@@ -88,7 +88,7 @@
 ```bash
 # 1. 配置数据库
 cd backend
-cp .env.example .env
+cp .env .env
 # 编辑 .env 文件，修改数据库连接信息
 
 # 2. 创建虚拟环境
