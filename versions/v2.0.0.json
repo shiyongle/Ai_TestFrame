@@ -1,0 +1,550 @@
+{
+  "version": "2.0.0",
+  "release_date": "2025-12-18",
+  "description": "规则配置系统 - 可配置的测试用例生成规则引擎",
+  "features": {
+    "rule_config_system": {
+      "status": "完成",
+      "description": "全新的规则配置系统，支持可视化配置测试用例生成规则",
+      "changes": [
+        "实现规则模板管理功能",
+        "创建规则引擎服务",
+        "支持自动生成正向、负向、边界值测试用例",
+        "实现断言规则配置",
+        "构建可视化规则编辑器"
+      ]
+    },
+    "rule_template_management": {
+      "status": "完成",
+      "description": "规则模板的完整生命周期管理",
+      "features": [
+        "规则模板CRUD操作",
+        "规则分类管理（正确性、安全性、性能、兼容性）",
+        "协议适配（HTTP、TCP、MQ）",
+        "规则优先级配置",
+        "规则启用/禁用控制"
+      ],
+      "template_structure": {
+        "basic_info": [
+          "模板名称",
+          "协议类型",
+          "规则分类",
+          "描述信息",
+          "优先级"
+        ],
+        "rule_definitions": [
+          "规则类型配置",
+          "执行顺序",
+          "必须/可选标记",
+          "规则配置参数"
+        ],
+        "assertions": [
+          "断言类型",
+          "字段路径",
+          "操作符",
+          "期望值",
+          "错误提示"
+        ]
+      }
+    },
+    "rule_engine": {
+      "status": "完成",
+      "description": "智能测试用例生成引擎",
+      "capabilities": [
+        "正向用例生成 - 验证正常业务流程",
+        "负向用例生成 - 验证异常处理能力",
+        "边界值用例生成 - 验证边界条件",
+        "参数缺失测试 - 验证必填参数校验",
+        "参数类型错误测试 - 验证类型校验",
+        "参数越界测试 - 验证范围校验"
+      ],
+      "generation_rules": {
+        "positive_case": {
+          "description": "生成正常参数的测试用例",
+          "assertions": [
+            "状态码在2xx范围内",
+            "响应时间符合要求",
+            "响应结构完整",
+            "业务字段值正确"
+          ]
+        },
+        "negative_case": {
+          "description": "生成异常参数的测试用例",
+          "scenarios": [
+            "缺少必填参数 - 期望400错误",
+            "参数类型错误 - 期望400错误",
+            "参数值非法 - 期望400错误"
+          ]
+        },
+        "boundary_case": {
+          "description": "生成边界值测试用例",
+          "scenarios": [
+            "最小值测试",
+            "最大值测试",
+            "最小值-1测试",
+            "最大值+1测试"
+          ]
+        }
+      }
+    },
+    "assertion_system": {
+      "status": "完成",
+      "description": "灵活的断言配置系统",
+      "assertion_types": [
+        {
+          "type": "equals",
+          "description": "等于判断",
+          "operator": "=="
+        },
+        {
+          "type": "not_equals",
+          "description": "不等于判断",
+          "operator": "!="
+        },
+        {
+          "type": "greater_than",
+          "description": "大于判断",
+          "operator": ">"
+        },
+        {
+          "type": "less_than",
+          "description": "小于判断",
+          "operator": "<"
+        },
+        {
+          "type": "contains",
+          "description": "包含判断",
+          "operator": "contains"
+        },
+        {
+          "type": "in_range",
+          "description": "范围判断",
+          "operator": "in_range"
+        },
+        {
+          "type": "regex",
+          "description": "正则匹配",
+          "operator": "regex"
+        },
+        {
+          "type": "field_exists",
+          "description": "字段存在性检查",
+          "operator": "exists"
+        },
+        {
+          "type": "field_type",
+          "description": "字段类型检查",
+          "operator": "type"
+        }
+      ],
+      "field_path_support": {
+        "description": "支持嵌套字段路径访问",
+        "examples": [
+          "status_code - 顶层字段",
+          "data.user.id - 嵌套字段",
+          "response_time - 性能指标"
+        ]
+      }
+    },
+    "visual_rule_editor": {
+      "status": "完成",
+      "description": "可视化规则配置编辑器",
+      "features": [
+        "拖拽式规则排序",
+        "动态添加/删除规则",
+        "折叠面板展示规则详情",
+        "断言配置卡片",
+        "实时预览",
+        "表单验证"
+      ],
+      "user_experience": [
+        "直观的界面设计",
+        "降低配置门槛",
+        "所见即所得",
+        "错误提示友好"
+      ]
+    },
+    "rule_categories": {
+      "status": "完成",
+      "description": "规则分类体系",
+      "categories": [
+        {
+          "name": "correctness",
+          "label": "正确性",
+          "description": "验证功能正确性的规则",
+          "examples": [
+            "状态码检查",
+            "响应结构检查",
+            "字段值检查"
+          ]
+        },
+        {
+          "name": "security",
+          "label": "安全性",
+          "description": "验证安全性的规则",
+          "examples": [
+            "SQL注入检查",
+            "XSS攻击检查",
+            "权限校验"
+          ]
+        },
+        {
+          "name": "performance",
+          "label": "性能",
+          "description": "验证性能指标的规则",
+          "examples": [
+            "响应时间检查",
+            "并发性能检查",
+            "资源占用检查"
+          ]
+        },
+        {
+          "name": "compatibility",
+          "label": "兼容性",
+          "description": "验证兼容性的规则",
+          "examples": [
+            "浏览器兼容性",
+            "版本兼容性",
+            "协议兼容性"
+          ]
+        }
+      ]
+    },
+    "rule_types": {
+      "status": "完成",
+      "description": "支持的规则类型",
+      "types": [
+        {
+          "type": "status_code_check",
+          "label": "状态码检查",
+          "description": "验证HTTP状态码是否符合预期",
+          "config": {
+            "expected_codes": "期望的状态码列表",
+            "error_codes": "错误状态码列表"
+          }
+        },
+        {
+          "type": "response_time_check",
+          "label": "响应时间检查",
+          "description": "验证接口响应时间",
+          "config": {
+            "max_time_ms": "最大响应时间（毫秒）",
+            "warning_time_ms": "警告阈值（毫秒）"
+          }
+        },
+        {
+          "type": "response_structure_check",
+          "label": "响应结构检查",
+          "description": "验证响应数据结构",
+          "config": {
+            "required_fields": "必需字段列表",
+            "field_types": "字段类型映射"
+          }
+        },
+        {
+          "type": "field_value_check",
+          "label": "字段值检查",
+          "description": "验证特定字段的值",
+          "config": {
+            "field_path": "字段路径",
+            "expected_value": "期望值",
+            "operator": "比较操作符"
+          }
+        },
+        {
+          "type": "business_logic_check",
+          "label": "业务逻辑检查",
+          "description": "验证业务逻辑正确性",
+          "config": {
+            "custom_validations": "自定义校验规则"
+          }
+        }
+      ]
+    }
+  },
+  "technical_improvements": {
+    "backend_enhancements": [
+      "新增4张数据库表（rule_templates、rule_definitions、assertion_rules、testcase_rules）",
+      "实现RuleEngineService规则引擎服务",
+      "创建规则管理API接口（/api/v1/rules）",
+      "支持规则模板的CRUD操作",
+      "实现测试用例自动生成接口",
+      "实现断言验证功能"
+    ],
+    "frontend_enhancements": [
+      "创建规则配置管理页面（RuleConfig）",
+      "实现可视化规则编辑器",
+      "集成Collapse折叠面板组件",
+      "支持动态表单配置",
+      "实现规则详情抽屉展示",
+      "添加规则配置到系统设置菜单"
+    ],
+    "database_design": [
+      "rule_templates表 - 规则模板主表",
+      "rule_definitions表 - 规则定义表",
+      "assertion_rules表 - 断言规则表",
+      "testcase_rules表 - 测试用例规则关联表",
+      "支持级联删除",
+      "建立外键关联关系"
+    ]
+  },
+  "design_philosophy": {
+    "core_principles": [
+      {
+        "principle": "配置化优于硬编码",
+        "description": "所有测试规则通过配置管理，避免硬编码在代码中",
+        "benefits": [
+          "灵活性高",
+          "易于维护",
+          "支持动态调整",
+          "降低开发成本"
+        ]
+      },
+      {
+        "principle": "可视化优于命令行",
+        "description": "提供直观的可视化配置界面，降低使用门槛",
+        "benefits": [
+          "用户友好",
+          "减少学习成本",
+          "减少配置错误",
+          "提高工作效率"
+        ]
+      },
+      {
+        "principle": "自动化优于手动",
+        "description": "基于规则自动生成测试用例，减少人工编写",
+        "benefits": [
+          "提高测试覆盖率",
+          "节省人力成本",
+          "保证测试质量",
+          "加快测试进度"
+        ]
+      },
+      {
+        "principle": "复用优于重复",
+        "description": "规则模板可在多个项目和接口间复用",
+        "benefits": [
+          "避免重复工作",
+          "统一测试标准",
+          "积累最佳实践",
+          "提升团队效率"
+        ]
+      },
+      {
+        "principle": "扩展性优于封闭性",
+        "description": "系统设计支持灵活扩展新的规则类型和断言",
+        "benefits": [
+          "适应业务变化",
+          "支持定制需求",
+          "持续演进",
+          "生态建设"
+        ]
+      }
+    ],
+    "architecture_design": {
+      "layered_architecture": {
+        "presentation_layer": "前端可视化配置界面",
+        "service_layer": "规则引擎服务层",
+        "data_layer": "规则配置数据存储",
+        "integration_layer": "与测试执行引擎集成"
+      },
+      "separation_of_concerns": {
+        "rule_definition": "规则定义与实现分离",
+        "rule_execution": "规则配置与执行分离",
+        "rule_storage": "规则逻辑与存储分离"
+      },
+      "plugin_architecture": {
+        "description": "支持插件式扩展新规则类型",
+        "extension_points": [
+          "自定义规则类型",
+          "自定义断言类型",
+          "自定义生成策略",
+          "自定义验证逻辑"
+        ]
+      }
+    },
+    "quality_assurance": {
+      "test_coverage": {
+        "description": "规则引擎确保测试用例的全面覆盖",
+        "dimensions": [
+          "正向场景覆盖",
+          "负向场景覆盖",
+          "边界条件覆盖",
+          "异常处理覆盖"
+        ]
+      },
+      "consistency": {
+        "description": "统一的测试标准和规范",
+        "aspects": [
+          "命名规范统一",
+          "断言格式统一",
+          "错误提示统一",
+          "报告格式统一"
+        ]
+      },
+      "traceability": {
+        "description": "测试用例与规则的可追溯性",
+        "features": [
+          "记录规则模板ID",
+          "记录生成时间",
+          "记录规则版本",
+          "支持规则回溯"
+        ]
+      }
+    }
+  },
+  "usage_workflow": {
+    "configuration_phase": {
+      "step1": "创建规则模板 - 定义模板基本信息",
+      "step2": "添加规则定义 - 配置具体检查规则",
+      "step3": "配置断言规则 - 设置期望值和验证逻辑",
+      "step4": "启用规则模板 - 激活规则供使用"
+    },
+    "generation_phase": {
+      "step1": "选择接口信息 - 提供接口元数据",
+      "step2": "选择规则模板 - 选择要应用的规则",
+      "step3": "生成测试用例 - 自动生成用例集",
+      "step4": "预览和调整 - 查看并优化用例"
+    },
+    "execution_phase": {
+      "step1": "执行测试用例 - 运行生成的用例",
+      "step2": "断言验证 - 根据规则验证结果",
+      "step3": "生成报告 - 输出测试报告",
+      "step4": "问题定位 - 快速定位失败原因"
+    }
+  },
+  "api_endpoints": {
+    "rule_templates": [
+      "GET /api/v1/rules/templates - 获取规则模板列表",
+      "POST /api/v1/rules/templates - 创建规则模板",
+      "GET /api/v1/rules/templates/{id} - 获取规则模板详情",
+      "PUT /api/v1/rules/templates/{id} - 更新规则模板",
+      "DELETE /api/v1/rules/templates/{id} - 删除规则模板"
+    ],
+    "test_generation": [
+      "POST /api/v1/rules/generate-testcases - 根据规则生成测试用例"
+    ],
+    "metadata": [
+      "GET /api/v1/rules/categories - 获取规则分类列表",
+      "GET /api/v1/rules/rule-types - 获取规则类型列表",
+      "GET /api/v1/rules/assertion-types - 获取断言类型列表"
+    ]
+  },
+  "file_structure": {
+    "backend": [
+      "models/database_models.py - 新增4个规则相关模型",
+      "services/rule_engine_service.py - 规则引擎服务",
+      "api/v1/rules.py - 规则管理API接口",
+      "migrations/add_rule_tables.sql - 数据库迁移脚本",
+      "run_migration.py - 迁移执行脚本"
+    ],
+    "frontend": [
+      "pages/RuleConfig/index.tsx - 规则配置管理页面",
+      "components/Layout/AppSider.tsx - 更新菜单配置",
+      "components/Layout/ResponsiveLayout.tsx - 更新菜单配置",
+      "App.tsx - 添加规则配置路由"
+    ]
+  },
+  "sample_rule_template": {
+    "name": "HTTP基础校验规则",
+    "category": "correctness",
+    "protocol": "http",
+    "description": "包含状态码、响应时间、响应结构的基础检查",
+    "rules": [
+      {
+        "rule_type": "status_code_check",
+        "assertions": [
+          {
+            "field": "status_code",
+            "operator": "in_range",
+            "expected": "[200, 299]",
+            "message": "HTTP状态码应在2xx范围内"
+          }
+        ]
+      },
+      {
+        "rule_type": "response_time_check",
+        "assertions": [
+          {
+            "field": "response_time",
+            "operator": "<",
+            "expected": "3000",
+            "message": "响应时间不应超过3秒"
+          }
+        ]
+      },
+      {
+        "rule_type": "response_structure_check",
+        "assertions": [
+          {
+            "field": "code",
+            "operator": "exists",
+            "message": "响应必须包含code字段"
+          },
+          {
+            "field": "message",
+            "operator": "exists",
+            "message": "响应必须包含message字段"
+          },
+          {
+            "field": "data",
+            "operator": "exists",
+            "message": "响应必须包含data字段"
+          }
+        ]
+      }
+    ]
+  },
+  "benefits": [
+    "降低测试用例编写成本 - 自动生成减少人工编写",
+    "提高测试覆盖率 - 规则保证全面覆盖各种场景",
+    "统一测试标准 - 规则模板确保测试一致性",
+    "提升测试效率 - 快速生成大量测试用例",
+    "便于维护和扩展 - 配置化管理易于调整",
+    "支持最佳实践积累 - 规则模板可复用和共享",
+    "降低学习成本 - 可视化配置降低使用门槛",
+    "提高测试质量 - 规则引擎保证测试完整性"
+  ],
+  "future_enhancements": {
+    "planned_features": [
+      "规则模板市场 - 预置常用规则模板",
+      "智能规则推荐 - 根据接口特征推荐规则",
+      "规则效果分析 - 统计规则发现的缺陷",
+      "规则版本管理 - 支持规则模板版本控制",
+      "规则组合优化 - 智能组合多个规则",
+      "规则执行优化 - 提升规则执行效率",
+      "规则导入导出 - 支持规则模板迁移",
+      "规则权限管理 - 控制规则的使用权限"
+    ],
+    "advanced_features": [
+      "AI辅助规则生成 - 基于历史数据自动生成规则",
+      "智能缺陷预测 - 预测哪些规则更容易发现问题",
+      "自适应规则调整 - 根据执行结果自动优化规则",
+      "规则效能评估 - 评估规则的有效性和价值",
+      "规则关联分析 - 分析规则间的关联关系",
+      "规则执行可视化 - 可视化展示规则执行过程"
+    ]
+  },
+  "breaking_changes": [
+    "新增规则配置菜单到系统设置下",
+    "数据库新增4张规则相关表",
+    "新增规则管理API路由"
+  ],
+  "migration_notes": [
+    "执行migrations/add_rule_tables.sql创建新表",
+    "或运行run_migration.py自动创建表",
+    "系统会自动插入示例规则模板",
+    "现有功能不受影响，向后兼容"
+  ],
+  "testing": {
+    "status": "通过",
+    "tests_performed": [
+      "规则模板CRUD功能测试",
+      "规则引擎用例生成测试",
+      "断言验证逻辑测试",
+      "前端界面交互测试",
+      "API接口测试",
+      "数据库迁移测试"
+    ]
+  }
+}

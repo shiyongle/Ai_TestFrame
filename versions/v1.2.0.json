@@ -1,0 +1,108 @@
+{
+  "version": "1.2.0",
+  "release_date": "2025-12-03",
+  "description": "数据库迁移版本 - 从SQLite迁移到MySQL",
+  "features": {
+    "database_migration": {
+      "status": "完成",
+      "description": "将数据库从SQLite迁移到MySQL，提升生产环境性能",
+      "changes": [
+        "替换SQLite连接为MySQL连接",
+        "添加PyMySQL数据库驱动",
+        "集成python-dotenv环境变量管理",
+        "配置数据库连接池参数",
+        "创建MySQL初始化脚本",
+        "更新启动脚本支持MySQL"
+      ]
+    },
+    "configuration_management": {
+      "status": "完成",
+      "description": "新增环境变量配置管理",
+      "files_added": [
+        "backend/.env.example - 环境变量配置模板",
+        "backend/init_mysql.sql - MySQL数据库初始化脚本"
+      ],
+      "environment_variables": [
+        "MYSQL_USER - MySQL用户名",
+        "MYSQL_PASSWORD - MySQL密码",
+        "MYSQL_HOST - MySQL主机地址",
+        "MYSQL_PORT - MySQL端口",
+        "MYSQL_DATABASE - 数据库名称",
+        "DB_POOL_SIZE - 连接池大小",
+        "DB_MAX_OVERFLOW - 连接池最大溢出",
+        "DB_POOL_TIMEOUT - 连接池超时时间"
+      ]
+    },
+    "documentation_updates": {
+      "status": "完成",
+      "description": "更新开发文档以反映MySQL变更",
+      "updates": [
+        "更新技术栈说明",
+        "添加数据库配置章节",
+        "完善启动流程说明",
+        "更新环境要求"
+      ]
+    },
+    "startup_script_enhancement": {
+      "status": "完成", 
+      "description": "增强启动脚本以支持MySQL环境",
+      "improvements": [
+        "添加MySQL环境检查",
+        "自动创建.env配置文件",
+        "增加用户友好提示信息",
+        "数据库初始化提醒"
+      ]
+    }
+  },
+  "technical_details": {
+    "database_changes": {
+      "previous": "SQLite with check_same_thread=False",
+      "current": "MySQL with connection pooling",
+      "driver": "PyMySQL",
+      "connection_pool": {
+        "pool_pre_ping": true,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 20
+      }
+    },
+    "new_dependencies": [
+      "pymysql==1.1.0",
+      "python-dotenv==1.0.0"
+    ],
+    "removed_dependencies": [
+      "aiosqlite==0.19.0"
+    ]
+  },
+  "setup_instructions": {
+    "database_setup": [
+      "创建MySQL数据库",
+      "执行初始化脚本",
+      "配置环境变量",
+      "启动应用服务"
+    ],
+    "commands": {
+      "database_init": "mysql -u root -p < backend/init_mysql.sql",
+      "config_copy": "cd backend && copy .env.example .env",
+      "startup": "start.bat"
+    }
+  },
+  "benefits": [
+    "更好的并发性能",
+    "生产环境就绪",
+    "标准化配置管理",
+    "连接池优化",
+    "环境变量灵活性"
+  ],
+  "compatibility": {
+    "mysql_versions": ["5.7+", "8.0+"],
+    "python_versions": ["3.8+"],
+    "breaking_changes": "需要手动创建MySQL数据库和配置连接"
+  },
+  "migration_notes": [
+    "需要安装MySQL服务",
+    "必须手动创建数据库",
+    "需要配置.env文件",
+    "现有SQLite数据需要手动迁移"
+  ]
+}
