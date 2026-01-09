@@ -400,7 +400,7 @@ async def get_knowledge_list(current_user: Dict = Depends(get_current_user)):
         return APIResponse(
             success=True,
             message="获取知识库列表成功",
-            data=documents
+            data={"documents": documents}
         )
         
     except Exception as e:

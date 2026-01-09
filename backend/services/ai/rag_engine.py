@@ -9,7 +9,7 @@ import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -73,6 +73,28 @@ class RAGEngine:
         )
         self._fit_vectorizer = False
         self.document_cache = {}
+        self._ensure_metadata_column()
+
+    def _ensure_metadata_column(self) -> None:
+        """确保知识文档表包含 doc_metadata 列"""
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        "WHERE TABLE_SCHEMA = DATABASE() "
+                        "AND TABLE_NAME = 'knowledge_documents' "
+                        "AND COLUMN_NAME = 'doc_metadata'"
+                    )
+                ).scalar()
+                if result == 0:
+                    conn.execute(
+                        text("ALTER TABLE knowledge_documents ADD COLUMN doc_metadata LONGTEXT")
+                    )
+                    conn.commit()
+                    logger.info("已补齐 knowledge_documents.doc_metadata 列")
+        except Exception as e:
+            logger.error(f"检查/补齐 doc_metadata 列失败: {e}")
         
     def _preprocess_text(self, text: str) -> str:
         """文本预处理"""
