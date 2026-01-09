@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, 
   Table, 
   Button, 
   Space, 
@@ -116,14 +115,17 @@ const Versions: React.FC = () => {
 
   const columns: ColumnsType<Version> = [
     {
-      title: '版本号',
+      title: '版本',
       dataIndex: 'version_number',
       key: 'version_number',
-      render: (text: string) => (
-        <Space>
-          <BookOutlined />
-          <Text strong>{text}</Text>
-        </Space>
+      render: (text: string, record) => (
+        <div className="cell-primary">
+          <Text className="cell-title">
+            <BookOutlined style={{ marginRight: 8, color: '#0071e3' }} />
+            {text}
+          </Text>
+          <Text className="cell-subtitle">{record.description || '暂无描述'}</Text>
+        </div>
       ),
     },
     {
@@ -143,7 +145,7 @@ const Versions: React.FC = () => {
           archived: { color: 'warning', text: '已归档' }
         };
         const config = statusConfig[status as keyof typeof statusConfig];
-        return <Tag color={config.color}>{config.text}</Tag>;
+        return <Tag color={config.color} className="tag-pill">{config.text}</Tag>;
       },
       filters: [
         { text: '草稿', value: 'draft' },
@@ -158,7 +160,7 @@ const Versions: React.FC = () => {
       key: 'requirements_count',
       render: (_, record) => (
         <Badge count={record.requirements?.length || 0} showZero>
-          <Tag color="blue">需求</Tag>
+          <Tag color="blue" className="tag-pill">需求</Tag>
         </Badge>
       ),
     },
@@ -189,7 +191,7 @@ const Versions: React.FC = () => {
       title: '操作',
       key: 'action',
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="middle" className="row-actions">
           <Tooltip title="查看详情">
             <Button 
               type="text" 
@@ -361,73 +363,130 @@ const Versions: React.FC = () => {
   
 
   return (
-    <div>
-      <Title level={2}>
-        <BookOutlined /> 版本管理
-      </Title>
+    <div className="page-shell">
+      <div className="page-toolbar">
+        <div className="page-title">
+          <Title level={2} style={{ margin: 0 }}>版本管理</Title>
+          <span className="page-subtitle">汇总需求并管理版本发布节奏</span>
+        </div>
+        <Space>
+          <Button>导出</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新建版本
+          </Button>
+        </Space>
+      </div>
       
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+      <Tabs className="mac-tabs" activeKey={activeTab} onChange={setActiveTab}>
         <TabPane tab="版本列表" key="list">
-          <Card>
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={12} md={8}>
-                <Input
-                  placeholder="搜索版本号或描述"
-                  prefix={<SearchOutlined />}
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
+          <div className="split-layout">
+            <div className="panel">
+              <div className="panel-body">
+                <div className="filter-bar">
+                  <Space wrap>
+                    <Input
+                      placeholder="搜索版本号或描述"
+                      prefix={<SearchOutlined />}
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      style={{ width: 220 }}
+                    />
+                    <Select
+                      placeholder="选择状态"
+                      style={{ width: 160 }}
+                      allowClear
+                      value={filterStatus}
+                      onChange={setFilterStatus}
+                    >
+                      <Select.Option value="draft">草稿</Select.Option>
+                      <Select.Option value="released">已发布</Select.Option>
+                      <Select.Option value="archived">已归档</Select.Option>
+                    </Select>
+                  </Space>
+                  <Space>
+                    <Button>重置</Button>
+                  </Space>
+                </div>
+
+                <Table
+                  columns={columns}
+                  dataSource={versions.filter(version => 
+                    (searchText ? version.version_number.toLowerCase().includes(searchText.toLowerCase()) || 
+                               version.description?.toLowerCase().includes(searchText.toLowerCase()) : true) &&
+                    (filterStatus ? version.status === filterStatus : true)
+                  )}
+                  rowKey="id"
+                  loading={loading}
+                  pagination={{
+                    total: versions.length,
+                    pageSize: 10,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: (total) => `共 ${total} 条记录`,
+                  }}
+                  onRow={(record) => ({
+                    onClick: () => setSelectedVersion(record),
+                  })}
+                  rowClassName={(record) =>
+                    selectedVersion?.id === record.id ? 'ant-table-row-selected' : ''
+                  }
                 />
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Select
-                  placeholder="选择状态"
-                  style={{ width: '100%' }}
-                  allowClear
-                  value={filterStatus}
-                  onChange={setFilterStatus}
-                >
-                  <Select.Option value="draft">草稿</Select.Option>
-                  <Select.Option value="released">已发布</Select.Option>
-                  <Select.Option value="archived">已归档</Select.Option>
-                </Select>
-              </Col>
-            </Row>
+              </div>
+            </div>
 
-            <Row style={{ marginBottom: 16 }}>
-              <Col>
-                <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-                  新建版本
-                </Button>
-              </Col>
-            </Row>
-
-            <Table
-              columns={columns}
-              dataSource={versions.filter(version => 
-                (searchText ? version.version_number.toLowerCase().includes(searchText.toLowerCase()) || 
-                           version.description?.toLowerCase().includes(searchText.toLowerCase()) : true) &&
-                (filterStatus ? version.status === filterStatus : true)
-              )}
-              rowKey="id"
-              loading={loading}
-              pagination={{
-                total: versions.length,
-                pageSize: 10,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total) => `共 ${total} 条记录`,
-              }}
-            />
-          </Card>
+            <div className="panel inspector-panel">
+              <div className="panel-header">
+                <Text strong>版本概览</Text>
+              </div>
+              <div className="panel-body">
+                {selectedVersion ? (
+                  <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                    <Space>
+                      <BookOutlined style={{ color: '#0071e3' }} />
+                      <Text strong>{selectedVersion.version_number}</Text>
+                    </Space>
+                    <Text type="secondary">{selectedVersion.description || '暂无描述'}</Text>
+                    <Tag color={selectedVersion.status === 'released' ? 'success' : selectedVersion.status === 'archived' ? 'warning' : 'default'}>
+                      {selectedVersion.status === 'released' ? '已发布' : selectedVersion.status === 'archived' ? '已归档' : '草稿'}
+                    </Tag>
+                    <Divider style={{ margin: '8px 0' }} />
+                    <Space direction="vertical" size={6}>
+                      <Text type="secondary">发布日期</Text>
+                      <Text>{selectedVersion.release_date ? moment(selectedVersion.release_date).format('YYYY-MM-DD') : '未设置'}</Text>
+                      <Text type="secondary">关联需求</Text>
+                      <Text>{selectedVersion.requirements?.length || 0} 个</Text>
+                    </Space>
+                    <Divider style={{ margin: '8px 0' }} />
+                    <Button type="primary" block onClick={() => handleView(selectedVersion)}>
+                      查看详情
+                    </Button>
+                    <Button block onClick={() => handleLinkRequirements(selectedVersion)}>
+                      关联需求
+                    </Button>
+                    <Button block onClick={() => handleGenerateTestCases(selectedVersion)}>
+                      生成测试用例
+                    </Button>
+                    <Button block onClick={() => handleEdit(selectedVersion)}>
+                      编辑版本
+                    </Button>
+                  </Space>
+                ) : (
+                  <Text type="secondary">选择一个版本以查看详情</Text>
+                )}
+              </div>
+            </div>
+          </div>
         </TabPane>
         
         <TabPane tab="版本统计" key="statistics">
-          <Card>
-            <Empty 
-              description="版本统计功能开发中..."
-              style={{ padding: '40px 0' }}
-            />
-          </Card>
+          <div className="panel">
+            <div className="panel-body">
+              <Empty 
+                description="版本统计功能开发中..."
+                style={{ padding: '40px 0' }}
+              />
+            </div>
+          </div>
         </TabPane>
       </Tabs>
 

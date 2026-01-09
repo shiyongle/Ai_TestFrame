@@ -66,114 +66,144 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
   const menuItems = [
     {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: '仪表盘',
-    },
-    {
-      key: 'tools',
-      icon: <ToolOutlined />,
-      label: '工具箱',
+      type: 'group',
+      label: '概览',
       children: [
         {
-          key: '/tools/id-generator',
-          icon: <IdcardOutlined />,
-          label: '身份证号码',
-        },
-        {
-          key: '/tools/phone-generator',
-          icon: <MobileOutlined />,
-          label: '手机号码',
+          key: '/dashboard',
+          icon: <DashboardOutlined />,
+          label: '仪表盘',
         },
       ],
     },
     {
-      key: 'projects',
-      icon: <ProjectOutlined />,
-      label: '项目管理',
+      type: 'group',
+      label: '项目与需求',
       children: [
         {
-          key: '/projects',
+          key: 'projects',
           icon: <ProjectOutlined />,
-          label: '项目列表',
+          label: '项目管理',
+          children: [
+            {
+              key: '/projects',
+              icon: <ProjectOutlined />,
+              label: '项目列表',
+            },
+            {
+              key: '/requirements',
+              icon: <FileSearchOutlined />,
+              label: '需求管理',
+            },
+          ],
         },
         {
-          key: '/requirements',
-          icon: <FileSearchOutlined />,
-          label: '需求管理',
+          key: '/versions',
+          icon: <HistoryOutlined />,
+          label: '版本管理',
         },
-      ],
-    },
-    {
-      key: '/versions',
-      icon: <HistoryOutlined />,
-      label: '版本管理',
-    },
-    {
-      key: 'testcases',
-      icon: <FileTextOutlined />,
-      label: '测试用例',
-      children: [
         {
-          key: '/testcases/functional',
+          key: 'testcases',
           icon: <FileTextOutlined />,
-          label: '功能测试用例',
-        },
-        {
-          key: '/testcases/interface',
-          icon: <CodeOutlined />,
-          label: '接口测试用例',
-        },
-      ],
-    },
-    {
-      key: 'test',
-      icon: <BugOutlined />,
-      label: '接口测试',
-      children: [
-        {
-          key: '/test/http',
-          icon: <ApiOutlined />,
-          label: 'HTTP 测试',
-        },
-        {
-          key: '/test/tcp',
-          icon: <ApiOutlined />,
-          label: 'TCP 测试',
-        },
-        {
-          key: '/test/mq',
-          icon: <ApiOutlined />,
-          label: 'MQ 测试',
+          label: '测试用例',
+          children: [
+            {
+              key: '/testcases/functional',
+              icon: <FileTextOutlined />,
+              label: '功能测试用例',
+            },
+            {
+              key: '/testcases/interface',
+              icon: <CodeOutlined />,
+              label: '接口测试用例',
+            },
+          ],
         },
       ],
     },
     {
-      key: '/automation',
-      icon: <RocketOutlined />,
-      label: '自动化测试',
+      type: 'group',
+      label: '测试执行',
       children: [
         {
-          key: '/api-automation',
-          icon: <ApiOutlined />,
-          label: '接口自动化',
+          key: 'test',
+          icon: <BugOutlined />,
+          label: '接口测试',
+          children: [
+            {
+              key: '/test/http',
+              icon: <ApiOutlined />,
+              label: 'HTTP 测试',
+            },
+            {
+              key: '/test/tcp',
+              icon: <ApiOutlined />,
+              label: 'TCP 测试',
+            },
+            {
+              key: '/test/mq',
+              icon: <ApiOutlined />,
+              label: 'MQ 测试',
+            },
+          ],
+        },
+        {
+          key: '/automation',
+          icon: <RocketOutlined />,
+          label: '自动化测试',
+          children: [
+            {
+              key: '/api-automation',
+              icon: <ApiOutlined />,
+              label: '接口自动化',
+            },
+          ],
+        },
+        {
+          key: '/reports',
+          icon: <BarChartOutlined />,
+          label: '测试报告',
         },
       ],
     },
     {
-      key: '/reports',
-      icon: <BarChartOutlined />,
-      label: '测试报告',
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: '系统设置',
+      type: 'group',
+      label: '工具',
       children: [
         {
-          key: '/rule-config',
+          key: 'tools',
+          icon: <ToolOutlined />,
+          label: '工具箱',
+          children: [
+            {
+              key: '/tools/id-generator',
+              icon: <IdcardOutlined />,
+              label: '身份证号码',
+            },
+            {
+              key: '/tools/phone-generator',
+              icon: <MobileOutlined />,
+              label: '手机号码',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'group',
+      label: '系统',
+      children: [
+        {
+          key: 'settings',
           icon: <SettingOutlined />,
-          label: '规则配置',
+          label: '系统设置',
+          children: [
+            {
+              key: '/rule-config',
+              icon: <SettingOutlined />,
+              label: '规则配置',
+            },
+          ],
         },
       ],
     },
@@ -220,7 +250,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   const siderContent = (
     <>
       <div 
-        className="logo" 
+        className="logo sidebar-brand" 
         style={{
           height: '72px',
           margin: '16px',
@@ -228,26 +258,27 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'space-between',
-          color: 'white',
-          fontWeight: 'bold',
+          color: 'inherit',
+          fontWeight: 600,
           fontSize: collapsed ? '16px' : '18px',
           transition: 'all 0.2s',
           padding: collapsed ? '0 14px' : '0 18px',
         }}
       >
         <Space size={collapsed ? 8 : 14}>
-          <ThunderboltOutlined style={{ fontSize: '22px' }} />
+          <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
           {!collapsed && <span>投石问路</span>}
         </Space>
         {!collapsed && (
           <Tag
-            color="geekblue"
+            color="default"
+            className="brand-badge"
             style={{
               margin: 0,
               borderRadius: 999,
               border: 'none',
-              background: 'rgba(255, 255, 255, 0.18)',
-              color: '#fff',
+              background: 'rgba(0, 113, 227, 0.1)',
+              color: '#0071e3',
               fontWeight: 600,
             }}
           >
@@ -256,12 +287,13 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         )}
       </div>
       <Menu
-        theme="dark"
+        theme="light"
         mode="inline"
         selectedKeys={getSelectedKeys()}
         defaultOpenKeys={getOpenKeys()}
         items={menuItems}
         onClick={handleMenuClick}
+        className="source-menu"
         style={{
           borderRight: 0,
           background: 'transparent',
@@ -276,16 +308,16 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       <Layout style={{ minHeight: '100vh' }}>
         <Drawer
           title={
-            <div style={{ color: 'white', display: 'flex', alignItems: 'center' }}>
-              <ThunderboltOutlined style={{ marginRight: '8px', fontSize: '20px' }} />
+            <div style={{ color: '#0b0f1a', display: 'flex', alignItems: 'center' }}>
+              <ThunderboltOutlined style={{ marginRight: '8px', fontSize: '20px', color: '#0071e3' }} />
               投石问路-智能化测试平台
             </div>
           }
           placement="left"
           onClose={() => setMobileVisible(false)}
           open={mobileVisible}
-          bodyStyle={{ padding: 0, background: '#0f172a' }}
-          headerStyle={{ background: '#0f172a', border: 'none' }}
+          bodyStyle={{ padding: 0, background: 'rgba(255, 255, 255, 0.96)' }}
+          headerStyle={{ background: 'rgba(255, 255, 255, 0.96)', border: 'none' }}
           width={280}
         >
           {siderContent}
@@ -314,7 +346,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           zIndex: 1000,
           paddingTop: 6,
         }}
-        theme="dark"
+        theme="light"
       >
         {siderContent}
       </Sider>

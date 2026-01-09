@@ -41,10 +41,10 @@ const App: React.FC = () => {
   };
 
   const contentStyle = {
-    margin: isMobile ? '12px' : '24px',
+    margin: isMobile ? '8px 0 16px' : '12px 0 24px',
     padding: 0,
     background: 'transparent',
-    minHeight: 'calc(100vh - 88px)',
+    minHeight: 'calc(100vh - 72px)',
     overflow: 'visible',
   };
 
@@ -59,7 +59,7 @@ const App: React.FC = () => {
           isMobile={isMobile}
         />
         <Content style={contentStyle}>
-          <div className="content-surface fade-in">
+          <div className="app-content fade-in">
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />

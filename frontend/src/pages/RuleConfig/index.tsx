@@ -207,10 +207,16 @@ const RuleConfig: React.FC = () => {
 
   const columns: ColumnsType<RuleTemplate> = [
     {
-      title: '规则名称',
+      title: '规则',
       dataIndex: 'name',
       key: 'name',
-      width: 200,
+      width: 220,
+      render: (text: string, record) => (
+        <div className="cell-primary">
+          <span className="cell-title">{text}</span>
+          <span className="cell-subtitle">{record.description || '暂无描述'}</span>
+        </div>
+      ),
     },
     {
       title: '协议',
@@ -223,7 +229,7 @@ const RuleConfig: React.FC = () => {
           tcp: 'green',
           mq: 'orange',
         };
-        return <Tag color={colorMap[protocol]}>{protocol.toUpperCase()}</Tag>;
+        return <Tag color={colorMap[protocol]} className="tag-pill">{protocol.toUpperCase()}</Tag>;
       },
     },
     {
@@ -238,7 +244,7 @@ const RuleConfig: React.FC = () => {
           performance: '性能',
           compatibility: '兼容性',
         };
-        return <Tag>{textMap[category] || category}</Tag>;
+        return <Tag className="tag-pill">{textMap[category] || category}</Tag>;
       },
     },
     {
@@ -259,7 +265,7 @@ const RuleConfig: React.FC = () => {
       key: 'is_enabled',
       width: 100,
       render: (enabled: boolean) => (
-        <Tag color={enabled ? 'success' : 'default'}>
+        <Tag color={enabled ? 'success' : 'default'} className="tag-pill">
           {enabled ? '启用' : '禁用'}
         </Tag>
       ),
@@ -277,7 +283,7 @@ const RuleConfig: React.FC = () => {
       width: 200,
       fixed: 'right',
       render: (_, record) => (
-        <Space size="small">
+        <Space size="small" className="row-actions">
           <Button
             type="link"
             size="small"
@@ -309,28 +315,42 @@ const RuleConfig: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
-      <Card
-        title="规则配置管理"
-        extra={
+    <div className="page-shell">
+      <div className="page-toolbar">
+        <div className="page-title">
+          <h2>规则配置管理</h2>
+          <span className="page-subtitle">管理规则模板与断言配置</span>
+        </div>
+        <Space>
+          <Button>导出</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             新增规则模板
           </Button>
-        }
-      >
-        <Table
-          columns={columns}
-          dataSource={templates}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条`,
-          }}
-        />
-      </Card>
+        </Space>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <Space>
+            <Tag color="blue">模板</Tag>
+            <span>共 {templates.length} 个</span>
+          </Space>
+        </div>
+        <div className="panel-body">
+          <Table
+            columns={columns}
+            dataSource={templates}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              pageSize: 10,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条`,
+            }}
+          />
+        </div>
+      </div>
 
       <Modal
         title={editingTemplate ? '编辑规则模板' : '新增规则模板'}

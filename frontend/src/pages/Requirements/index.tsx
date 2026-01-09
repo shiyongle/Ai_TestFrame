@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Card, 
   Table, 
   Button, 
   Space, 
@@ -220,12 +219,18 @@ const Requirements: React.FC = () => {
 
   const columns: ColumnsType<Requirement> = [
     {
-      title: '需求标题',
+      title: '需求',
       dataIndex: 'title',
       key: 'title',
       filteredValue: searchText ? [searchText] : null,
       onFilter: (value, record) => 
         record.title.toLowerCase().includes(value.toString().toLowerCase()),
+      render: (text: string, record) => (
+        <div className="cell-primary">
+          <Text className="cell-title">{text}</Text>
+          <Text className="cell-subtitle">{record.description || '暂无描述'}</Text>
+        </div>
+      ),
     },
     {
       title: '项目',
@@ -242,7 +247,7 @@ const Requirements: React.FC = () => {
       render: (priority: string) => {
         const color = priority === 'high' ? 'red' : priority === 'medium' ? 'orange' : 'green';
         const text = priority === 'high' ? '高' : priority === 'medium' ? '中' : '低';
-        return <Tag color={color}>{text}</Tag>;
+        return <Tag color={color} className="tag-pill">{text}</Tag>;
       },
       filters: [
         { text: '高', value: 'high' },
@@ -267,7 +272,7 @@ const Requirements: React.FC = () => {
           rejected: { color: 'error', text: '已拒绝' }
         };
         const config = statusConfig[status as keyof typeof statusConfig];
-        return <Tag color={config.color}>{config.text}</Tag>;
+        return <Tag color={config.color} className="tag-pill">{config.text}</Tag>;
       },
       filters: [
         { text: '草稿', value: 'draft' },
@@ -293,7 +298,7 @@ const Requirements: React.FC = () => {
           assumption: { color: 'cyan', text: '假设' }
         };
         const config = typeConfig[type as keyof typeof typeConfig];
-        return <Tag color={config.color}>{config.text}</Tag>;
+        return <Tag color={config.color} className="tag-pill">{config.text}</Tag>;
       },
     },
     {
@@ -313,10 +318,10 @@ const Requirements: React.FC = () => {
       render: (_, record) => (
         <Space>
           <Badge count={record.linkedFunctionalTestCases} showZero>
-            <Tag color="blue" icon={<FileTextOutlined />}>功能</Tag>
+            <Tag color="blue" icon={<FileTextOutlined />} className="tag-pill">功能</Tag>
           </Badge>
           <Badge count={record.linkedInterfaceTestCases} showZero>
-            <Tag color="green" icon={<CodeOutlined />}>接口</Tag>
+            <Tag color="green" icon={<CodeOutlined />} className="tag-pill">接口</Tag>
           </Badge>
         </Space>
       ),
@@ -325,7 +330,7 @@ const Requirements: React.FC = () => {
       title: '操作',
       key: 'action',
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="middle" className="row-actions">
           <Tooltip title="编辑">
             <Button 
               type="text" 
@@ -542,78 +547,77 @@ const Requirements: React.FC = () => {
   };
 
   return (
-    <div>
-      <Title level={2}>
-        <FileSearchOutlined /> 需求管理
-      </Title>
+    <div className="page-shell">
+      <div className="page-toolbar">
+        <div className="page-title">
+          <Title level={2} style={{ margin: 0 }}>需求管理</Title>
+          <span className="page-subtitle">统一管理需求生命周期与测试用例关联</span>
+        </div>
+        <Space>
+          <Button>导出</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+            新建需求
+          </Button>
+        </Space>
+      </div>
       
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+      <Tabs className="mac-tabs" activeKey={activeTab} onChange={setActiveTab}>
         <TabPane tab="需求列表" key="list">
-          <Card>
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-              <Col xs={24} sm={12} md={6}>
-                <Input
-                  placeholder="搜索需求标题"
-                  prefix={<SearchOutlined />}
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                />
-              </Col>
-              <Col xs={24} sm={12} md={6}>
-                <Select
-                  placeholder="选择项目"
-                  style={{ width: '100%' }}
-                  allowClear
-                  value={filterProject}
-                  onChange={setFilterProject}
-                >
-                  {projects.map(p => (
-                    <Select.Option key={p.id} value={p.id.toString()}>
-                      {p.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Col>
-              <Col xs={24} sm={12} md={6}>
-                <Select
-                  placeholder="选择状态"
-                  style={{ width: '100%' }}
-                  allowClear
-                  value={filterStatus}
-                  onChange={setFilterStatus}
-                >
-                  <Select.Option value="draft">草稿</Select.Option>
-                  <Select.Option value="review">审核中</Select.Option>
-                  <Select.Option value="approved">已批准</Select.Option>
-                  <Select.Option value="development">开发中</Select.Option>
-                  <Select.Option value="testing">测试中</Select.Option>
-                  <Select.Option value="completed">已完成</Select.Option>
-                  <Select.Option value="rejected">已拒绝</Select.Option>
-                </Select>
-              </Col>
-              <Col xs={24} sm={12} md={6}>
-                <Select
-                  placeholder="选择优先级"
-                  style={{ width: '100%' }}
-                  allowClear
-                  value={filterPriority}
-                  onChange={setFilterPriority}
-                >
-                  <Select.Option value="high">高</Select.Option>
-                  <Select.Option value="medium">中</Select.Option>
-                  <Select.Option value="low">低</Select.Option>
-                </Select>
-              </Col>
-            </Row>
-
-            <Row style={{ marginBottom: 16 }}>
-              <Col>
-                <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-                  新建需求
-                </Button>
-              </Col>
-            </Row>
-
+          <div className="panel">
+            <div className="panel-body">
+              <div className="filter-bar">
+                <Space wrap>
+                  <Input
+                    placeholder="搜索需求标题"
+                    prefix={<SearchOutlined />}
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    style={{ width: 220 }}
+                  />
+                  <Select
+                    placeholder="选择项目"
+                    style={{ width: 180 }}
+                    allowClear
+                    value={filterProject}
+                    onChange={setFilterProject}
+                  >
+                    {projects.map(p => (
+                      <Select.Option key={p.id} value={p.id.toString()}>
+                        {p.name}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                  <Select
+                    placeholder="选择状态"
+                    style={{ width: 140 }}
+                    allowClear
+                    value={filterStatus}
+                    onChange={setFilterStatus}
+                  >
+                    <Select.Option value="draft">草稿</Select.Option>
+                    <Select.Option value="review">审核中</Select.Option>
+                    <Select.Option value="approved">已批准</Select.Option>
+                    <Select.Option value="development">开发中</Select.Option>
+                    <Select.Option value="testing">测试中</Select.Option>
+                    <Select.Option value="completed">已完成</Select.Option>
+                    <Select.Option value="rejected">已拒绝</Select.Option>
+                  </Select>
+                  <Select
+                    placeholder="优先级"
+                    style={{ width: 120 }}
+                    allowClear
+                    value={filterPriority}
+                    onChange={setFilterPriority}
+                  >
+                    <Select.Option value="high">高</Select.Option>
+                    <Select.Option value="medium">中</Select.Option>
+                    <Select.Option value="low">低</Select.Option>
+                  </Select>
+                </Space>
+                <Space>
+                  <Button>重置</Button>
+                </Space>
+              </div>
             <Table
               columns={columns}
               dataSource={requirements}
@@ -627,29 +631,34 @@ const Requirements: React.FC = () => {
                 showTotal: (total) => `共 ${total} 条记录`,
               }}
             />
-          </Card>
+            </div>
+          </div>
         </TabPane>
         
         <TabPane tab="需求统计" key="statistics">
-          <Card>
-            <Alert
-              message="需求统计"
-              description="这里显示需求的统计分析信息，包括按状态、优先级、项目等维度的统计数据。"
-              type="info"
-              showIcon
-            />
-          </Card>
+          <div className="panel">
+            <div className="panel-body">
+              <Alert
+                message="需求统计"
+                description="这里显示需求的统计分析信息，包括按状态、优先级、项目等维度的统计数据。"
+                type="info"
+                showIcon
+              />
+            </div>
+          </div>
         </TabPane>
         
         <TabPane tab="需求跟踪" key="tracking">
-          <Card>
-            <Alert
-              message="需求跟踪"
-              description="这里显示需求的跟踪信息，包括需求变更记录、状态变更历史、关联关系等。"
-              type="info"
-              showIcon
-            />
-          </Card>
+          <div className="panel">
+            <div className="panel-body">
+              <Alert
+                message="需求跟踪"
+                description="这里显示需求的跟踪信息，包括需求变更记录、状态变更历史、关联关系等。"
+                type="info"
+                showIcon
+              />
+            </div>
+          </div>
         </TabPane>
       </Tabs>
 
