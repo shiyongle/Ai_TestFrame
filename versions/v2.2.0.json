@@ -1,0 +1,61 @@
+﻿{
+  "version": "2.2.0",
+  "release_date": "2026-01-09",
+  "description": "前端 macOS 风格布局重构版本 - 统一信息密度与列表交互",
+  "features": {
+    "layout_redesign": {
+      "status": "完成",
+      "description": "引入 macOS 风格布局体系，统一页面结构与层级表达",
+      "changes": [
+        "新增 page-toolbar / panel / split-layout / inspector-panel 通用布局",
+        "页面内容容器统一为 app-content，调整内容留白与最大宽度",
+        "Dashboard/Projects/Requirements/TestCases/Versions/RuleConfig 统一布局风格"
+      ]
+    },
+    "navigation_refactor": {
+      "status": "完成",
+      "description": "侧边栏调整为 Source List 分组结构",
+      "changes": [
+        "菜单分组为 概览 / 项目与需求 / 测试执行 / 工具 / 系统",
+        "菜单选中态与分组标题风格更接近 macOS"
+      ]
+    },
+    "table_density": {
+      "status": "完成",
+      "description": "提升表格可读性与信息密度，优化交互",
+      "changes": [
+        "表格行高与字号提升，表头/单元格统一间距",
+        "操作列默认隐藏，行 hover/选中时显示",
+        "选中行增加浅色背景与左侧细条标记",
+        "首列双层信息展示（标题 + 次信息）"
+      ]
+    },
+    "visual_polish": {
+      "status": "完成",
+      "description": "提升整体字号与标签样式，增强可读性",
+      "changes": [
+        "全局基础字号提升至 15px，控件字号统一放大",
+        "标签统一为胶囊样式（tag-pill）",
+        "操作列轻量浮层感以减少噪音"
+      ]
+    }
+  },
+  "file_changes": {
+    "modified": [
+      "frontend/src/index.css",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppHeader.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/pages/Dashboard.tsx",
+      "frontend/src/pages/Projects.tsx",
+      "frontend/src/pages/Requirements/index.tsx",
+      "frontend/src/pages/TestCases.tsx",
+      "frontend/src/pages/Versions.tsx",
+      "frontend/src/pages/RuleConfig/index.tsx"
+    ]
+  },
+  "notes": [
+    "移除需求管理与版本管理中重复的“新建”按钮",
+    "保持现有路由与功能不变，仅调整布局与视觉层级"
+  ]
+}
