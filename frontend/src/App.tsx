@@ -19,6 +19,7 @@ import InterfaceTestCases from './pages/TestCases/InterfaceTestCases';
 import ApiAutomation from './pages/ApiAutomation';
 import Requirements from './pages/Requirements';
 import RuleConfig from './pages/RuleConfig';
+import AiKnowledge from './pages/AiKnowledge';
 
 const { Content } = Layout;
 
@@ -73,6 +74,7 @@ const App: React.FC = () => {
               <Route path="/test/tcp" element={<TcpTest />} />
               <Route path="/test/mq" element={<MqTest />} />
               <Route path="/rule-config" element={<RuleConfig />} />
+              <Route path="/ai/knowledge" element={<AiKnowledge />} />
               <Route path="/tools/id-generator" element={<IdGenerator />} />
               <Route path="/tools/phone-generator" element={<PhoneGenerator />} />
               <Route path="/test-menu" element={<TestMenu />} />

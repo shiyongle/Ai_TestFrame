@@ -29,6 +29,15 @@ async def get_testcases(
     return testcase_service.get_testcases(db, project_id)
 
 
+@router.get("/testcases", response_model=List[TestCaseResponse])
+async def get_all_testcases(
+    db: Session = Depends(get_database),
+    testcase_service = Depends(get_testcase_service)
+):
+    """获取所有测试用例"""
+    return testcase_service.get_all_testcases(db)
+
+
 @router.get("/testcases/{testcase_id}", response_model=TestCaseResponse)
 async def get_testcase(
     testcase_id: int,

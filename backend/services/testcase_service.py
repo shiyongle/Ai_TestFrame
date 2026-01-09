@@ -37,6 +37,16 @@ class TestCaseService:
         except Exception as e:
             logger.error(f"获取测试用例列表失败: 项目ID {project_id} - {str(e)}")
             raise e
+
+    def get_all_testcases(self, db: Session) -> List[TestCase]:
+        """获取所有测试用例"""
+        try:
+            testcases = db.query(TestCase).all()
+            logger.info(f"获取所有测试用例成功，共 {len(testcases)} 个用例")
+            return testcases
+        except Exception as e:
+            logger.error(f"获取所有测试用例失败: {str(e)}")
+            raise e
     
     def get_testcase(self, db: Session, testcase_id: int) -> Optional[TestCase]:
         """获取指定测试用例"""

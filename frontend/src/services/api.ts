@@ -46,6 +46,7 @@ export const projectApi = {
 export const testcaseApi = {
   getTestCases: (projectId: number): Promise<any[]> => api.get(`/api/v1/projects/${projectId}/testcases`),
   createTestCase: (projectId: number, data: any): Promise<any> => api.post(`/api/v1/projects/${projectId}/testcases`, data),
+  getAllTestCases: (): Promise<any[]> => api.get('/api/v1/testcases'),
 };
 
 // 测试相关API
@@ -85,6 +86,21 @@ export const requirementApi = {
   getProjectRequirements: (projectId: number): Promise<any[]> => api.get(`/api/v1/projects/${projectId}/requirements`),
   addComment: (id: number, comment: any): Promise<any> => api.post(`/api/v1/requirements/${id}/comments`, comment),
   linkTestCases: (id: number, linkData: any): Promise<any> => api.post(`/api/v1/requirements/${id}/link-testcases`, linkData),
+};
+
+// AI 知识库 API
+export const aiApi = {
+  getKnowledgeList: (): Promise<any> => api.get('/api/v1/ai/knowledge/list'),
+  addKnowledgeDocument: (data: any): Promise<any> => api.post('/api/v1/ai/knowledge/add', data),
+  searchKnowledge: (data: any): Promise<any> => api.post('/api/v1/ai/knowledge/search', data),
+  deleteKnowledgeDocument: (id: number): Promise<any> => api.delete(`/api/v1/ai/knowledge/${id}`),
+  getKnowledgeCategories: (): Promise<any> => api.get('/api/v1/ai/knowledge/categories'),
+  importKnowledgeFiles: (data: FormData): Promise<any> =>
+    api.post('/api/v1/ai/knowledge/import', data, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }),
+  updateKnowledgeLinks: (id: number, data: any): Promise<any> =>
+    api.post(`/api/v1/ai/knowledge/${id}/links`, data),
 };
 
 export default api;

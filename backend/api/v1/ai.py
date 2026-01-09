@@ -3,7 +3,7 @@ AI相关API路由
 提供AI能力的RESTful接口
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 import logging
@@ -51,6 +51,11 @@ class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., description="搜索查询")
     top_k: int = Field(5, description="返回结果数量")
     category: str = Field(None, description="文档分类过滤")
+
+class KnowledgeLinkRequest(BaseModel):
+    """知识文档关联请求"""
+    requirement_ids: List[int] = Field(default_factory=list, description="关联需求ID")
+    testcase_ids: List[int] = Field(default_factory=list, description="关联用例ID")
 
 class WorkflowCreateRequest(BaseModel):
     """工作流创建请求"""
@@ -222,7 +227,43 @@ async def search_knowledge(
             )
             
     except Exception as e:
-        logger.error(f"搜索知识API错误: {e}")
+            logger.error(f"搜索知识API错误: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge/import", response_model=APIResponse)
+async def import_knowledge_files(
+    files: List[UploadFile] = File(...),
+    category: str = Form("general"),
+    source: str = Form("upload"),
+    current_user: Dict = Depends(get_current_user)
+):
+    """导入知识文档文件"""
+    try:
+        from services.ai.knowledge_importer import parse_multiple_files
+        file_payload = []
+        for f in files:
+            content = await f.read()
+            file_payload.append((f.filename, content))
+
+        parsed_docs = parse_multiple_files(file_payload)
+        created = []
+        for doc in parsed_docs:
+            result = await ai_service.add_knowledge_document(
+                title=doc["title"],
+                content=doc["content"],
+                source=source or "upload",
+                category=category or "general",
+                metadata={"file_name": doc["title"]}
+            )
+            created.append(result)
+
+        return APIResponse(
+            success=True,
+            message="导入成功",
+            data={"count": len(created), "documents": created}
+        )
+    except Exception as e:
+        logger.error(f"导入知识文档失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/workflow/create", response_model=APIResponse)
@@ -391,7 +432,35 @@ async def delete_knowledge_document(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"删除知识文档API错误: {e}")
+            logger.error(f"删除知识文档API错误: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge/{document_id}/links", response_model=APIResponse)
+async def update_knowledge_links(
+    document_id: int,
+    request: KnowledgeLinkRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    """更新知识文档关联关系"""
+    try:
+        from services.ai.rag_engine import rag_engine
+        result = rag_engine.update_document_links(
+            document_id=document_id,
+            requirement_ids=request.requirement_ids,
+            testcase_ids=request.testcase_ids
+        )
+        if result.get('success'):
+            return APIResponse(
+                success=True,
+                message="关联更新成功",
+                data=result
+            )
+        else:
+            raise HTTPException(status_code=400, detail=result.get('error'))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新知识文档关联API错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/knowledge/categories", response_model=APIResponse)

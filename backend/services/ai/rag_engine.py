@@ -321,5 +321,83 @@ class RAGEngine:
             logger.error(f"获取文档数量失败: {e}")
             return 0
 
+    def get_all_documents(self) -> List[Dict[str, Any]]:
+        """获取所有知识库文档"""
+        try:
+            with self.SessionLocal() as session:
+                documents = session.query(KnowledgeDocument).order_by(
+                    KnowledgeDocument.updated_at.desc()
+                ).all()
+                return [
+                    {
+                        'id': doc.id,
+                        'doc_id': doc.doc_id,
+                        'title': doc.title,
+                        'content': doc.content,
+                        'source': doc.source,
+                        'category': doc.category,
+                        'metadata': json.loads(doc.doc_metadata) if doc.doc_metadata else {},
+                        'created_at': doc.created_at.isoformat() if doc.created_at else None,
+                        'updated_at': doc.updated_at.isoformat() if doc.updated_at else None
+                    }
+                    for doc in documents
+                ]
+        except Exception as e:
+            logger.error(f"获取知识文档失败: {e}")
+            return []
+
+    def delete_document(self, document_id: int) -> Dict[str, Any]:
+        """删除知识库文档"""
+        try:
+            with self.SessionLocal() as session:
+                doc = session.query(KnowledgeDocument).filter(
+                    KnowledgeDocument.id == document_id
+                ).first()
+                if not doc:
+                    return {'success': False, 'error': '文档不存在'}
+
+                doc_id = doc.doc_id
+                session.query(DocumentEmbedding).filter(
+                    DocumentEmbedding.doc_id == doc_id
+                ).delete()
+                session.delete(doc)
+                session.commit()
+
+                return {'success': True, 'doc_id': doc_id}
+        except Exception as e:
+            logger.error(f"删除文档失败: {e}")
+            return {'success': False, 'error': str(e)}
+
+    def update_document_links(
+        self,
+        document_id: int,
+        requirement_ids: List[int] = None,
+        testcase_ids: List[int] = None
+    ) -> Dict[str, Any]:
+        """更新知识文档关联"""
+        try:
+            with self.SessionLocal() as session:
+                doc = session.query(KnowledgeDocument).filter(
+                    KnowledgeDocument.id == document_id
+                ).first()
+                if not doc:
+                    return {'success': False, 'error': '文档不存在'}
+
+                metadata = json.loads(doc.doc_metadata) if doc.doc_metadata else {}
+                metadata['linked_requirements'] = requirement_ids or []
+                metadata['linked_testcases'] = testcase_ids or []
+                doc.doc_metadata = json.dumps(metadata, ensure_ascii=False)
+                session.commit()
+
+                return {
+                    'success': True,
+                    'document_id': document_id,
+                    'linked_requirements': metadata['linked_requirements'],
+                    'linked_testcases': metadata['linked_testcases']
+                }
+        except Exception as e:
+            logger.error(f"更新文档关联失败: {e}")
+            return {'success': False, 'error': str(e)}
+
 # 全局实例
 rag_engine = RAGEngine()

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layout, Menu, Drawer, Space, Tag } from 'antd';
+import type { MenuProps } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DashboardOutlined,
@@ -17,6 +18,7 @@ import {
   CodeOutlined,
   RocketOutlined,
   FileSearchOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -64,9 +66,9 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
   const currentPath = location.pathname === '/' ? '/dashboard' : location.pathname;
 
-  const menuItems = [
+  const menuItems: MenuProps['items'] = [
     {
-      type: 'group',
+      type: 'group' as const,
       label: '概览',
       children: [
         {
@@ -77,7 +79,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       ],
     },
     {
-      type: 'group',
+      type: 'group' as const,
       label: '项目与需求',
       children: [
         {
@@ -122,7 +124,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       ],
     },
     {
-      type: 'group',
+      type: 'group' as const,
       label: '测试执行',
       children: [
         {
@@ -167,7 +169,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       ],
     },
     {
-      type: 'group',
+      type: 'group' as const,
       label: '工具',
       children: [
         {
@@ -190,7 +192,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       ],
     },
     {
-      type: 'group',
+      type: 'group' as const,
       label: '系统',
       children: [
         {
@@ -202,6 +204,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               key: '/rule-config',
               icon: <SettingOutlined />,
               label: '规则配置',
+            },
+            {
+              key: '/ai/knowledge',
+              icon: <DatabaseOutlined />,
+              label: 'RAG 知识库',
             },
           ],
         },
@@ -239,6 +246,9 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     }
     if (currentPath.startsWith('/requirements')) {
       openKeys.push('projects');
+    }
+    if (currentPath.startsWith('/ai/knowledge')) {
+      openKeys.push('settings');
     }
     // 默认展开工具箱菜单
     if (openKeys.length === 0) {
