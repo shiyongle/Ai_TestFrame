@@ -349,6 +349,51 @@ async def get_available_providers(current_user: Dict = Depends(get_current_user)
         logger.error(f"获取提供商API错误: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/knowledge/list", response_model=APIResponse)
+async def get_knowledge_list(current_user: Dict = Depends(get_current_user)):
+    """获取知识库文档列表"""
+    try:
+        from services.ai.rag_engine import rag_engine
+        documents = rag_engine.get_all_documents()
+        
+        return APIResponse(
+            success=True,
+            message="获取知识库列表成功",
+            data=documents
+        )
+        
+    except Exception as e:
+        logger.error(f"获取知识库列表API错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/knowledge/{document_id}", response_model=APIResponse)
+async def delete_knowledge_document(
+    document_id: int,
+    current_user: Dict = Depends(get_current_user)
+):
+    """删除知识库文档"""
+    try:
+        from services.ai.rag_engine import rag_engine
+        result = rag_engine.delete_document(document_id)
+        
+        if result.get('success'):
+            return APIResponse(
+                success=True,
+                message="知识文档删除成功",
+                data=result
+            )
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"删除失败: {result.get('error')}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除知识文档API错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/knowledge/categories", response_model=APIResponse)
 async def get_knowledge_categories(current_user: Dict = Depends(get_current_user)):
     """获取知识库分类"""
