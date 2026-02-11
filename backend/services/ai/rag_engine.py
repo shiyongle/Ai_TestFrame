@@ -9,6 +9,7 @@ import hashlib
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 import logging
+import threading
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Float, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -63,7 +64,21 @@ class RAGEngine:
     """RAG知识库引擎"""
     
     def __init__(self):
-        self.engine = create_engine(settings.database_url)
+        # 预加载jieba分词
+        import jieba
+        jieba.initialize()
+        # 测试分词以确保初始化完成
+        jieba.lcut("测试")
+        
+        self.engine = create_engine(
+            settings.database_url,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_timeout=settings.db_pool_timeout,
+            pool_recycle=settings.db_pool_recycle,
+            pool_pre_ping=settings.db_pool_pre_ping,
+            connect_args={"connect_timeout": settings.db_pool_timeout}
+        )
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
         self.vectorizer = TfidfVectorizer(
@@ -72,8 +87,10 @@ class RAGEngine:
             ngram_range=(1, 2)
         )
         self._fit_vectorizer = False
+        self._vectorizer_lock = threading.Lock()
         self.document_cache = {}
         self._ensure_metadata_column()
+        logger.info("RAG引擎初始化完成")
 
     def _ensure_metadata_column(self) -> None:
         """确保知识文档表包含 doc_metadata 列"""
@@ -148,7 +165,20 @@ class RAGEngine:
         category: str = "general",
         metadata: Dict[str, Any] = None
     ) -> str:
-        """添加文档到知识库"""
+        """添加文档到知识库（仅入库，不做向量化）"""
+        return await asyncio.to_thread(
+            self._add_document_sync, title, content, source, category, metadata
+        )
+
+    def _add_document_sync(
+        self,
+        title: str,
+        content: str,
+        source: str = "",
+        category: str = "general",
+        metadata: Dict[str, Any] = None
+    ) -> str:
+        """添加文档到知识库（同步，仅入库）"""
         try:
             doc_id = self._generate_doc_id(title, content)
             metadata = metadata or {}
@@ -174,26 +204,6 @@ class RAGEngine:
                 )
                 session.add(doc)
                 session.commit()
-                
-                # 文档分块并存储向量
-                chunks = self._chunk_document(content)
-                for i, chunk in enumerate(chunks):
-                    # 预处理文本
-                    processed_text = self._preprocess_text(chunk)
-                    
-                    # 存储文档块
-                    embedding_doc = DocumentEmbedding(
-                        doc_id=doc_id,
-                        chunk_index=i,
-                        chunk_content=chunk,
-                        embedding=""  # 后续会更新
-                    )
-                    session.add(embedding_doc)
-                
-                session.commit()
-            
-            # 更新向量化器
-            await self._update_vectorizer()
             
             logger.info(f"成功添加文档: {title} (ID: {doc_id})")
             return doc_id
@@ -202,31 +212,148 @@ class RAGEngine:
             logger.error(f"添加文档失败: {e}")
             raise
     
-    async def _update_vectorizer(self):
-        """更新向量化器"""
+    def _update_vectorizer_sync(self, new_texts=None, new_chunk_ids=None):
+        """更新向量化器 - 支持增量更新（同步）"""
         try:
-            with self.SessionLocal() as session:
-                # 获取所有文档块
-                chunks = session.query(DocumentEmbedding.chunk_content).all()
-                texts = [self._preprocess_text(chunk[0]) for chunk in chunks]
-                
-                if texts:
-                    # 训练向量化器
-                    self.vectorizer.fit(texts)
-                    self._fit_vectorizer = True
+            with self._vectorizer_lock:
+                with self.SessionLocal() as session:
+                    # 如果是新文档，只处理新添加的文档块
+                    if new_texts and new_chunk_ids:
+                        texts = new_texts
+                        chunk_ids = new_chunk_ids
+                    else:
+                        # 获取所有没有向量的文档块（兼容旧逻辑）
+                        chunks = session.query(DocumentEmbedding).filter(
+                            DocumentEmbedding.embedding == ""
+                        ).all()
+                        texts = [self._preprocess_text(chunk.chunk_content) for chunk in chunks]
+                        chunk_ids = [chunk.id for chunk in chunks]
                     
-                    # 更新所有文档块的向量
+                    if not texts:
+                        return
+                    
+                    # 如果向量化器未训练，需要先训练
+                    if not self._fit_vectorizer:
+                        # 获取所有已有文档块进行训练
+                        all_chunks = session.query(DocumentEmbedding).all()
+                        all_texts = [self._preprocess_text(chunk.chunk_content) for chunk in all_chunks]
+                        if all_texts:
+                            self.vectorizer.fit(all_texts)
+                            self._fit_vectorizer = True
+                            logger.info(f"向量化器训练完成，使用 {len(all_texts)} 个文档块")
+                            
+                            # 重新训练后，需要更新所有文档块的向量
+                            all_embeddings = self.vectorizer.transform(all_texts).toarray()
+                            for i, chunk in enumerate(all_chunks):
+                                session.query(DocumentEmbedding).filter(
+                                    DocumentEmbedding.id == chunk.id
+                                ).update({
+                                    DocumentEmbedding.embedding: json.dumps(all_embeddings[i].tolist())
+                                })
+                            session.commit()
+                            logger.info(f"已更新所有 {len(all_chunks)} 个文档块的向量")
+                            return
+                    
+                    # 计算新文档块的向量
                     embeddings = self.vectorizer.transform(texts).toarray()
                     
-                    for i, embedding in enumerate(embeddings):
-                        chunk = chunks[i]
-                        chunk.embedding = json.dumps(embedding.tolist())
+                    # 批量更新向量
+                    for chunk_id, embedding in zip(chunk_ids, embeddings):
+                        session.query(DocumentEmbedding).filter(
+                            DocumentEmbedding.id == chunk_id
+                        ).update({
+                            DocumentEmbedding.embedding: json.dumps(embedding.tolist())
+                        })
                     
                     session.commit()
-                    logger.info(f"更新了 {len(texts)} 个文档块的向量")
-                    
+                    logger.info(f"成功更新 {len(texts)} 个文档块的向量")
+                
         except Exception as e:
             logger.error(f"更新向量化器失败: {e}")
+            raise
+
+    async def _update_vectorizer(self, new_texts=None, new_chunk_ids=None):
+        """更新向量化器 - 支持增量更新（异步封装）"""
+        await asyncio.to_thread(self._update_vectorizer_sync, new_texts, new_chunk_ids)
+
+    async def _schedule_vectorizer_update(self, new_texts=None, new_chunk_ids=None) -> None:
+        """后台更新向量化器，避免阻塞请求"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # 不在事件循环中，回退为同步等待
+            await self._update_vectorizer(new_texts, new_chunk_ids)
+            return
+
+        async def _run():
+            try:
+                await self._update_vectorizer(new_texts, new_chunk_ids)
+            except Exception as e:
+                logger.error(f"后台更新向量化器失败: {e}")
+
+        loop.create_task(_run())
+
+    def _build_embeddings_for_doc_sync(self, doc_id: str, content: str) -> None:
+        """为单个文档构建向量化数据（同步）"""
+        with self.SessionLocal() as session:
+            existing_chunks = session.query(DocumentEmbedding).filter(
+                DocumentEmbedding.doc_id == doc_id
+            ).all()
+
+            # 如果已有向量，直接跳过
+            if existing_chunks and any(chunk.embedding for chunk in existing_chunks):
+                return
+
+            if existing_chunks:
+                session.query(DocumentEmbedding).filter(
+                    DocumentEmbedding.doc_id == doc_id
+                ).delete()
+                session.commit()
+
+            chunks = self._chunk_document(content)
+            new_chunk_ids = []
+            new_texts = []
+            for i, chunk in enumerate(chunks):
+                processed_text = self._preprocess_text(chunk)
+                embedding_doc = DocumentEmbedding(
+                    doc_id=doc_id,
+                    chunk_index=i,
+                    chunk_content=chunk,
+                    embedding=""
+                )
+                session.add(embedding_doc)
+                session.flush()
+                new_chunk_ids.append(embedding_doc.id)
+                new_texts.append(processed_text)
+
+            session.commit()
+
+        # 向量化更新放到独立逻辑，避免占用DB会话时间
+        self._update_vectorizer_sync(new_texts, new_chunk_ids)
+
+    async def _schedule_embedding_build(self, doc_id: str, content: str) -> None:
+        """后台构建向量化数据，避免阻塞请求"""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
+            return
+
+        async def _run():
+            try:
+                await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
+            except Exception as e:
+                logger.error(f"后台构建向量化数据失败: {e}")
+
+        loop.create_task(_run())
+
+    def _schedule_embedding_build_sync(self, doc_id: str, content: str) -> None:
+        """同步场景下的后台构建"""
+        threading.Thread(
+            target=self._build_embeddings_for_doc_sync,
+            args=(doc_id, content),
+            daemon=True
+        ).start()
     
     async def search(
         self, 

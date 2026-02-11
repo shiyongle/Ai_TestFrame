@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -11,9 +12,9 @@ class Settings(BaseSettings):
     debug: bool = False
     
     # 数据库配置
-    mysql_user: str = ""
-    mysql_password: str = ""
-    mysql_host: str = ""
+    mysql_user: str = "root"
+    mysql_password: str = "s3cr3t"
+    mysql_host: str = "192.168.0.193"
     mysql_port: int = 3306
     mysql_database: str = "test_system"
     
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     WORKFLOW_MAX_CONCURRENT: int = 10
     
     model_config = {
-        "env_file": ".env",
+        "env_file": str(Path(__file__).resolve().parents[1] / ".env"),
         "env_file_encoding": "utf-8"
     }
     

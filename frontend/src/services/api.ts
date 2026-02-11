@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { HttpTestRequest, HttpTestResponse, TcpTestRequest, TcpTestResponse, MqTestRequest, MqTestResponse, Project } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -9,6 +10,11 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+const uploadApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 120000,
 });
 
 // 请求拦截器
@@ -96,9 +102,7 @@ export const aiApi = {
   deleteKnowledgeDocument: (id: number): Promise<any> => api.delete(`/api/v1/ai/knowledge/${id}`),
   getKnowledgeCategories: (): Promise<any> => api.get('/api/v1/ai/knowledge/categories'),
   importKnowledgeFiles: (data: FormData): Promise<any> =>
-    api.post('/api/v1/ai/knowledge/import', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }),
+    uploadApi.post('/api/v1/ai/knowledge/import', data),
   updateKnowledgeLinks: (id: number, data: any): Promise<any> =>
     api.post(`/api/v1/ai/knowledge/${id}/links`, data),
 };

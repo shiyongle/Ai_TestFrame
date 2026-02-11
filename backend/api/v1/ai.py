@@ -3,9 +3,10 @@ AI相关API路由
 提供AI能力的RESTful接口
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
+import asyncio
 import logging
 
 from services.ai.ai_service import ai_service
@@ -14,6 +15,7 @@ async def get_current_user():
     return {"user_id": "1", "username": "admin"}
 
 logger = logging.getLogger(__name__)
+main_logger = logging.getLogger("main")
 router = APIRouter()
 
 # 请求模型
@@ -176,30 +178,51 @@ async def add_knowledge_document(
     current_user: Dict = Depends(get_current_user)
 ):
     """添加知识文档"""
-    try:
+    main_logger.info(f"[AI] add knowledge request: title={request.title}, category={request.category}")
+
+    async def _persist_document(title: str, content: str, source: str, category: str, metadata: Dict[str, Any]):
         result = await ai_service.add_knowledge_document(
-            title=request.title,
-            content=request.content,
-            source=request.source,
-            category=request.category,
-            metadata=request.metadata
+            title=title,
+            content=content,
+            source=source,
+            category=category,
+            metadata=metadata
         )
-        
-        if result.get('success'):
-            return APIResponse(
-                success=True,
-                message="知识文档添加成功",
-                data=result
-            )
+        if result.get("success"):
+            main_logger.info(f"[AI] knowledge persisted: doc_id={result.get('doc_id')}, title={title}")
         else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"添加失败: {result.get('error')}"
+            main_logger.error(f"[AI] knowledge persist failed: title={title}, error={result.get('error')}")
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(
+            _persist_document(
+                request.title,
+                request.content,
+                request.source,
+                request.category,
+                request.metadata
             )
-            
-    except Exception as e:
-        logger.error(f"添加知识文档API错误: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        )
+    except RuntimeError:
+        # 极端情况下没有事件循环，直接同步执行
+        await _persist_document(
+            request.title,
+            request.content,
+            request.source,
+            request.category,
+            request.metadata
+        )
+
+    return APIResponse(
+        success=True,
+        message="知识文档已入队，正在后台持久化",
+        data={
+            "queued": True,
+            "title": request.title,
+            "category": request.category
+        }
+    )
 
 @router.post("/knowledge/search", response_model=APIResponse)
 async def search_knowledge(
@@ -241,29 +264,50 @@ async def import_knowledge_files(
     try:
         from services.ai.knowledge_importer import parse_multiple_files
         file_payload = []
+        
+        logger.info(f"开始处理导入请求，文件数量: {len(files)}")
+        
         for f in files:
-            content = await f.read()
-            file_payload.append((f.filename, content))
+            try:
+                content = await f.read()
+                logger.info(f"读取文件: {f.filename}, 大小: {len(content)} 字节")
+                file_payload.append((f.filename, content))
+            except Exception as e:
+                logger.error(f"读取文件 {f.filename} 失败: {e}")
+                raise
 
+        logger.info(f"开始解析 {len(file_payload)} 个文件")
         parsed_docs = parse_multiple_files(file_payload)
+        logger.info(f"成功解析 {len(parsed_docs)} 个文档")
+        
         created = []
         for doc in parsed_docs:
-            result = await ai_service.add_knowledge_document(
-                title=doc["title"],
-                content=doc["content"],
-                source=source or "upload",
-                category=category or "general",
-                metadata={"file_name": doc["title"]}
-            )
-            created.append(result)
+            try:
+                result = await ai_service.add_knowledge_document(
+                    title=doc["title"],
+                    content=doc["content"],
+                    source=source or "upload",
+                    category=category or "general",
+                    metadata={"file_name": doc["title"]}
+                )
+                created.append(result)
+                logger.info(f"成功添加文档: {doc['title']}")
+            except Exception as e:
+                logger.error(f"添加文档 {doc['title']} 失败: {e}")
+                # 继续处理其他文档，不中断整个导入过程
+                created.append({"success": False, "error": str(e), "title": doc["title"]})
 
+        success_count = sum(1 for doc in created if doc.get("success", False))
+        
         return APIResponse(
             success=True,
-            message="导入成功",
-            data={"count": len(created), "documents": created}
+            message=f"导入完成，成功 {success_count}/{len(created)} 个文档",
+            data={"count": success_count, "total": len(created), "documents": created}
         )
     except Exception as e:
         logger.error(f"导入知识文档失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/workflow/create", response_model=APIResponse)
@@ -297,7 +341,6 @@ async def create_workflow(
 @router.post("/workflow/execute", response_model=APIResponse)
 async def execute_workflow(
     request: WorkflowExecuteRequest,
-    background_tasks: BackgroundTasks,
     current_user: Dict = Depends(get_current_user)
 ):
     """执行工作流"""

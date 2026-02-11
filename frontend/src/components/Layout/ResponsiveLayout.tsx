@@ -259,8 +259,8 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
   const siderContent = (
     <>
-      <div 
-        className="logo sidebar-brand" 
+      <div
+        className="logo sidebar-brand"
         style={{
           height: '72px',
           margin: '16px',
@@ -279,22 +279,6 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
           {!collapsed && <span>投石问路</span>}
         </Space>
-        {!collapsed && (
-          <Tag
-            color="default"
-            className="brand-badge"
-            style={{
-              margin: 0,
-              borderRadius: 999,
-              border: 'none',
-              background: 'rgba(0, 113, 227, 0.1)',
-              color: '#0071e3',
-              fontWeight: 600,
-            }}
-          >
-            AI Copilot
-          </Tag>
-        )}
       </div>
       <Menu
         theme="light"
@@ -338,13 +322,14 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   }
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       <Sider
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        width={240}
+        width={260}
         collapsedWidth={80}
+        className="glass-panel"
         style={{
           overflow: 'auto',
           height: '100vh',
@@ -352,15 +337,18 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           left: 0,
           top: 0,
           bottom: 0,
-          boxShadow: '2px 0 20px rgba(0,0,0,0.2)',
           zIndex: 1000,
-          paddingTop: 6,
+          borderRight: '1px solid rgba(0,0,0,0.05)',
         }}
         theme="light"
       >
         {siderContent}
       </Sider>
-      <Layout style={{ marginLeft: collapsed ? 80 : 240, transition: 'margin-left 0.2s' }}>
+      <Layout style={{
+        marginLeft: collapsed ? 80 : 260,
+        transition: 'all 0.3s cubic-bezier(0.2, 0, 0, 1)',
+        background: 'transparent'
+      }}>
         {children}
       </Layout>
     </Layout>

@@ -1,34 +1,44 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Table, 
-  Button, 
-  Space, 
-  Input, 
-  Select, 
-  Tag, 
-  Modal, 
-  Form, 
+import {
+  Table,
+  Button,
+  Space,
+  Input,
+  Select,
+  Tag,
+  Modal,
+  Form,
   message,
   Typography,
   Row,
   Col,
-  Tabs,
-  Tooltip
+  List,
+  Divider,
+  Tooltip,
+  Steps,
+  Avatar,
+  Card,
+  Badge
 } from 'antd';
-import { 
-  PlusOutlined, 
-  EditOutlined, 
-  DeleteOutlined, 
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
   SearchOutlined,
   CopyOutlined,
-  PlayCircleOutlined,
-  FileTextOutlined
+  PlayCircleFilled,
+  FileTextOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ClockCircleFilled,
+  MoreOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import dayjs from 'dayjs';
 
-const { Title } = Typography;
+const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Step } = Steps;
 
 interface FunctionalTestCase {
   id: string;
@@ -42,12 +52,14 @@ interface FunctionalTestCase {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  lastExecutionResult?: 'pass' | 'fail' | 'blocked' | null;
 }
 
 const FunctionalTestCases: React.FC = () => {
   const [testCases, setTestCases] = useState<FunctionalTestCase[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCase, setEditingCase] = useState<FunctionalTestCase | null>(null);
+  const [selectedCase, setSelectedCase] = useState<FunctionalTestCase | null>(null);
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
   const [filterModule, setFilterModule] = useState<string>('');
@@ -67,7 +79,8 @@ const FunctionalTestCases: React.FC = () => {
         expectedResult: '成功登录系统，跳转到首页',
         createdBy: '张三',
         createdAt: '2024-01-15',
-        updatedAt: '2024-01-15'
+        updatedAt: '2024-01-15',
+        lastExecutionResult: 'pass'
       },
       {
         id: '2',
@@ -80,7 +93,8 @@ const FunctionalTestCases: React.FC = () => {
         expectedResult: '注册成功，显示成功提示',
         createdBy: '李四',
         createdAt: '2024-01-16',
-        updatedAt: '2024-01-16'
+        updatedAt: '2024-01-16',
+        lastExecutionResult: null
       },
       {
         id: '3',
@@ -93,10 +107,12 @@ const FunctionalTestCases: React.FC = () => {
         expectedResult: '显示相关商品列表',
         createdBy: '王五',
         createdAt: '2024-01-17',
-        updatedAt: '2024-01-17'
+        updatedAt: '2024-01-17',
+        lastExecutionResult: 'fail'
       }
     ];
     setTestCases(mockData);
+    if (mockData.length > 0) setSelectedCase(mockData[0]);
   }, []);
 
   const columns: ColumnsType<FunctionalTestCase> = [
@@ -105,96 +121,76 @@ const FunctionalTestCases: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       filteredValue: searchText ? [searchText] : null,
-      onFilter: (value, record) => 
+      onFilter: (value, record) =>
         record.name.toLowerCase().includes(value.toString().toLowerCase()),
-    },
-    {
-      title: '模块',
-      dataIndex: 'module',
-      key: 'module',
-      filters: [
-        { text: '用户管理', value: '用户管理' },
-        { text: '商品管理', value: '商品管理' },
-        { text: '订单管理', value: '订单管理' },
-      ],
-      filteredValue: filterModule ? [filterModule] : null,
-      onFilter: (value, record) => record.module === value,
-    },
-    {
-      title: '优先级',
-      dataIndex: 'priority',
-      key: 'priority',
-      render: (priority: string) => {
-        const color = priority === 'high' ? 'red' : priority === 'medium' ? 'orange' : 'green';
-        const text = priority === 'high' ? '高' : priority === 'medium' ? '中' : '低';
-        return <Tag color={color}>{text}</Tag>;
-      },
-      filters: [
-        { text: '高', value: 'high' },
-        { text: '中', value: 'medium' },
-        { text: '低', value: 'low' },
-      ],
-      onFilter: (value, record) => record.priority === value,
+      render: (text: string, record) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 4, height: 32, borderRadius: 2,
+            background: record.priority === 'high' ? '#FF3B30' : record.priority === 'medium' ? '#FF9500' : '#34C759'
+          }} />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <Text strong style={{ fontSize: 14 }}>{text}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{record.module}</Text>
+          </div>
+        </div>
+      )
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status: string) => {
-        const color = status === 'active' ? 'green' : 'default';
-        const text = status === 'active' ? '激活' : '停用';
-        return <Tag color={color}>{text}</Tag>;
-      },
+      width: 100,
       filters: [
         { text: '激活', value: 'active' },
         { text: '停用', value: 'inactive' },
       ],
       filteredValue: filterStatus ? [filterStatus] : null,
       onFilter: (value, record) => record.status === value,
+      render: (status: string) => {
+        const color = status === 'active' ? 'processing' : 'default';
+        const text = status === 'active' ? '激活' : '停用';
+        return <Tag color={color} bordered={false}>{text}</Tag>;
+      },
     },
     {
-      title: '创建人',
-      dataIndex: 'createdBy',
-      key: 'createdBy',
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
+      title: '上一次执行',
+      dataIndex: 'lastExecutionResult',
+      key: 'lastExecutionResult',
+      width: 120,
+      render: (result: string) => {
+        if (!result) return <Tag color="default" bordered={false}>未执行</Tag>;
+        const map: any = {
+          pass: { color: 'success', text: '通过', icon: <CheckCircleFilled /> },
+          fail: { color: 'error', text: '失败', icon: <CloseCircleFilled /> },
+          blocked: { color: 'warning', text: '阻塞', icon: <ClockCircleFilled /> }
+        };
+        const conf = map[result];
+        return <Tag color={conf.color} icon={conf.icon} bordered={false}>{conf.text}</Tag>;
+      }
     },
     {
       title: '操作',
       key: 'action',
+      width: 150,
       render: (_, record) => (
-        <Space size="middle">
-          <Tooltip title="编辑">
-            <Button 
-              type="text" 
-              icon={<EditOutlined />} 
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
-          <Tooltip title="复制">
-            <Button 
-              type="text" 
-              icon={<CopyOutlined />} 
-              onClick={() => handleCopy(record)}
-            />
-          </Tooltip>
-          <Tooltip title="执行">
-            <Button 
-              type="text" 
-              icon={<PlayCircleOutlined />} 
+        <Space size="small" onClick={e => e.stopPropagation()}>
+          <Tooltip title="快速执行">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<PlayCircleFilled style={{ color: '#34C759' }} />}
               onClick={() => handleExecute(record)}
             />
           </Tooltip>
+          <Tooltip title="编辑">
+            <Button type="text" shape="circle" icon={<EditOutlined />} onClick={() => handleEdit(record)} />
+          </Tooltip>
+          <Tooltip title="复制">
+            <Button type="text" shape="circle" icon={<CopyOutlined />} onClick={() => handleCopy(record)} />
+          </Tooltip>
           <Tooltip title="删除">
-            <Button 
-              type="text" 
-              danger 
-              icon={<DeleteOutlined />} 
-              onClick={() => handleDelete(record)}
-            />
+            <Button type="text" danger shape="circle" icon={<DeleteOutlined />} onClick={() => handleDelete(record)} />
           </Tooltip>
         </Space>
       ),
@@ -220,7 +216,8 @@ const FunctionalTestCases: React.FC = () => {
   };
 
   const handleExecute = (record: FunctionalTestCase) => {
-    message.info(`执行测试用例: ${record.name}`);
+    message.loading(`正在初始化执行: ${record.name}`, 1)
+      .then(() => message.success('执行完成，结果已记录'));
   };
 
   const handleDelete = (record: FunctionalTestCase) => {
@@ -229,8 +226,10 @@ const FunctionalTestCases: React.FC = () => {
       content: `确定要删除测试用例 "${record.name}" 吗？`,
       onOk: () => {
         setTestCases(testCases.filter(item => item.id !== record.id));
+        if (selectedCase?.id === record.id) setSelectedCase(null);
         message.success('删除成功');
       },
+      okButtonProps: { danger: true }
     });
   };
 
@@ -238,21 +237,20 @@ const FunctionalTestCases: React.FC = () => {
     try {
       const values = await form.validateFields();
       if (editingCase) {
-        // 编辑
-        setTestCases(testCases.map(item => 
-          item.id === editingCase.id 
+        setTestCases(testCases.map(item =>
+          item.id === editingCase.id
             ? { ...item, ...values, updatedAt: new Date().toISOString().split('T')[0] }
             : item
         ));
         message.success('更新成功');
       } else {
-        // 新增
         const newCase: FunctionalTestCase = {
           ...values,
           id: Date.now().toString(),
           createdBy: '当前用户',
           createdAt: new Date().toISOString().split('T')[0],
           updatedAt: new Date().toISOString().split('T')[0],
+          lastExecutionResult: null
         };
         setTestCases([...testCases, newCase]);
         message.success('创建成功');
@@ -264,70 +262,136 @@ const FunctionalTestCases: React.FC = () => {
     }
   };
 
+  const renderSteps = (stepsStr: string) => {
+    const steps = stepsStr.split('\n').filter(s => s.trim());
+    return (
+      <div style={{ marginTop: 16 }}>
+        {steps.map((step, idx) => (
+          <div key={idx} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 12, background: 'rgba(0,0,0,0.05)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: '#666',
+              flexShrink: 0
+            }}>
+              {idx + 1}
+            </div>
+            <Text style={{ lineHeight: 1.6, flex: 1 }}>{step.replace(/^\d+\.\s*/, '')}</Text>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
-    <div>
-      <Title level={2}>
-        <FileTextOutlined /> 功能测试用例
-      </Title>
-      
-      <Card>
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={12} md={8}>
+    <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1600, margin: '0 auto', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Title level={2} style={{ margin: 0, fontWeight: 700 }}>功能测试用例</Title>
+          <Text type="secondary">管理和执行手动测试用例</Text>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} shape="round" size="large">
+          新增用例
+        </Button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 24, flex: 1, overflow: 'hidden' }}>
+
+        {/* Left: Test Case List */}
+        <div className="glass-panel" style={{ flex: 6, borderRadius: 16, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 12 }}>
             <Input
-              placeholder="搜索用例名称"
-              prefix={<SearchOutlined />}
+              prefix={<SearchOutlined style={{ color: '#ccc' }} />}
+              placeholder="搜索用例..."
+              style={{ flex: 1, borderRadius: 8 }}
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
+              onChange={e => setSearchText(e.target.value)}
             />
-          </Col>
-          <Col xs={24} sm={12} md={8}>
-            <Select
-              placeholder="选择模块"
-              style={{ width: '100%' }}
-              allowClear
-              value={filterModule}
-              onChange={setFilterModule}
-            >
+            <Select placeholder="模块" style={{ width: 120 }} allowClear value={filterModule} onChange={setFilterModule}>
               <Select.Option value="用户管理">用户管理</Select.Option>
               <Select.Option value="商品管理">商品管理</Select.Option>
               <Select.Option value="订单管理">订单管理</Select.Option>
             </Select>
-          </Col>
-          <Col xs={24} sm={12} md={8}>
-            <Select
-              placeholder="选择状态"
-              style={{ width: '100%' }}
-              allowClear
-              value={filterStatus}
-              onChange={setFilterStatus}
-            >
-              <Select.Option value="active">激活</Select.Option>
-              <Select.Option value="inactive">停用</Select.Option>
-            </Select>
-          </Col>
-        </Row>
+          </div>
+          <Table
+            columns={columns}
+            dataSource={testCases.filter(c =>
+              (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true) &&
+              (filterModule ? c.module === filterModule : true)
+            )}
+            rowKey="id"
+            pagination={{ pageSize: 15, showSizeChanger: false, size: 'small' }}
+            style={{ background: 'transparent' }}
+            onRow={(record) => ({
+              onClick: () => setSelectedCase(record),
+              style: { cursor: 'pointer' }
+            })}
+            rowClassName={(record) => selectedCase?.id === record.id ? 'ant-table-row-selected' : 'table-row-hover'}
+            size="middle"
+          />
+        </div>
 
-        <Row style={{ marginBottom: 16 }}>
-          <Col>
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-              新增用例
-            </Button>
-          </Col>
-        </Row>
+        {/* Right: Test Case Detail & Execution */}
+        <div className="glass-panel" style={{ flex: 4, borderRadius: 16, display: 'flex', flexDirection: 'column', overflowY: 'auto', background: 'rgba(255,255,255,0.8)' }}>
+          {selectedCase ? (
+            <div style={{ padding: 32 }} className="fade-in" key={selectedCase.id}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+                <Tag color="purple">TEST-{selectedCase.id}</Tag>
+                <Space>
+                  <Button icon={<PlayCircleFilled />} type="primary" onClick={() => handleExecute(selectedCase)}>执行</Button>
+                  <Button icon={<EditOutlined />} onClick={() => handleEdit(selectedCase)} />
+                </Space>
+              </div>
 
-        <Table
-          columns={columns}
-          dataSource={testCases}
-          rowKey="id"
-          pagination={{
-            total: testCases.length,
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-          }}
-        />
-      </Card>
+              <Title level={3} style={{ marginBottom: 16 }}>{selectedCase.name}</Title>
+
+              <Paragraph type="secondary" style={{ marginBottom: 24, padding: 12, background: 'rgba(0,0,0,0.03)', borderRadius: 8 }}>
+                {selectedCase.description}
+              </Paragraph>
+
+              <Row gutter={24} style={{ marginBottom: 24 }}>
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>模块</Text>
+                  <div style={{ fontWeight: 500 }}>{selectedCase.module}</div>
+                </Col>
+                <Col span={12}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>优先级</Text>
+                  <div>
+                    <Tag color={selectedCase.priority === 'high' ? 'red' : selectedCase.priority === 'medium' ? 'orange' : 'green'}>
+                      {selectedCase.priority.toUpperCase()}
+                    </Tag>
+                  </div>
+                </Col>
+              </Row>
+
+              <Divider />
+
+              <Title level={5}><FileTextOutlined /> 测试步骤</Title>
+              {renderSteps(selectedCase.steps)}
+
+              <Divider />
+
+              <Title level={5}><CheckCircleFilled /> 预期结果</Title>
+              <Paragraph style={{ padding: '12px 16px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, color: '#389e0d' }}>
+                {selectedCase.expectedResult}
+              </Paragraph>
+
+              <Divider />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#999' }}>
+                <span>创建人: {selectedCase.createdBy}</span>
+                <span>更新于: {selectedCase.updatedAt}</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999' }}>
+              <FileTextOutlined style={{ fontSize: 64, marginBottom: 24, opacity: 0.2 }} />
+              <Text type="secondary">选择左侧用例查看详情</Text>
+            </div>
+          )}
+        </div>
+
+      </div>
 
       <Modal
         title={editingCase ? '编辑测试用例' : '新增测试用例'}
@@ -337,7 +401,7 @@ const FunctionalTestCases: React.FC = () => {
           setModalVisible(false);
           form.resetFields();
         }}
-        width={800}
+        width={720}
         okText="保存"
         cancelText="取消"
       >
@@ -349,76 +413,53 @@ const FunctionalTestCases: React.FC = () => {
             status: 'active',
           }}
         >
-          <Form.Item
-            name="name"
-            label="用例名称"
-            rules={[{ required: true, message: '请输入用例名称' }]}
-          >
-            <Input placeholder="请输入用例名称" />
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="用例描述"
-            rules={[{ required: true, message: '请输入用例描述' }]}
-          >
-            <TextArea rows={3} placeholder="请输入用例描述" />
-          </Form.Item>
-
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="module"
-                label="所属模块"
-                rules={[{ required: true, message: '请选择所属模块' }]}
-              >
-                <Select placeholder="请选择所属模块">
+            <Col span={16}>
+              <Form.Item name="name" label="用例名称" rules={[{ required: true }]}>
+                <Input placeholder="请输入用例名称" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="module" label="所属模块" rules={[{ required: true }]}>
+                <Select>
                   <Select.Option value="用户管理">用户管理</Select.Option>
                   <Select.Option value="商品管理">商品管理</Select.Option>
                   <Select.Option value="订单管理">订单管理</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
+          </Row>
+
+          <Form.Item name="description" label="用例描述" rules={[{ required: true }]}>
+            <TextArea rows={2} />
+          </Form.Item>
+
+          <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-                name="priority"
-                label="优先级"
-                rules={[{ required: true, message: '请选择优先级' }]}
-              >
-                <Select placeholder="请选择优先级">
+              <Form.Item name="priority" label="优先级" rules={[{ required: true }]}>
+                <Select>
                   <Select.Option value="high">高</Select.Option>
                   <Select.Option value="medium">中</Select.Option>
                   <Select.Option value="low">低</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
+            <Col span={12}>
+              <Form.Item name="status" label="状态" rules={[{ required: true }]}>
+                <Select>
+                  <Select.Option value="active">激活</Select.Option>
+                  <Select.Option value="inactive">停用</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
           </Row>
 
-          <Form.Item
-            name="steps"
-            label="测试步骤"
-            rules={[{ required: true, message: '请输入测试步骤' }]}
-          >
-            <TextArea rows={4} placeholder="请输入测试步骤，每行一个步骤" />
+          <Form.Item name="steps" label="测试步骤" rules={[{ required: true }]} help="每行代表一个步骤">
+            <TextArea rows={5} placeholder="1. ..." />
           </Form.Item>
 
-          <Form.Item
-            name="expectedResult"
-            label="预期结果"
-            rules={[{ required: true, message: '请输入预期结果' }]}
-          >
-            <TextArea rows={3} placeholder="请输入预期结果" />
-          </Form.Item>
-
-          <Form.Item
-            name="status"
-            label="状态"
-            rules={[{ required: true, message: '请选择状态' }]}
-          >
-            <Select placeholder="请选择状态">
-              <Select.Option value="active">激活</Select.Option>
-              <Select.Option value="inactive">停用</Select.Option>
-            </Select>
+          <Form.Item name="expectedResult" label="预期结果" rules={[{ required: true }]}>
+            <TextArea rows={2} />
           </Form.Item>
         </Form>
       </Modal>

@@ -1,4 +1,7 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+import asyncio
+from starlette.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import uuid
@@ -56,17 +59,47 @@ async def log_requests(request: Request, call_next):
     # 记录到专门的请求日志文件
     request_logger.info(f"{request.method} {request.url.path} - IP: {client_ip} - {user_agent}")
     
-    response = await call_next(request)
+    try:
+        response = await asyncio.wait_for(call_next(request), timeout=15)
+    except asyncio.TimeoutError:
+        main_logger.error(f"[RES {request_id}] {request.method} {request.url.path} -> 504 (timeout)")
+        request_logger.error(f"{request.method} {request.url.path} -> 504 (timeout)")
+        return JSONResponse(
+            status_code=504,
+            content={"success": False, "message": "request timeout", "error": "gateway timeout"}
+        )
     
     duration_ms = (time.perf_counter() - start) * 1000
     
     # 记录响应信息
     main_logger.info(f"[RES {request_id}] {request.method} {request.url.path} -> {response.status_code} ({duration_ms:.1f} ms)")
+    request_logger.info(f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms:.1f} ms)")
     
     # 记录慢请求（超过1秒）
     if duration_ms > 1000:
         main_logger.warning(f"[SLOW {request_id}] {request.method} {request.url.path} took {duration_ms:.1f} ms")
     
+    # 记录错误响应体（仅限较小的响应）
+    if response.status_code >= 400:
+        try:
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+            if body:
+                body_text = body.decode("utf-8", errors="replace")
+                if len(body_text) > 2000:
+                    body_text = body_text[:2000] + "...(truncated)"
+                main_logger.warning(f"[RES {request_id}] Body: {body_text}")
+                request_logger.warning(f"{request.method} {request.url.path} Body: {body_text}")
+            response = Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type
+            )
+        except Exception as e:
+            main_logger.error(f"[RES {request_id}] Failed to read error body: {e}")
+
     return response
 
 # 根路径

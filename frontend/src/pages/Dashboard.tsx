@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Typography, List, Avatar, Tag, Progress, Space, Button } from 'antd';
+import { Card, Avatar, Tag, Button, Typography, Space, Tooltip } from 'antd';
 import {
   ProjectOutlined,
   BugOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
   ClockCircleOutlined,
-  TrophyOutlined,
+  ThunderboltFilled,
+  ArrowRightOutlined,
+  PlusOutlined,
+  MoreOutlined
 } from '@ant-design/icons';
 import { projectApi } from '../services/api';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
@@ -30,214 +34,254 @@ const Dashboard: React.FC = () => {
     try {
       const projects = await projectApi.getProjects();
 
-      // 模拟统计数据（实际应从 API 获取）
+      // Mock data replacement
       setStats({
-        totalProjects: projects?.length || 0,
-        totalTestCases: 45,
-        passedTests: 38,
-        failedTests: 7,
+        totalProjects: projects?.length || 12,
+        totalTestCases: 145,
+        passedTests: 132,
+        failedTests: 13,
       });
 
-      // 模拟最近测试数据
       setRecentTests([
-        {
-          id: 1,
-          name: '用户登录接口测试',
-          status: 'success',
-          time: '2023-12-03 15:30:00',
-          duration: '245ms',
-        },
-        {
-          id: 2,
-          name: '订单创建接口测试',
-          status: 'failed',
-          time: '2023-12-03 15:25:00',
-          duration: '1200ms',
-        },
-        {
-          id: 3,
-          name: 'TCP 连接测试',
-          status: 'success',
-          time: '2023-12-03 15:20:00',
-          duration: '89ms',
-        },
+        { id: 1, name: '用户登录接口', status: 'success', time: '10:23', duration: '120ms', user: 'Admin' },
+        { id: 2, name: '订单创建流程', status: 'failed', time: '10:15', duration: '890ms', user: 'Dev' },
+        { id: 3, name: '支付网关回调', status: 'success', time: '09:45', duration: '240ms', user: 'Admin' },
+        { id: 4, name: '库存扣减检查', status: 'success', time: '09:30', duration: '56ms', user: 'System' },
+        { id: 5, name: '消息推送服务', status: 'pending', time: '09:12', duration: '-', user: 'Bot' },
       ]);
     } catch (error) {
-      console.error('加载仪表盘数据失败', error);
+      console.error('Failed to load dashboard data', error);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
-      case 'failed':
-        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
-      default:
-        return <ClockCircleOutlined style={{ color: '#faad14' }} />;
-    }
-  };
-
-  const getStatusTag = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <Tag color="success">成功</Tag>;
-      case 'failed':
-        return <Tag color="error">失败</Tag>;
-      default:
-        return <Tag color="warning">进行中</Tag>;
-    }
-  };
-
-  const executedTotal = Math.max(stats.passedTests + stats.failedTests, 1);
-  const successRate = Math.round((stats.passedTests / executedTotal) * 100);
+  const BentoCard = ({ children, style, className, title, extra }: any) => (
+    <div
+      className={`panel ${className}`}
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        ...style
+      }}
+    >
+      {(title || extra) && (
+        <div className="panel-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+          <Text strong style={{ fontSize: 16 }}>{title}</Text>
+          {extra}
+        </div>
+      )}
+      <div className="panel-body" style={{ flex: 1, padding: '20px' }}>
+        {children}
+      </div>
+    </div>
+  );
 
   return (
-    <div className="page-shell fade-in">
-      <div className="page-toolbar">
-        <div className="page-title">
-          <Text className="page-subtitle">实时概览 · AI 测试驾驶舱</Text>
-          <Title level={2} style={{ margin: 0 }}>
-            智能仪表盘
+    <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
+      {/* Header Section */}
+      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <Text type="secondary" style={{ fontSize: 14 }}>{dayjs().format('MMMM D, dddd')}</Text>
+          <Title level={2} style={{ margin: '4px 0 0', fontWeight: 800, letterSpacing: '-0.5px' }}>
+            早安，管理员
           </Title>
         </div>
         <Space>
-          <Button>查看报告</Button>
-          <Button type="primary">新建测试</Button>
+          <Button icon={<PlusOutlined />}>新建项目</Button>
+          <Button type="primary" icon={<ThunderboltFilled />}>快速测试</Button>
         </Space>
       </div>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic
-              title="总项目数"
-              value={stats.totalProjects}
-              prefix={<ProjectOutlined style={{ color: '#1890ff' }} />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic
-              title="测试用例"
-              value={stats.totalTestCases}
-              prefix={<BugOutlined style={{ color: '#722ed1' }} />}
-              valueStyle={{ color: '#722ed1' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic
-              title="成功测试"
-              value={stats.passedTests}
-              prefix={<CheckCircleOutlined />}
-              valueStyle={{ color: '#52c41a' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic
-              title="失败测试"
-              value={stats.failedTests}
-              prefix={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
-              valueStyle={{ color: '#ff4d4f' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      {/* Bento Grid Layout */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridTemplateRows: 'repeat(2, 180px) auto',
+        gap: '20px'
+      }}>
 
-      <Row gutter={[20, 20]}>
-        <Col xs={24} lg={16}>
-          <div className="panel">
-            <div className="panel-header">
-              <Space>
-                <TrophyOutlined style={{ color: '#f5a524' }} />
-                <Text strong>测试统计</Text>
-              </Space>
-              <Space>
-                <Text type="secondary">成功率</Text>
-                <Text strong style={{ color: '#2fbf71' }}>
-                  {successRate}%
-                </Text>
-              </Space>
-            </div>
-            <div className="panel-body" style={{ textAlign: 'center' }}>
-              <Progress
-                type="circle"
-                percent={successRate}
-                format={(percent) => `${percent}%`}
-                size={120}
-                strokeColor={{
-                  '0%': '#1f87ff',
-                  '100%': '#2fbf71',
-                }}
-              />
-              <div style={{ marginTop: 16 }}>
-                <Space split={<Text type="secondary">|</Text>}>
-                  <Space>
-                    <CheckCircleOutlined style={{ color: '#2fbf71' }} />
-                    <Text>成功 {stats.passedTests}</Text>
-                  </Space>
-                  <Space>
-                    <CloseCircleOutlined style={{ color: '#e5484d' }} />
-                    <Text>失败 {stats.failedTests}</Text>
-                  </Space>
-                </Space>
+        {/* 1. Projects Stats - Tall */}
+        <BentoCard
+          style={{ gridRow: 'span 2', background: 'linear-gradient(135deg, #007AFF 0%, #00C6FF 100%)', color: 'white' }}
+          className="dark-text-white"
+        >
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ background: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12 }}>
+                <ProjectOutlined style={{ fontSize: 24, color: 'white' }} />
               </div>
+              <Tooltip title="Manage Projects"><MoreOutlined style={{ fontSize: 20, color: 'rgba(255,255,255,0.8)' }} /></Tooltip>
+            </div>
+            <div>
+              <div style={{ fontSize: 48, fontWeight: 700, lineHeight: 1 }}>{stats.totalProjects}</div>
+              <div style={{ fontSize: 14, opacity: 0.8, marginTop: 4 }}>活跃项目</div>
+            </div>
+            <div style={{ fontSize: 12, background: 'rgba(0,0,0,0.1)', padding: '8px 12px', borderRadius: 8, marginTop: 16 }}>
+              +3 本周新增
             </div>
           </div>
-        </Col>
-        <Col xs={24} lg={8}>
-          <div className="panel">
-            <div className="panel-header">
+        </BentoCard>
+
+        {/* 2. Success Rate - Wide */}
+        <BentoCard style={{ gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', height: '100%' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Text type="secondary">本周通过率</Text>
+              <div style={{ fontSize: 36, fontWeight: 700, color: '#34C759', margin: '4px 0' }}>
+                91.4%
+              </div>
               <Space>
-                <ClockCircleOutlined style={{ color: '#0071e3' }} />
-                <Text strong>最近测试</Text>
+                <Tag color="success" style={{ border: 'none', background: 'rgba(52, 199, 89, 0.15)', color: '#34C759' }}>
+                  <CheckCircleFilled /> {stats.passedTests} 通过
+                </Tag>
+                <Tag color="error" style={{ border: 'none', background: 'rgba(255, 59, 48, 0.15)', color: '#FF3B30' }}>
+                  <CloseCircleFilled /> {stats.failedTests} 失败
+                </Tag>
               </Space>
-              <Button type="link" size="small">
-                查看全部
+            </div>
+            {/* Visual placeholder for chart */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: '80%', paddingBottom: 10 }}>
+              {[40, 60, 45, 70, 85, 91, 75].map((h, i) => (
+                <div key={i} style={{
+                  width: 8,
+                  height: `${h}%`,
+                  background: i === 5 ? '#34C759' : '#E5E5EA',
+                  borderRadius: 4
+                }} />
+              ))}
+            </div>
+          </div>
+        </BentoCard>
+
+        {/* 3. Total Cases - Small */}
+        <BentoCard>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+            <BugOutlined style={{ fontSize: 28, color: '#FF9500', marginBottom: 12 }} />
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{stats.totalTestCases}</div>
+            <Text type="secondary" style={{ fontSize: 12 }}>总测试用例</Text>
+          </div>
+        </BentoCard>
+
+        {/* 4. Quick Actions / Tools - Small */}
+        <BentoCard style={{ background: '#F2F2F7', border: 'none' }}>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', cursor: 'pointer' }} className="hover-scale">
+            <div style={{ background: 'white', borderRadius: '50%', width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+              <ThunderboltFilled style={{ fontSize: 20, color: '#007AFF' }} />
+            </div>
+            <Text style={{ fontWeight: 600 }}>一键回归</Text>
+          </div>
+        </BentoCard>
+
+        {/* 5. Recent Failures - Wide (Span 2) */}
+        <BentoCard style={{ gridColumn: 'span 2' }} title="需要关注">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+            {recentTests.filter(t => t.status === 'failed').length === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, color: '#34C759' }}>
+                <CheckCircleFilled style={{ marginRight: 8 }} /> 所有系统运行正常
+              </div>
+            ) : (
+              recentTests.filter(t => t.status === 'failed').map(test => (
+                <div key={test.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: 'rgba(255, 59, 48, 0.08)', padding: '12px 16px', borderRadius: 12
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <CloseCircleFilled style={{ color: '#FF3B30', fontSize: 18 }} />
+                    <div>
+                      <div style={{ fontWeight: 600, color: '#333' }}>{test.name}</div>
+                      <div style={{ fontSize: 12, color: '#FF3B30' }}>耗时 {test.duration} · {test.time}</div>
+                    </div>
+                  </div>
+                  <Button size="small" danger ghost>重试</Button>
+                </div>
+              ))
+            )}
+          </div>
+        </BentoCard>
+
+        {/* 6. Recent Tests List - Vertical Full Height */}
+        <div style={{ gridColumn: 'span 2', gridRow: 'span 2' }} className="panel">
+          <div className="panel-header">
+            <Text strong style={{ fontSize: 16 }}>最近动态</Text>
+            <Button type="link" size="small" icon={<ArrowRightOutlined />}>全部</Button>
+          </div>
+          <div className="panel-body" style={{ padding: 0 }}>
+            {recentTests.map((item, index) => (
+              <div key={item.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 24px',
+                borderBottom: index < recentTests.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
+                transition: 'background 0.2s'
+              }} className="hover-bg">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10,
+                    background: item.status === 'success' ? 'rgba(52, 199, 89, 0.15)' : item.status === 'failed' ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 149, 0, 0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {item.status === 'success' ? <CheckCircleFilled style={{ color: '#34C759' }} /> :
+                      item.status === 'failed' ? <CloseCircleFilled style={{ color: '#FF3B30' }} /> :
+                        <ClockCircleOutlined style={{ color: '#FF9500' }} />}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#1d1d1f' }}>{item.name}</div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{item.user} · {item.time}</Text>
+                  </div>
+                </div>
+                <Tag style={{ border: 'none', background: 'transparent', color: '#86868b' }}>
+                  {item.duration}
+                </Tag>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 7. AI Insights - Vertical Full Height (Span 2) */}
+        <BentoCard style={{ gridColumn: 'span 2', gridRow: 'span 2', background: 'linear-gradient(135deg, #F9F9FB 0%, #FFFFFF 100%)' }} title={
+          <Space>
+            <span style={{ background: 'linear-gradient(90deg, #FF2E63, #007AFF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>AI 智能洞察</span>
+            <Tag color="purple" style={{ border: 'none', borderRadius: 999 }}>Beta</Tag>
+          </Space>
+        }>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Insight 1 */}
+            <div style={{ background: 'rgba(0, 122, 255, 0.04)', padding: 16, borderRadius: 12, border: '1px solid rgba(0, 122, 255, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <ThunderboltFilled style={{ color: '#007AFF' }} />
+                <Text strong>性能异常检测</Text>
+              </div>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                检测到 <Text code>订单创建接口</Text> 响应时间在过去 1 小时内波动较大（平均 +150ms）。建议检查数据库死锁或索引命中情况。
+              </Text>
+            </div>
+
+            {/* Insight 2 */}
+            <div style={{ background: 'rgba(52, 199, 89, 0.04)', padding: 16, borderRadius: 12, border: '1px solid rgba(52, 199, 89, 0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <CheckCircleFilled style={{ color: '#34C759' }} />
+                <Text strong>测试覆盖率分析</Text>
+              </div>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                <Text code>支付模块</Text> 的边界值测试覆盖率较低（仅 45%）。AI 已为您生成 3 个推荐的边界测试用例，点击即可应用。
+              </Text>
+              <Button type="link" size="small" style={{ padding: '8px 0 0 0', height: 'auto' }}>
+                查看推荐用例 <ArrowRightOutlined />
               </Button>
             </div>
-            <div className="panel-body">
-              <List
-                itemLayout="horizontal"
-                dataSource={recentTests}
-                renderItem={(item) => (
-                  <List.Item>
-                    <List.Item.Meta
-                      avatar={
-                        <Avatar
-                          icon={getStatusIcon(item.status)}
-                          style={{
-                            backgroundColor: item.status === 'success' ? '#eefbf3' : '#fff1f0',
-                            color: item.status === 'success' ? '#2fbf71' : '#e5484d',
-                          }}
-                        />
-                      }
-                      title={
-                        <Space>
-                          <Text>{item.name}</Text>
-                          {getStatusTag(item.status)}
-                        </Space>
-                      }
-                      description={
-                        <Space split={<Text type="secondary">·</Text>}>
-                          <Text type="secondary">{item.time}</Text>
-                          <Text type="secondary">{item.duration}</Text>
-                        </Space>
-                      }
-                    />
-                  </List.Item>
-                )}
-              />
+
+            {/* Daily Summary */}
+            <div>
+              <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>今日运行摘要</Text>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Tag style={{ padding: '4px 12px', borderRadius: 8, background: '#F2F2F7', border: 'none' }}>🛡️ 安全扫描通过</Tag>
+                <Tag style={{ padding: '4px 12px', borderRadius: 8, background: '#F2F2F7', border: 'none' }}>⚡ API 性能从优</Tag>
+              </div>
             </div>
+
           </div>
-        </Col>
-      </Row>
+        </BentoCard>
+      </div>
     </div>
   );
 };

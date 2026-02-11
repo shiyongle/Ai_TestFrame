@@ -44,19 +44,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
 
   return (
     <Header
+      className="glass-header"
       style={{
-        padding: '0 20px',
-        background: 'rgba(255, 255, 255, 0.82)',
-        borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
+        padding: '0 24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 999,
-        boxShadow: '0 18px 40px rgba(15, 23, 42, 0.12)',
-        backdropFilter: 'blur(14px)',
         height: 64,
+        boxShadow: 'none',
       }}
     >
       <Space align="center" size="middle">
@@ -77,20 +72,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
           <Text strong style={{ fontSize: '17px', color: '#0b0f1a' }}>
             投石问路
           </Text>
-          <Tag color="blue" style={{ marginLeft: 6, borderRadius: 999, border: 'none' }}>
-            Copilot Ready
-          </Tag>
         </Space>
       </Space>
 
       <Space size="middle">
-        {!isMobile && (
-          <Input.Search
-            placeholder="搜索项目 / 需求 / 用例"
-            style={{ width: 260 }}
-            size="middle"
-          />
-        )}
+
         <Badge dot>
           <Button type="text" icon={<BellOutlined />} style={{ fontSize: '16px' }} />
         </Badge>
