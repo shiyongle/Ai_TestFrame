@@ -13,6 +13,8 @@ import Reports from './pages/Reports';
 import Versions from './pages/Versions';
 import IdGenerator from './pages/Tools/IdGenerator';
 import PhoneGenerator from './pages/Tools/PhoneGenerator';
+import JsonFormatter from './pages/Tools/JsonFormatter';
+import AesCrypto from './pages/Tools/AesCrypto';
 import TestMenu from './TestMenu';
 import FunctionalTestCases from './pages/TestCases/FunctionalTestCases';
 import InterfaceTestCases from './pages/TestCases/InterfaceTestCases';
@@ -55,7 +57,7 @@ const App: React.FC = () => {
       onMobileMenuVisibleChange={setMobileMenuVisible}
     >
       <Layout>
-        <AppHeader 
+        <AppHeader
           onMobileMenuClick={handleMobileMenuClick}
           isMobile={isMobile}
         />
@@ -77,6 +79,8 @@ const App: React.FC = () => {
               <Route path="/ai/knowledge" element={<AiKnowledge />} />
               <Route path="/tools/id-generator" element={<IdGenerator />} />
               <Route path="/tools/phone-generator" element={<PhoneGenerator />} />
+              <Route path="/tools/json-formatter" element={<JsonFormatter />} />
+              <Route path="/tools/aes-crypto" element={<AesCrypto />} />
               <Route path="/test-menu" element={<TestMenu />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/versions" element={<Versions />} />

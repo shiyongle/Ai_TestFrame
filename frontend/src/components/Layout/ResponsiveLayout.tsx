@@ -19,6 +19,7 @@ import {
   RocketOutlined,
   FileSearchOutlined,
   DatabaseOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -186,6 +187,16 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               key: '/tools/phone-generator',
               icon: <MobileOutlined />,
               label: '手机号码',
+            },
+            {
+              key: '/tools/json-formatter',
+              icon: <CodeOutlined />,
+              label: 'JSON 格式化',
+            },
+            {
+              key: '/tools/aes-crypto',
+              icon: <SafetyCertificateOutlined />,
+              label: 'AES 加解密',
             },
           ],
         },
