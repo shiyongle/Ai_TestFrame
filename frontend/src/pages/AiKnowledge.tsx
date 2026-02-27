@@ -114,6 +114,39 @@ const AiKnowledge: React.FC = () => {
     message.success('Document deleted');
   };
 
+  const handleAddSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      await aiApi.addKnowledgeDocument(values);
+      message.success('文档已提交处理');
+      setModalVisible(false);
+      form.resetFields();
+      setTimeout(loadDocuments, 1000); // give backend a moment to persist
+    } catch (e: any) {
+      if (e.errorFields) return;
+      message.error(e?.response?.data?.detail || '添加失败');
+    }
+  };
+
+  const handleImport = async (options: any) => {
+    const { file, onSuccess, onError } = options;
+    const formData = new FormData();
+    formData.append('files', file);
+    formData.append('category', 'general');
+    formData.append('source', 'upload');
+
+    try {
+      const res = await aiApi.importKnowledgeFiles(formData);
+      message.success(res.message || '导入成功');
+      onSuccess?.(res);
+      setImportVisible(false);
+      loadDocuments();
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '导入失败');
+      onError?.(e);
+    }
+  };
+
   const renderDocList = () => (
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 16 }}>
@@ -255,7 +288,7 @@ const AiKnowledge: React.FC = () => {
       </div>
 
       {/* Add Modal */}
-      <Modal title="Add Knowledge Document" open={modalVisible} onCancel={() => setModalVisible(false)} onOk={() => setModalVisible(false)} width={600}>
+      <Modal title="Add Knowledge Document" open={modalVisible} onCancel={() => setModalVisible(false)} onOk={handleAddSubmit} width={600}>
         <Form form={form} layout="vertical">
           <Form.Item name="title" label="Title" rules={[{ required: true }]}><Input placeholder="e.g. Login Specs" /></Form.Item>
           <Row gutter={16}>
@@ -268,7 +301,7 @@ const AiKnowledge: React.FC = () => {
 
       {/* Import Modal */}
       <Modal title="Import Documents" open={importVisible} onCancel={() => setImportVisible(false)} footer={null}>
-        <Upload.Dragger style={{ padding: 40 }} multiple showUploadList={false}>
+        <Upload.Dragger style={{ padding: 40 }} multiple showUploadList={false} customRequest={handleImport}>
           <p className="ant-upload-drag-icon"><ExperimentOutlined style={{ color: '#1890ff' }} /></p>
           <p className="ant-upload-text">Click or drag file to this area to upload</p>
           <p className="ant-upload-hint">Support for .md, .txt, .pdf</p>
