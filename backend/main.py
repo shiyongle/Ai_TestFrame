@@ -46,6 +46,13 @@ async def log_requests(request: Request, call_next):
     if request.method in ["POST", "PUT", "PATCH"]:
         try:
             body = await request.body()
+            
+            # 修复：Starlette 中间件中读取 body 后，会消耗掉 stream
+            # 必须重置 _receive 使得后续路由可以继续读取
+            async def receive():
+                return {"type": "http.request", "body": body}
+            request._receive = receive
+            
             if body and len(body) < 1024:  # 限制1KB以内的请求体
                 request_body = body.decode('utf-8')
         except Exception:
@@ -134,6 +141,13 @@ except Exception as e:
 async def startup_event():
     """应用启动时的初始化操作"""
     try:
+        main_logger.info(f"正在检查数据库连接... URL: {settings.database_url.replace(settings.mysql_password, '******')}")
+        from sqlalchemy import text
+        from core.database import engine
+        with engine.connect() as connection:
+            result = connection.execute(text("SELECT 1"))
+            main_logger.info(f"数据库连接测试成功! Result: {result.scalar()}")
+            
         create_tables()
         main_logger.info("数据库表创建/验证成功")
     except Exception as e:

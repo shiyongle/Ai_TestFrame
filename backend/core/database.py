@@ -18,6 +18,7 @@ engine = create_engine(
     pool_pre_ping=settings.db_pool_pre_ping,
     echo=True  # 启用SQL日志
 )
+print(f"DEBUG: Database Engine created with URL: {settings.database_url.replace(settings.mysql_password, '******')}")
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -28,10 +29,13 @@ Base = declarative_base()
 # 依赖注入：获取数据库会话
 def get_db():
     """获取数据库会话"""
+    print("DEBUG: get_db called, creating session...")
     db = SessionLocal()
     try:
+        print("DEBUG: Session created, yielding...")
         yield db
     finally:
+        print("DEBUG: Closing session...")
         db.close()
 
 # 创建所有表

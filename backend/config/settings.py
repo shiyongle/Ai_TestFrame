@@ -76,3 +76,8 @@ class Settings(BaseSettings):
 
 # 全局配置实例
 settings = Settings()
+print(f"DEBUG: Settings loaded from {settings.model_config.get('env_file')}")
+print(f"DEBUG: MYSQL_HOST={settings.mysql_host}")
+print(f"DEBUG: MYSQL_PORT={settings.mysql_port}")
+print(f"DEBUG: MYSQL_USER={settings.mysql_user}")
+print(f"DEBUG: MYSQL_DATABASE={settings.mysql_database}")

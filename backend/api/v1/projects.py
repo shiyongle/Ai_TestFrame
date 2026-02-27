@@ -9,17 +9,26 @@ router = APIRouter()
 
 
 @router.post("/projects", response_model=ProjectResponse)
-async def create_project(
+def create_project(
     project: ProjectCreate,
     db: Session = Depends(get_database),
     project_service = Depends(get_project_service)
 ):
     """创建测试项目"""
-    return project_service.create_project(db, project)
+    print(f"DEBUG: Receiving create project request: {project.name}")
+    import logging
+    logging.getLogger("main").info(f"DEBUG: Receiving create project request: {project.name}")
+    try:
+        result = project_service.create_project(db, project)
+        logging.getLogger("main").info(f"DEBUG: Project created successfully: {result.id}")
+        return result
+    except Exception as e:
+        logging.getLogger("main").error(f"DEBUG: Error creating project: {e}")
+        raise e
 
 
 @router.get("/projects", response_model=List[ProjectResponse])
-async def get_projects(
+def get_projects(
     db: Session = Depends(get_database),
     project_service = Depends(get_project_service)
 ):
@@ -28,7 +37,7 @@ async def get_projects(
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
-async def get_project(
+def get_project(
     project_id: int,
     db: Session = Depends(get_database),
     project_service = Depends(get_project_service)
@@ -41,7 +50,7 @@ async def get_project(
 
 
 @router.put("/projects/{project_id}", response_model=ProjectResponse)
-async def update_project(
+def update_project(
     project_id: int,
     project_update: dict,
     db: Session = Depends(get_database),
@@ -55,7 +64,7 @@ async def update_project(
 
 
 @router.delete("/projects/{project_id}")
-async def delete_project(
+def delete_project(
     project_id: int,
     db: Session = Depends(get_database),
     project_service = Depends(get_project_service)
@@ -68,7 +77,7 @@ async def delete_project(
 
 
 @router.get("/projects/{project_id}/statistics")
-async def get_project_statistics(
+def get_project_statistics(
     project_id: int,
     db: Session = Depends(get_database),
     project_service = Depends(get_project_service)
