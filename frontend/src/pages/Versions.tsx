@@ -80,6 +80,7 @@ const Versions: React.FC = () => {
   const [allRequirements, setAllRequirements] = useState<any[]>([]);
   const [generatedTestCases, setGeneratedTestCases] = useState<any[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [selectedReqIds, setSelectedReqIds] = useState<number[]>([]);
 
   useEffect(() => {
     loadVersions();
@@ -94,7 +95,13 @@ const Versions: React.FC = () => {
       const sorted = (data || []).sort((a: Version, b: Version) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf());
       setVersions(sorted);
       if (sorted.length > 0) {
-        setSelectedVersion(sorted[0]);
+
+        // When reloading, preserve selection if possible
+        setSelectedVersion(prev => {
+          if (!prev) return sorted[0];
+          const updated = sorted.find(v => v.id === prev.id);
+          return updated || sorted[0];
+        });
       }
     } catch (error) {
       message.error('加载版本列表失败');
@@ -142,6 +149,28 @@ const Versions: React.FC = () => {
       },
       okButtonProps: { danger: true }
     });
+  };
+
+  const handleOpenLinkModal = () => {
+    setSelectedReqIds([]);
+    setLinkModalVisible(true);
+  };
+
+  const handleLinkRequirements = async () => {
+    if (!selectedVersion) return;
+    if (selectedReqIds.length === 0) {
+      message.warning('请选择要关联的需求');
+      return;
+    }
+
+    try {
+      await versionApi.addRequirementsToVersion(selectedVersion.id, selectedReqIds);
+      message.success('关联成功');
+      setLinkModalVisible(false);
+      loadVersions(); // Refresh the list
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '关联失败');
+    }
   };
 
   const handleSubmit = async () => {
@@ -336,7 +365,7 @@ const Versions: React.FC = () => {
                   )}
                   locale={{ emptyText: '暂无关联需求' }}
                 />
-                <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 16 }}>关联更多需求</Button>
+                <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 16 }} onClick={handleOpenLinkModal}>关联更多需求</Button>
               </div>
 
             </div>
@@ -397,6 +426,42 @@ const Versions: React.FC = () => {
             <Text type="success"><CheckCircleFilled /> 生成成功！请前往测试用例库查看。</Text>
           </div>
         )}
+      </Modal>
+
+      {/* Link Requirements Modal */}
+      <Modal
+        title="关联更多需求"
+        open={linkModalVisible}
+        onOk={handleLinkRequirements}
+        onCancel={() => setLinkModalVisible(false)}
+        destroyOnClose
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            请选择要关联到当前版本 {selectedVersion?.version_number} 的需求：
+          </Text>
+          <Select
+            mode="multiple"
+            style={{ width: '100%' }}
+            placeholder="请选择需求..."
+            value={selectedReqIds}
+            onChange={setSelectedReqIds}
+            optionFilterProp="children"
+            showSearch
+          >
+            {allRequirements
+              .filter(req => {
+                // exclude already linked requirements
+                if (!selectedVersion?.requirements) return true;
+                return !selectedVersion.requirements.some(linked => linked.id === req.id);
+              })
+              .map(req => (
+                <Select.Option key={req.id} value={req.id}>
+                  [{req.id}] {req.title}
+                </Select.Option>
+              ))}
+          </Select>
+        </div>
       </Modal>
 
     </div>
