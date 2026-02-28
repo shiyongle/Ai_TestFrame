@@ -66,7 +66,8 @@ export const testApi = {
 
 // 版本管理API
 export const versionApi = {
-  getVersions: (): Promise<any[]> => api.get('/api/v1/versions'),
+  getVersions: (projectId?: number): Promise<any[]> =>
+    api.get('/api/v1/versions', { params: { project_id: projectId } }),
   createVersion: (data: any): Promise<any> => api.post('/api/v1/versions', data),
   getVersion: (id: number): Promise<any> => api.get(`/api/v1/versions/${id}`),
   updateVersion: (id: number, data: any): Promise<any> => api.put(`/api/v1/versions/${id}`, data),

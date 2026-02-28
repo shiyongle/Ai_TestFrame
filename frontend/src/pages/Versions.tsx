@@ -38,9 +38,10 @@ import {
   RocketOutlined,
   BranchesOutlined,
   HistoryOutlined,
-  BugOutlined
+  BugOutlined,
+  ProjectOutlined
 } from '@ant-design/icons';
-import { versionApi, requirementApi, aiApi } from '../services/api';
+import { versionApi, requirementApi, aiApi, projectApi } from '../services/api';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -59,6 +60,8 @@ interface Version {
   release_date: string;
   created_at: string;
   created_by: string;
+  project_id?: number;
+  project?: any;
   requirements?: any[];
 }
 
@@ -86,16 +89,30 @@ const Versions: React.FC = () => {
   const [allKnowledge, setAllKnowledge] = useState<any[]>([]);
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<number[]>([]);
 
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
+
   useEffect(() => {
-    loadVersions();
+    loadProjects();
     loadRequirements();
     loadKnowledge();
   }, []);
 
-  const loadVersions = async () => {
+  useEffect(() => {
+    loadVersions(selectedProjectId);
+  }, [selectedProjectId]);
+
+  const loadProjects = async () => {
+    try {
+      const data = await projectApi.getProjects();
+      setProjects(data || []);
+    } catch (e) { console.error(e); }
+  };
+
+  const loadVersions = async (projectId?: number) => {
     setLoading(true);
     try {
-      const data = await versionApi.getVersions();
+      const data = await versionApi.getVersions(projectId);
       // Sort by created_at desc
       const sorted = (data || []).sort((a: Version, b: Version) => dayjs(b.created_at).valueOf() - dayjs(a.created_at).valueOf());
       setVersions(sorted);
@@ -155,7 +172,7 @@ const Versions: React.FC = () => {
         try {
           await versionApi.deleteVersion(v.id);
           message.success('删除成功');
-          loadVersions();
+          loadVersions(selectedProjectId);
           if (selectedVersion?.id === v.id) setSelectedVersion(null);
         } catch (e) { message.error('删除失败'); }
       },
@@ -179,7 +196,7 @@ const Versions: React.FC = () => {
       await versionApi.addRequirementsToVersion(selectedVersion.id, selectedReqIds);
       message.success('关联成功');
       setLinkModalVisible(false);
-      loadVersions(); // Refresh the list
+      loadVersions(selectedProjectId); // Refresh the list
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '关联失败');
     }
@@ -212,6 +229,8 @@ const Versions: React.FC = () => {
         ...values,
         release_date: values.release_date ? values.release_date.toDate() : null,
         changes: values.changes || {},
+        created_by: values.created_by || 'Admin',
+        description: values.description || '',
       };
 
       if (editingVersion) {
@@ -222,7 +241,7 @@ const Versions: React.FC = () => {
         message.success('创建成功');
       }
       setModalVisible(false);
-      loadVersions();
+      loadVersions(selectedProjectId);
     } catch (e) { message.error('操作失败'); }
   };
 
@@ -271,9 +290,22 @@ const Versions: React.FC = () => {
           <Title level={2} style={{ margin: 0, fontWeight: 700 }}>版本管理</Title>
           <Text type="secondary">版本发布时间轴与变更追踪</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} shape="round" size="large">
-          新建版本
-        </Button>
+        <Space>
+          <Select
+            placeholder="全项目 (所有版本)"
+            allowClear
+            style={{ width: 200 }}
+            value={selectedProjectId}
+            onChange={(val) => setSelectedProjectId(val)}
+          >
+            {projects.map(p => (
+              <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+            ))}
+          </Select>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} shape="round" size="large">
+            新建版本
+          </Button>
+        </Space>
       </div>
 
       <div style={{ display: 'flex', gap: 24, flex: 1, overflow: 'hidden' }}>
@@ -328,13 +360,22 @@ const Versions: React.FC = () => {
                     <Title level={1} style={{ margin: 0 }}>{selectedVersion.version_number}</Title>
                     <Tag color={getStatusColor(selectedVersion.status)} style={{ fontSize: 14, padding: '4px 10px' }}>{getStatusLabel(selectedVersion.status)}</Tag>
                   </div>
-                  <Text type="secondary" style={{ fontSize: 16 }}>
-                    发布于 {selectedVersion.release_date ? dayjs(selectedVersion.release_date).format('YYYY年MM月DD日') : '待定'}
-                  </Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Text type="secondary" style={{ fontSize: 16 }}>
+                      发布于 {selectedVersion.release_date ? dayjs(selectedVersion.release_date).format('YYYY年MM月DD日') : '待定'}
+                    </Text>
+                    {selectedVersion.project && (
+                      <Tag color="cyan" style={{ fontSize: 14, padding: '2px 8px', borderRadius: 6, margin: 0 }}>
+                        <ProjectOutlined style={{ marginRight: 4 }} />
+                        {selectedVersion.project.name}
+                      </Tag>
+                    )}
+                  </div>
                 </div>
                 <Space>
                   <Button icon={<EditOutlined />} onClick={() => handleEdit(selectedVersion)}>编辑</Button>
-                  <Button icon={<RobotFilled />} onClick={handleGenerateTestCases}>AI生成用例</Button>
+                  <Button icon={<FileTextOutlined />} onClick={handleOpenKnowledgeModal}>绑定 RAG 知识库</Button>
+                  <Button type="primary" icon={<RobotFilled />} onClick={handleGenerateTestCases}>AI生成用例</Button>
                   <Button danger icon={<DeleteOutlined />} onClick={() => handleDelete(selectedVersion)} />
                 </Space>
               </div>
@@ -398,7 +439,6 @@ const Versions: React.FC = () => {
                   locale={{ emptyText: '暂无关联需求' }}
                 />
                 <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 16 }} onClick={handleOpenLinkModal}>关联更多需求</Button>
-                <Button type="dashed" block icon={<FileTextOutlined />} style={{ marginTop: 8 }} onClick={handleOpenKnowledgeModal}>绑定 RAG 知识库</Button>
               </div>
 
             </div>
@@ -420,6 +460,13 @@ const Versions: React.FC = () => {
         onCancel={() => setModalVisible(false)}
       >
         <Form form={form} layout="vertical">
+          <Form.Item name="project_id" label="所属项目" rules={[{ required: true, message: '请选择所属项目' }]}>
+            <Select placeholder="选择关联项目">
+              {projects.map(p => (
+                <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
           <Form.Item name="version_number" label="版本号" rules={[{ required: true }]}>
             <Input placeholder="v1.0.0" />
           </Form.Item>

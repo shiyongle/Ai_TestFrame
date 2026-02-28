@@ -86,8 +86,10 @@ class Version(Base):
     release_date = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(String(100))
+    project_id = Column(Integer, ForeignKey("projects.id"))
     
     # 关联关系
+    project = relationship("Project")
     test_reports = relationship("TestReport", back_populates="version")
     requirements = relationship("VersionRequirement", back_populates="version")
     knowledge_docs = relationship("VersionKnowledge", back_populates="version", cascade="all, delete-orphan")

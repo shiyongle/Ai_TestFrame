@@ -14,10 +14,11 @@ router = APIRouter()
 # Pydantic模型
 class VersionBase(BaseModel):
     version_number: str
-    description: str
+    description: Optional[str] = None
     status: str = "draft"
     release_date: Optional[datetime] = None
-    created_by: str
+    created_by: Optional[str] = None
+    project_id: Optional[int] = None
 
 class VersionCreate(VersionBase):
     changes: dict = {}
@@ -53,11 +54,15 @@ async def create_version(
 
 @router.get("/versions")
 async def get_versions(
+    project_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """获取版本历史"""
     try:
-        versions = db.query(Version).order_by(Version.created_at.desc()).all()
+        query = db.query(Version)
+        if project_id:
+            query = query.filter(Version.project_id == project_id)
+        versions = query.order_by(Version.created_at.desc()).all()
         
         # 为每个版本添加关联的需求信息
         result = []
@@ -79,6 +84,8 @@ async def get_versions(
                 "release_date": version.release_date.isoformat() if version.release_date else None,
                 "created_at": version.created_at.isoformat() if version.created_at else None,
                 "created_by": version.created_by,
+                "project_id": version.project_id,
+                "project": {"id": version.project.id, "name": version.project.name} if version.project else None,
                 "changes": version.changes,
                 "requirements": [
                     {

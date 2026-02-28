@@ -57,10 +57,15 @@ CREATE TABLE IF NOT EXISTS versions (
     version_number VARCHAR(50) NOT NULL,
     description TEXT,
     changes JSON,
+    status VARCHAR(20) DEFAULT 'draft' COMMENT 'draft, released, archived',
+    release_date DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(100),
+    project_id INT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     INDEX idx_versions_number (version_number),
-    INDEX idx_versions_created_at (created_at)
+    INDEX idx_versions_created_at (created_at),
+    INDEX idx_versions_project (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 版本与知识库关联表
