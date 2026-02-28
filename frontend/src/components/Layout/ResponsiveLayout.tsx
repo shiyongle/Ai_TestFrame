@@ -223,6 +223,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               icon: <DatabaseOutlined />,
               label: 'RAG 知识库',
             },
+            {
+              key: '/settings',
+              icon: <SettingOutlined />,
+              label: '全局配置',
+            },
           ],
         },
       ],

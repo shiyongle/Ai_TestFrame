@@ -9,6 +9,20 @@ CREATE DATABASE IF NOT EXISTS test_system CHARACTER SET utf8mb4 COLLATE utf8mb4_
 -- 使用数据库
 USE test_system;
 
+-- ==================== 基础配置表 ====================
+
+-- 系统设置表 (用于存储动态配置，如大模型 API Key)
+CREATE TABLE IF NOT EXISTS system_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(100) NOT NULL,
+    setting_value TEXT,
+    category VARCHAR(50) DEFAULT 'llm',
+    description VARCHAR(255),
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX idx_settings_key (setting_key),
+    INDEX idx_settings_category (category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ==================== 基础业务表 ====================
 
 -- 项目表

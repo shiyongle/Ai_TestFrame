@@ -111,5 +111,10 @@ export const aiApi = {
   updateKnowledgeLinks: (id: number, data: any): Promise<any> =>
     api.post(`/api/v1/ai/knowledge/${id}/links`, data),
 };
+// 系统设置 API
+export const systemApi = {
+  getSettings: (category: string): Promise<any> => api.get(`/api/v1/system/settings/${category}`),
+  updateSettings: (category: string, data: any): Promise<any> => api.put(`/api/v1/system/settings/${category}`, data),
+};
 
 export default api;

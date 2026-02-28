@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional
 from abc import ABC, abstractmethod
 import logging
 from config.settings import settings
+from core.database import SessionLocal
+from models.database_models import SystemSetting
 
 logger = logging.getLogger(__name__)
 
@@ -181,20 +183,38 @@ class LLMClient:
     
     def _init_providers(self):
         """初始化模型提供商"""
+        db_settings = {}
+        try:
+            # Create a short-lived session to read db configs
+            with SessionLocal() as db:
+                records = db.query(SystemSetting).filter(SystemSetting.category == 'llm').all()
+                for rec in records:
+                    db_settings[rec.setting_key] = rec.setting_value
+        except Exception as e:
+            logger.error(f"Failed to load LLM settings from DB: {e}")
+
         # OpenAI
-        if hasattr(settings, 'OPENAI_API_KEY') and settings.OPENAI_API_KEY:
-            self.providers['openai'] = OpenAIProvider(
-                api_key=settings.OPENAI_API_KEY,
-                base_url=getattr(settings, 'OPENAI_BASE_URL', "https://api.openai.com/v1")
-            )
+        openai_key = db_settings.get('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
+        openai_base_url = db_settings.get('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', "https://api.openai.com/v1")
+        if openai_key:
+            self.providers['openai'] = OpenAIProvider(api_key=openai_key, base_url=openai_base_url)
         
         # 智谱GLM
-        if hasattr(settings, 'GLM_API_KEY') and settings.GLM_API_KEY:
-            self.providers['glm'] = GLMProvider(api_key=settings.GLM_API_KEY)
+        glm_key = db_settings.get('GLM_API_KEY') or getattr(settings, 'GLM_API_KEY', None)
+        if glm_key:
+            self.providers['glm'] = GLMProvider(api_key=glm_key)
         
         # 通义千问
-        if hasattr(settings, 'TONGYI_API_KEY') and settings.TONGYI_API_KEY:
-            self.providers['tongyi'] = TongyiProvider(api_key=settings.TONGYI_API_KEY)
+        tongyi_key = db_settings.get('TONGYI_API_KEY') or getattr(settings, 'TONGYI_API_KEY', None)
+        if tongyi_key:
+            self.providers['tongyi'] = TongyiProvider(api_key=tongyi_key)
+            
+        # DeepSeek
+        deepseek_key = db_settings.get('DEEPSEEK_API_KEY') or getattr(settings, 'DEEPSEEK_API_KEY', None)
+        deepseek_base_url = "https://api.deepseek.com"
+        # Can utilize OpenAIProvider for DeepSeek since they are API compatible
+        if deepseek_key:
+            self.providers['deepseek'] = OpenAIProvider(api_key=deepseek_key, base_url=deepseek_base_url)
         
         logger.info(f"已初始化的大模型提供商: {list(self.providers.keys())}")
     
@@ -251,6 +271,11 @@ class LLMClient:
         except Exception as e:
             logger.error(f"测试连接失败: {e}")
             return False
+
+    def refresh_providers(self):
+        """重新初始化底层库(当用户修改配置后调用)"""
+        self.providers.clear()
+        self._init_providers()
 
 # 全局实例
 llm_client = LLMClient()

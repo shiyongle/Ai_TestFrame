@@ -22,6 +22,7 @@ import ApiAutomation from './pages/ApiAutomation';
 import Requirements from './pages/Requirements';
 import RuleConfig from './pages/RuleConfig';
 import AiKnowledge from './pages/AiKnowledge';
+import SystemSettings from './pages/SystemSettings';
 
 const { Content } = Layout;
 
@@ -84,6 +85,7 @@ const App: React.FC = () => {
               <Route path="/test-menu" element={<TestMenu />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/versions" element={<Versions />} />
+              <Route path="/settings" element={<SystemSettings />} />
             </Routes>
           </div>
         </Content>

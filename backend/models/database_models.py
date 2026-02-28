@@ -15,6 +15,17 @@ class Project(Base):
     
     testcases = relationship("TestCase", back_populates="project")
 
+# 系统设置表
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    setting_key = Column(String(100), unique=True, index=True, nullable=False)
+    setting_value = Column(Text, nullable=True) # Could be keys, JSON, etc
+    category = Column(String(50), index=True, default='llm')
+    description = Column(String(255))
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 # 测试用例表
 class TestCase(Base):
     __tablename__ = "testcases"
