@@ -63,6 +63,18 @@ CREATE TABLE IF NOT EXISTS versions (
     INDEX idx_versions_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 版本与知识库关联表
+CREATE TABLE IF NOT EXISTS version_knowledge (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    version_id INT NOT NULL,
+    knowledge_doc_id INT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE,
+    FOREIGN KEY (knowledge_doc_id) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    INDEX idx_version_knowledge_version (version_id),
+    INDEX idx_version_knowledge_doc (knowledge_doc_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 测试报告表
 CREATE TABLE IF NOT EXISTS test_reports (
     id INT AUTO_INCREMENT PRIMARY KEY,

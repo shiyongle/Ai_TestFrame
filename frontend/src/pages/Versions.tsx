@@ -40,7 +40,7 @@ import {
   HistoryOutlined,
   BugOutlined
 } from '@ant-design/icons';
-import { versionApi, requirementApi } from '../services/api';
+import { versionApi, requirementApi, aiApi } from '../services/api';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -82,9 +82,14 @@ const Versions: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [selectedReqIds, setSelectedReqIds] = useState<number[]>([]);
 
+  const [linkKnowledgeVisible, setLinkKnowledgeVisible] = useState(false);
+  const [allKnowledge, setAllKnowledge] = useState<any[]>([]);
+  const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<number[]>([]);
+
   useEffect(() => {
     loadVersions();
     loadRequirements();
+    loadKnowledge();
   }, []);
 
   const loadVersions = async () => {
@@ -114,6 +119,13 @@ const Versions: React.FC = () => {
     try {
       const data = await requirementApi.getRequirements();
       setAllRequirements(data || []);
+    } catch (e) { console.error(e); }
+  };
+
+  const loadKnowledge = async () => {
+    try {
+      const res = await aiApi.getKnowledgeList();
+      setAllKnowledge(res?.data?.documents || res?.data || []);
     } catch (e) { console.error(e); }
   };
 
@@ -168,6 +180,26 @@ const Versions: React.FC = () => {
       message.success('关联成功');
       setLinkModalVisible(false);
       loadVersions(); // Refresh the list
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '关联失败');
+    }
+  };
+
+  const handleOpenKnowledgeModal = async () => {
+    if (!selectedVersion) return;
+    try {
+      const res = await versionApi.getLinkedKnowledge(selectedVersion.id);
+      setSelectedKnowledgeIds(res.map((k: any) => k.id));
+      setLinkKnowledgeVisible(true);
+    } catch (e) { message.error('获取已关联知识文档失败'); }
+  };
+
+  const handleLinkKnowledge = async () => {
+    if (!selectedVersion) return;
+    try {
+      await versionApi.linkKnowledgeToVersion(selectedVersion.id, selectedKnowledgeIds);
+      message.success('关联知识库成功');
+      setLinkKnowledgeVisible(false);
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '关联失败');
     }
@@ -366,6 +398,7 @@ const Versions: React.FC = () => {
                   locale={{ emptyText: '暂无关联需求' }}
                 />
                 <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 16 }} onClick={handleOpenLinkModal}>关联更多需求</Button>
+                <Button type="dashed" block icon={<FileTextOutlined />} style={{ marginTop: 8 }} onClick={handleOpenKnowledgeModal}>绑定 RAG 知识库</Button>
               </div>
 
             </div>
@@ -460,6 +493,36 @@ const Versions: React.FC = () => {
                   [{req.id}] {req.title}
                 </Select.Option>
               ))}
+          </Select>
+        </div>
+      </Modal>
+
+      {/* Link Knowledge Modal */}
+      <Modal
+        title="关联知识库"
+        open={linkKnowledgeVisible}
+        onOk={handleLinkKnowledge}
+        onCancel={() => setLinkKnowledgeVisible(false)}
+        destroyOnClose
+      >
+        <div style={{ padding: '20px 0' }}>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            请选择要关联到当前版本 {selectedVersion?.version_number} 的知识库文档（此为按需限定生成上下文的前提）：
+          </Text>
+          <Select
+            mode="multiple"
+            style={{ width: '100%' }}
+            placeholder="请选择知识库文档..."
+            value={selectedKnowledgeIds}
+            onChange={setSelectedKnowledgeIds}
+            optionFilterProp="children"
+            showSearch
+          >
+            {allKnowledge.map(doc => (
+              <Select.Option key={doc.id} value={doc.id}>
+                [{doc.category || '默认'}] {doc.title}
+              </Select.Option>
+            ))}
           </Select>
         </div>
       </Modal>

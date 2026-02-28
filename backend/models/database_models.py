@@ -58,6 +58,22 @@ class VersionRequirement(Base):
     version = relationship("Version", back_populates="requirements")
     requirement = relationship("Requirement")
 
+class VersionKnowledge(Base):
+    """版本与知识库关联表"""
+    __tablename__ = "version_knowledge"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    version_id = Column(Integer, ForeignKey("versions.id"), nullable=False)
+    knowledge_doc_id = Column(Integer, ForeignKey("knowledge_documents.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # 关联关系
+    version = relationship("Version", back_populates="knowledge_docs")
+    # Using string reference for KnowledgeDocument since it's defined elsewhere or later
+    # We can use backref implicitly, or rely on explicit manual queries.
+    # Because KnowledgeDocument is defined in rag_engine.py, we don't import it here to avoid circular imports.
+    # We will query and insert directly.
+
 # 版本管理表
 class Version(Base):
     __tablename__ = "versions"
@@ -74,6 +90,7 @@ class Version(Base):
     # 关联关系
     test_reports = relationship("TestReport", back_populates="version")
     requirements = relationship("VersionRequirement", back_populates="version")
+    knowledge_docs = relationship("VersionKnowledge", back_populates="version", cascade="all, delete-orphan")
 
 # 测试报告表
 class TestReport(Base):

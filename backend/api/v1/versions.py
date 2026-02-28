@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import sessionmaker, Session
 from typing import List, Optional
 from core.database import get_db
-from models.database_models import Version, Requirement, VersionRequirement
+from models.database_models import Version, Requirement, VersionRequirement, VersionKnowledge
 from pydantic import BaseModel
 from datetime import datetime
 from services.ai_generator import ai_generator
+from services.ai.ai_service import ai_service
+from services.ai.rag_engine import KnowledgeDocument
 
 router = APIRouter()
 
@@ -261,13 +263,54 @@ async def get_version_requirements(
     
     return requirements
 
+@router.post("/versions/{version_id}/knowledge")
+async def link_knowledge_to_version(
+    version_id: int,
+    knowledge_ids: List[int],
+    db: Session = Depends(get_db)
+):
+    """将知识文档关联到版本"""
+    version = db.query(Version).filter(Version.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+    
+    # 验证知识文档是否存在
+    valid_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(knowledge_ids)).all()
+    if len(valid_docs) != len(knowledge_ids):
+        raise HTTPException(status_code=404, detail="部分知识文档不存在")
+        
+    # 首先全量删除已有关系，再重新增加，确保为最新的多选
+    db.query(VersionKnowledge).filter(VersionKnowledge.version_id == version_id).delete()
+    
+    for doc_id in knowledge_ids:
+        new_link = VersionKnowledge(version_id=version_id, knowledge_doc_id=doc_id)
+        db.add(new_link)
+        
+    db.commit()
+    return {"message": "知识文档已成功关联到版本"}
+
+@router.get("/versions/{version_id}/knowledge")
+async def get_version_knowledge(
+    version_id: int,
+    db: Session = Depends(get_db)
+):
+    """获取版本关联的知识文档"""
+    version = db.query(Version).filter(Version.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+        
+    links = db.query(VersionKnowledge).filter(VersionKnowledge.version_id == version_id).all()
+    doc_ids = [link.knowledge_doc_id for link in links]
+    docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(doc_ids)).all()
+    return docs
+
 @router.post("/versions/{version_id}/generate-testcases")
 async def generate_test_cases_for_version(
     version_id: int,
     request: dict,
     db: Session = Depends(get_db)
 ):
-    """为版本关联的需求生成测试用例"""
+    """为版本关联的需求生成测试用例（并自带绑定的RAG上下文）"""
     model = request.get("model", "glm-4.6")
     
     # 验证版本是否存在
@@ -297,18 +340,67 @@ async def generate_test_cases_for_version(
             status=status.HTTP_400_BAD_REQUEST,
             detail="未找到有效的需求"
         )
+        
+    # 查询当前版本具体关联的RAG知识库文档，组装硬性上下文
+    linked_knowledge_entries = db.query(VersionKnowledge).filter(
+        VersionKnowledge.version_id == version_id
+    ).all()
+    
+    explicit_context = ""
+    if linked_knowledge_entries:
+        doc_ids = [k.knowledge_doc_id for k in linked_knowledge_entries]
+        docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(doc_ids)).all()
+        parts = []
+        for doc in docs:
+            parts.append(f"【{doc.title}】\n{doc.content}")
+        explicit_context = "\n\n".join(parts)
     
     try:
         generated_testcases = []
         
-        # 为每个需求生成测试用例
         for requirement in requirements:
-            testcase = await ai_generator.generate_test_case_from_requirement(requirement, model)
-            generated_testcases.append({
-                "requirement_id": requirement.id,
-                "requirement_title": requirement.title,
-                "testcase": testcase
-            })
+            req_data = {
+                'title': requirement.title,
+                'description': requirement.description,
+                'priority': requirement.priority,
+                'type': requirement.type,
+                'acceptance_criteria': requirement.acceptance_criteria,
+                'business_value': requirement.business_value
+            }
+            
+            # Use explicitly linked context if available, otherwise fallback to the service's auto-search logic
+            if explicit_context:
+                enhanced_prompt = ai_service._build_rag_enhanced_prompt(requirement, explicit_context)
+                from services.ai.llm_client import llm_client
+                import json
+                result = await llm_client.text_completion(
+                    prompt=enhanced_prompt,
+                    provider=model,
+                    max_tokens=2000
+                )
+                if result.get('success'):
+                    try:
+                        testcase = json.loads(result['content'])
+                        generated_testcases.append({
+                            "requirement_id": requirement.id,
+                            "requirement_title": requirement.title,
+                            "testcase": testcase,
+                            "used_rag": True,
+                            "explicit_knowledge": True
+                        })
+                    except Exception:
+                        pass
+            else:
+                # Fallback to general search RAG or pure generation if no explicit knowledge linked
+                res = await ai_service.generate_test_case_from_requirement(req_data, provider=model, use_rag=True)
+                if res.get('success'):
+                    generated_testcases.append({
+                        "requirement_id": requirement.id,
+                        "requirement_title": requirement.title,
+                        "testcase": res.get('test_case'),
+                        "used_rag": res.get('used_rag', False),
+                        "explicit_knowledge": False
+                    })
         
         return {
             "message": "测试用例生成成功",
@@ -319,6 +411,8 @@ async def generate_test_cases_for_version(
         }
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"生成测试用例失败: {str(e)}"

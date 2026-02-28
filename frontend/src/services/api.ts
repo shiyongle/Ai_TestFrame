@@ -72,14 +72,18 @@ export const versionApi = {
   updateVersion: (id: number, data: any): Promise<any> => api.put(`/api/v1/versions/${id}`, data),
   deleteVersion: (id: number): Promise<any> => api.delete(`/api/v1/versions/${id}`),
   getLatestVersion: (): Promise<any> => api.get('/api/v1/versions/latest'),
-  addRequirementsToVersion: (versionId: number, requirementIds: number[]): Promise<any> => 
+  addRequirementsToVersion: (versionId: number, requirementIds: number[]): Promise<any> =>
     api.post(`/api/v1/versions/${versionId}/requirements`, requirementIds),
-  removeRequirementFromVersion: (versionId: number, requirementId: number): Promise<any> => 
+  removeRequirementFromVersion: (versionId: number, requirementId: number): Promise<any> =>
     api.delete(`/api/v1/versions/${versionId}/requirements/${requirementId}`),
-  getVersionRequirements: (versionId: number): Promise<any[]> => 
+  getVersionRequirements: (versionId: number): Promise<any[]> =>
     api.get(`/api/v1/versions/${versionId}/requirements`),
-  generateTestCases: (versionId: number, model: string): Promise<any> => 
+  generateTestCases: (versionId: number, model: string): Promise<any> =>
     api.post(`/api/v1/versions/${versionId}/generate-testcases`, { model }),
+  linkKnowledgeToVersion: (versionId: number, knowledgeIds: number[]): Promise<any> =>
+    api.post(`/api/v1/versions/${versionId}/knowledge`, knowledgeIds),
+  getLinkedKnowledge: (versionId: number): Promise<any[]> =>
+    api.get(`/api/v1/versions/${versionId}/knowledge`),
 };
 
 // 需求管理API
