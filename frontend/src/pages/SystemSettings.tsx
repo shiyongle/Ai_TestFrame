@@ -72,8 +72,11 @@ const SystemSettings: React.FC = () => {
             'OPENAI_API_KEY': 'OpenAI (GPT-4) 官方或代理 API Key',
             'OPENAI_BASE_URL': 'OpenAI 接口地址 (覆盖默认的 api.openai.com/v1)',
             'GLM_API_KEY': '智谱AI (GLM-4) 开发者 API Key',
+            'GLM_BASE_URL': '智谱AI 接口地址 (支持覆盖代理)',
             'TONGYI_API_KEY': '阿里云百炼 (通义千问) API Key',
+            'TONGYI_BASE_URL': '通义千问 接口地址 (支持覆盖代理)',
             'DEEPSEEK_API_KEY': 'DeepSeek API Key',
+            'DEEPSEEK_BASE_URL': 'DeepSeek 接口地址 (支持覆盖代理)',
         };
         return map[key] || '';
     };
@@ -113,7 +116,12 @@ const SystemSettings: React.FC = () => {
                                 form={form}
                                 layout="vertical"
                                 onFinish={handleSaveAIConfig}
-                                initialValues={{ OPENAI_BASE_URL: 'https://api.openai.com/v1' }}
+                                initialValues={{
+                                    OPENAI_BASE_URL: 'https://api.openai.com/v1',
+                                    GLM_BASE_URL: 'https://open.bigmodel.cn/api/paas/v4',
+                                    DEEPSEEK_BASE_URL: 'https://api.deepseek.com/v1',
+                                    TONGYI_BASE_URL: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+                                }}
                             >
                                 <Divider orientation="left">OpenAI 系列</Divider>
                                 <Form.Item label="OpenAI API Key" name="OPENAI_API_KEY" tooltip="以 sk- 开头的凭证">
@@ -127,11 +135,22 @@ const SystemSettings: React.FC = () => {
                                 <Form.Item label="智谱清言 (GLM) API Key" name="GLM_API_KEY">
                                     <Input.Password placeholder="输入智谱大模型开放平台的 API Key" />
                                 </Form.Item>
+                                <Form.Item label="智谱清言 Base URL" name="GLM_BASE_URL" tooltip="用于配置接口代理地址">
+                                    <Input placeholder="https://open.bigmodel.cn/api/paas/v4" />
+                                </Form.Item>
+
                                 <Form.Item label="DeepSeek API Key" name="DEEPSEEK_API_KEY">
                                     <Input.Password placeholder="输入 DeepSeek 开放平台的 API Key" />
                                 </Form.Item>
+                                <Form.Item label="DeepSeek Base URL" name="DEEPSEEK_BASE_URL" tooltip="用于配置接口代理地址">
+                                    <Input placeholder="https://api.deepseek.com/v1" />
+                                </Form.Item>
+
                                 <Form.Item label="通义千问 API Key" name="TONGYI_API_KEY">
                                     <Input.Password placeholder="输入阿里云百炼 API Key" />
+                                </Form.Item>
+                                <Form.Item label="通义千问 Base URL" name="TONGYI_BASE_URL" tooltip="用于配置接口代理地址">
+                                    <Input placeholder="https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation" />
                                 </Form.Item>
 
                                 <Form.Item style={{ marginTop: 32 }}>

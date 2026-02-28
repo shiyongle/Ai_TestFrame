@@ -92,9 +92,9 @@ class OpenAIProvider(BaseLLMProvider):
 class GLMProvider(BaseLLMProvider):
     """智谱GLM模型提供商"""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: str = "https://open.bigmodel.cn/api/paas/v4"):
         self.api_key = api_key
-        self.base_url = "https://open.bigmodel.cn/api/paas/v4"
+        self.base_url = base_url
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -133,9 +133,9 @@ class GLMProvider(BaseLLMProvider):
 class TongyiProvider(BaseLLMProvider):
     """阿里云通义千问模型提供商"""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, base_url: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"):
         self.api_key = api_key
-        self.base_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+        self.base_url = base_url
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -201,17 +201,19 @@ class LLMClient:
         
         # 智谱GLM
         glm_key = db_settings.get('GLM_API_KEY') or getattr(settings, 'GLM_API_KEY', None)
+        glm_base_url = db_settings.get('GLM_BASE_URL') or getattr(settings, 'GLM_BASE_URL', "https://open.bigmodel.cn/api/paas/v4")
         if glm_key:
-            self.providers['glm'] = GLMProvider(api_key=glm_key)
+            self.providers['glm'] = GLMProvider(api_key=glm_key, base_url=glm_base_url)
         
         # 通义千问
         tongyi_key = db_settings.get('TONGYI_API_KEY') or getattr(settings, 'TONGYI_API_KEY', None)
+        tongyi_base_url = db_settings.get('TONGYI_BASE_URL') or getattr(settings, 'TONGYI_BASE_URL', "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
         if tongyi_key:
-            self.providers['tongyi'] = TongyiProvider(api_key=tongyi_key)
+            self.providers['tongyi'] = TongyiProvider(api_key=tongyi_key, base_url=tongyi_base_url)
             
         # DeepSeek
         deepseek_key = db_settings.get('DEEPSEEK_API_KEY') or getattr(settings, 'DEEPSEEK_API_KEY', None)
-        deepseek_base_url = "https://api.deepseek.com"
+        deepseek_base_url = db_settings.get('DEEPSEEK_BASE_URL') or getattr(settings, 'DEEPSEEK_BASE_URL', "https://api.deepseek.com/v1")
         # Can utilize OpenAIProvider for DeepSeek since they are API compatible
         if deepseek_key:
             self.providers['deepseek'] = OpenAIProvider(api_key=deepseek_key, base_url=deepseek_base_url)
