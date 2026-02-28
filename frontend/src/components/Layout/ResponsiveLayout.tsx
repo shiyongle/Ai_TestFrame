@@ -20,6 +20,8 @@ import {
   FileSearchOutlined,
   DatabaseOutlined,
   SafetyCertificateOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -286,11 +288,39 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           padding: collapsed ? '0 14px' : '0 18px',
         }}
       >
-        <Space size={collapsed ? 8 : 14}>
+        <Space size={collapsed ? 8 : 14} style={{ overflow: 'hidden' }}>
           <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
-          {!collapsed && <span>投石问路</span>}
+          {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>投石问路</span>}
         </Space>
+        {!isMobile && (
+          <div
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              cursor: 'pointer',
+              color: '#8c8c8c',
+              fontSize: '16px',
+              display: collapsed ? 'none' : 'block'
+            }}
+          >
+            <MenuFoldOutlined className="hover-scale" />
+          </div>
+        )}
       </div>
+      {/* 补充折叠状态下点击展开的悬浮按钮 */}
+      {collapsed && !isMobile && (
+        <div
+          onClick={() => setCollapsed(false)}
+          style={{
+            cursor: 'pointer',
+            textAlign: 'center',
+            marginBottom: '10px',
+            color: '#8c8c8c',
+            display: 'block'
+          }}
+        >
+          <MenuUnfoldOutlined className="hover-scale" style={{ fontSize: 16 }} />
+        </div>
+      )}
       <Menu
         theme="light"
         mode="inline"
@@ -335,6 +365,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   return (
     <Layout style={{ minHeight: '100vh', background: 'transparent' }}>
       <Sider
+        trigger={null}
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
