@@ -376,38 +376,21 @@ async def generate_test_cases_for_version(
             }
             
             # Use explicitly linked context if available, otherwise fallback to the service's auto-search logic
-            if explicit_context:
-                enhanced_prompt = ai_service._build_rag_enhanced_prompt(requirement, explicit_context)
-                from services.ai.llm_client import llm_client
-                import json
-                result = await llm_client.text_completion(
-                    prompt=enhanced_prompt,
-                    provider=model,
-                    max_tokens=2000
-                )
-                if result.get('success'):
-                    try:
-                        testcase = json.loads(result['content'])
-                        generated_testcases.append({
-                            "requirement_id": requirement.id,
-                            "requirement_title": requirement.title,
-                            "testcase": testcase,
-                            "used_rag": True,
-                            "explicit_knowledge": True
-                        })
-                    except Exception:
-                        pass
-            else:
-                # Fallback to general search RAG or pure generation if no explicit knowledge linked
-                res = await ai_service.generate_test_case_from_requirement(req_data, provider=model, use_rag=True)
-                if res.get('success'):
-                    generated_testcases.append({
-                        "requirement_id": requirement.id,
-                        "requirement_title": requirement.title,
-                        "testcase": res.get('test_case'),
-                        "used_rag": res.get('used_rag', False),
-                        "explicit_knowledge": False
-                    })
+            res = await ai_service.generate_test_case_from_requirement(
+                req_data, 
+                provider=model, 
+                use_rag=True, 
+                explicit_context=explicit_context if explicit_context else None
+            )
+            
+            if res.get('success'):
+                generated_testcases.append({
+                    "requirement_id": requirement.id,
+                    "requirement_title": requirement.title,
+                    "testcase": res.get('test_case'),
+                    "used_rag": res.get('used_rag', False),
+                    "explicit_knowledge": res.get('explicit_knowledge', False)
+                })
         
         return {
             "message": "测试用例生成成功",

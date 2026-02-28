@@ -26,7 +26,8 @@ class AIService:
         self, 
         requirement_data: Dict[str, Any],
         provider: str = "glm",
-        use_rag: bool = True
+        use_rag: bool = True,
+        explicit_context: Optional[str] = None
     ) -> Dict[str, Any]:
         """根据需求生成测试用例"""
         try:
@@ -41,9 +42,9 @@ class AIService:
                 business_value=requirement_data.get('business_value', '')
             )
             
-            # 如果启用RAG，先获取相关知识
-            context = ""
-            if use_rag:
+            # 如果启用RAG，获取相关知识（或者使用传入的明确知识片段）
+            context = explicit_context or ""
+            if not context and use_rag:
                 context = await rag_engine.get_context_for_query(
                     f"{requirement.title} {requirement.description}",
                     max_context_length=1500
@@ -66,6 +67,7 @@ class AIService:
                             'test_case': test_case,
                             'provider': provider,
                             'used_rag': True,
+                            'explicit_knowledge': bool(explicit_context),
                             'context_sources': len(context.split('【')) - 1 if context else 0
                         }
                     except json.JSONDecodeError:
