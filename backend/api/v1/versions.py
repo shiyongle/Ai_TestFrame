@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from services.ai_generator import ai_generator
 from services.ai.ai_service import ai_service
-from services.ai.rag_engine import KnowledgeDocument
+from models.database_models import KnowledgeDocument
 
 router = APIRouter()
 

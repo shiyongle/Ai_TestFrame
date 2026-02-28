@@ -3,7 +3,7 @@ AI相关API路由
 提供AI能力的RESTful接口
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Dict, Any, List, Optional
 import asyncio
@@ -180,49 +180,32 @@ async def add_knowledge_document(
     """添加知识文档"""
     main_logger.info(f"[AI] add knowledge request: title={request.title}, category={request.category}")
 
-    async def _persist_document(title: str, content: str, source: str, category: str, metadata: Dict[str, Any]):
+    try:
         result = await ai_service.add_knowledge_document(
-            title=title,
-            content=content,
-            source=source,
-            category=category,
-            metadata=metadata
+            title=request.title,
+            content=request.content,
+            source=request.source,
+            category=request.category,
+            metadata=request.metadata
         )
         if result.get("success"):
-            main_logger.info(f"[AI] knowledge persisted: doc_id={result.get('doc_id')}, title={title}")
-        else:
-            main_logger.error(f"[AI] knowledge persist failed: title={title}, error={result.get('error')}")
-
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            _persist_document(
-                request.title,
-                request.content,
-                request.source,
-                request.category,
-                request.metadata
+            main_logger.info(f"[AI] knowledge persisted: doc_id={result.get('doc_id')}, title={request.title}")
+            return APIResponse(
+                success=True,
+                message="知识文档添加并解析完成",
+                data={
+                    "queued": False,
+                    "title": request.title,
+                    "category": request.category,
+                    "doc_id": result.get('doc_id')
+                }
             )
-        )
-    except RuntimeError:
-        # 极端情况下没有事件循环，直接同步执行
-        await _persist_document(
-            request.title,
-            request.content,
-            request.source,
-            request.category,
-            request.metadata
-        )
-
-    return APIResponse(
-        success=True,
-        message="知识文档已入队，正在后台持久化",
-        data={
-            "queued": True,
-            "title": request.title,
-            "category": request.category
-        }
-    )
+        else:
+            main_logger.error(f"[AI] knowledge persist failed: title={request.title}, error={result.get('error')}")
+            raise HTTPException(status_code=500, detail=result.get("error"))
+    except Exception as e:
+        main_logger.error(f"处理文档添加请求失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/knowledge/search", response_model=APIResponse)
 async def search_knowledge(

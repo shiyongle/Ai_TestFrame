@@ -82,7 +82,30 @@ class VersionKnowledge(Base):
     version = relationship("Version", back_populates="knowledge_docs")
     # Using string reference for KnowledgeDocument since it's defined elsewhere or later
     # We can use backref implicitly, or rely on explicit manual queries.
-    # Because KnowledgeDocument is defined in rag_engine.py, we don't import it here to avoid circular imports.
+
+class KnowledgeDocument(Base):
+    """知识文档表"""
+    __tablename__ = "knowledge_documents"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    doc_id = Column(String(100), unique=True, nullable=False)
+    title = Column(String(500), nullable=False)
+    content = Column(Text, nullable=False)
+    source = Column(String(200), nullable=False)
+    category = Column(String(100), nullable=False)
+    doc_metadata = Column(Text)  # JSON格式，避免与SQLAlchemy保留字冲突
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class DocumentEmbedding(Base):
+    """文档向量表"""
+    __tablename__ = "document_embeddings"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    doc_id = Column(String(100), nullable=False)
+    chunk_index = Column(Integer, nullable=False)
+    chunk_content = Column(Text, nullable=False)
+    embedding = Column(Text)  # JSON格式的向量
     # We will query and insert directly.
 
 # 版本管理表

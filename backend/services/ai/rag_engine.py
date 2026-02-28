@@ -21,6 +21,7 @@ import jieba
 import re
 
 from config.settings import settings
+from models.database_models import KnowledgeDocument, DocumentEmbedding
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -35,30 +36,7 @@ class DocumentChunk:
     source: str = ""
     chunk_index: int = 0
 
-class KnowledgeDocument(Base):
-    """知识文档表"""
-    __tablename__ = "knowledge_documents"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    doc_id = Column(String(100), unique=True, nullable=False)
-    title = Column(String(500), nullable=False)
-    content = Column(Text, nullable=False)
-    source = Column(String(200), nullable=False)
-    category = Column(String(100), nullable=False)
-    doc_metadata = Column(Text)  # JSON格式，避免与SQLAlchemy保留字冲突
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class DocumentEmbedding(Base):
-    """文档向量表"""
-    __tablename__ = "document_embeddings"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    doc_id = Column(String(100), nullable=False)
-    chunk_index = Column(Integer, nullable=False)
-    chunk_content = Column(Text, nullable=False)
-    embedding = Column(Text)  # JSON格式的向量
-    created_at = Column(DateTime, default=datetime.utcnow)
+    chunk_index: int = 0
 
 class RAGEngine:
     """RAG知识库引擎"""
@@ -165,10 +143,16 @@ class RAGEngine:
         category: str = "general",
         metadata: Dict[str, Any] = None
     ) -> str:
-        """添加文档到知识库（仅入库，不做向量化）"""
-        return await asyncio.to_thread(
+        """添加文档到知识库并构建向量"""
+        doc_id = await asyncio.to_thread(
             self._add_document_sync, title, content, source, category, metadata
         )
+        
+        # 在独立的线程池中构建向量，因为外层API已经接入了FastAPI的BackgroundTasks，
+        # 所以这里的 await 不会阻塞用户的HTTP响应时间，且能保证任务绝对执行完毕。
+        await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
+        
+        return doc_id
 
     def _add_document_sync(
         self,
@@ -332,20 +316,11 @@ class RAGEngine:
         self._update_vectorizer_sync(new_texts, new_chunk_ids)
 
     async def _schedule_embedding_build(self, doc_id: str, content: str) -> None:
-        """后台构建向量化数据，避免阻塞请求"""
+        """后台构建向量化数据，由于外层已使用BackgroundTasks或处于async下，直接await线程构建即可"""
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
             await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
-            return
-
-        async def _run():
-            try:
-                await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
-            except Exception as e:
-                logger.error(f"后台构建向量化数据失败: {e}")
-
-        loop.create_task(_run())
+        except Exception as e:
+            logger.error(f"后台构建向量化数据失败: {e}")
 
     def _schedule_embedding_build_sync(self, doc_id: str, content: str) -> None:
         """同步场景下的后台构建"""
