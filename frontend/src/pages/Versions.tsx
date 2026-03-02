@@ -255,13 +255,11 @@ const Versions: React.FC = () => {
     setGenerating(true);
     try {
       const res = await versionApi.generateTestCases(selectedVersion.id, model);
-      if (res.generated_count > 0) {
-        setGeneratedTestCases(res.testcases);
-        message.success(`已生成 ${res.generated_count} 个用例`);
-      } else {
-        message.warning('未生成用例');
-      }
-    } catch (e) { message.error('生成失败'); }
+      message.success(res.message || '✅ 生成请求已提交至后台处理中，稍后请在测试用例库查看');
+      setGenerateModalVisible(false);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '提交生成任务失败');
+    }
     finally { setGenerating(false); }
   };
 
@@ -497,15 +495,11 @@ const Versions: React.FC = () => {
         footer={null}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('glm-4')} loading={generating}>使用 GLM-4 生成</Button>
-          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('gpt-4')} loading={generating}>使用 GPT-4 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('glm')} loading={generating}>使用 GLM-4 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('openai')} loading={generating}>使用 GPT-4 / OpenAI 生成</Button>
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('deepseek')} loading={generating}>使用 DeepSeek 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('tongyi')} loading={generating}>使用 通义千问 生成</Button>
         </div>
-        {generatedTestCases.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <Text type="success"><CheckCircleFilled /> 生成成功！请前往测试用例库查看。</Text>
-          </div>
-        )}
       </Modal>
 
       {/* Link Requirements Modal */}

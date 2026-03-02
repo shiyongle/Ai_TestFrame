@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import sessionmaker, Session
 from typing import List, Optional
-from core.database import get_db
-from models.database_models import Version, Requirement, VersionRequirement, VersionKnowledge
+from core.database import get_db, SessionLocal
+from models.database_models import Version, Requirement, VersionRequirement, VersionKnowledge, TestCase
 from pydantic import BaseModel
 from datetime import datetime
 from services.ai_generator import ai_generator
@@ -315,10 +315,11 @@ async def get_version_knowledge(
 async def generate_test_cases_for_version(
     version_id: int,
     request: dict,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """为版本关联的需求生成测试用例（并自带绑定的RAG上下文）"""
-    model = request.get("model", "glm-4.6")
+    """为版本关联的需求生成测试用例（后台异步执行并自带绑定的RAG上下文）"""
+    model = request.get("model", "glm")
     
     # 验证版本是否存在
     version = db.query(Version).filter(Version.id == version_id).first()
@@ -361,49 +362,79 @@ async def generate_test_cases_for_version(
         for doc in docs:
             parts.append(f"【{doc.title}】\n{doc.content}")
         explicit_context = "\n\n".join(parts)
+        
+    project_id = version.project_id
+
+    async def _bg_generate_testcases(
+        reqs: List[Requirement],
+        req_explicit_context: str,
+        ai_model: str,
+        proj_id: int
+    ):
+        """后台异步处理测使用例生成和入库逻辑"""
+        try:
+            # We must use a short-lived DB session in the background
+            with SessionLocal() as bg_db:
+                for req in reqs:
+                    req_data = {
+                        'title': req.title,
+                        'description': req.description,
+                        'priority': req.priority,
+                        'type': req.type,
+                        'acceptance_criteria': req.acceptance_criteria,
+                        'business_value': req.business_value
+                    }
+                    
+                    res = await ai_service.generate_test_case_from_requirement(
+                        req_data, 
+                        provider=ai_model, 
+                        use_rag=True, 
+                        explicit_context=req_explicit_context if req_explicit_context else None
+                    )
+                    
+                    if res.get('success'):
+                        test_case_json = res.get('test_case', {})
+                        if isinstance(test_case_json, str):
+                            import json
+                            try:
+                                test_case_json = json.loads(test_case_json)
+                            except:
+                                test_case_json = {}
+                        
+                        tc_name = test_case_json.get('name') or test_case_json.get('title') or f"[{req.title}] 自动生成用例"
+                        tc_desc = test_case_json.get('description', '')
+                        tc_protocol = test_case_json.get('protocol', 'http')
+                        
+                        # Save directly into TestCase model
+                        new_tc = TestCase(
+                            name=tc_name,
+                            description=tc_desc,
+                            protocol=tc_protocol,
+                            config=test_case_json,
+                            project_id=proj_id
+                        )
+                        bg_db.add(new_tc)
+                
+                # Commit ALL generated test cases
+                bg_db.commit()
+                print(f"[AI Generate] Successfully saved generated test cases for Version ID {version_id}.")
+        except Exception as bg_e:
+            import traceback
+            traceback.print_exc()
+
+    # Schedule background task
+    background_tasks.add_task(
+        _bg_generate_testcases,
+        requirements,
+        explicit_context,
+        model,
+        project_id
+    )
     
-    try:
-        generated_testcases = []
-        
-        for requirement in requirements:
-            req_data = {
-                'title': requirement.title,
-                'description': requirement.description,
-                'priority': requirement.priority,
-                'type': requirement.type,
-                'acceptance_criteria': requirement.acceptance_criteria,
-                'business_value': requirement.business_value
-            }
-            
-            # Use explicitly linked context if available, otherwise fallback to the service's auto-search logic
-            res = await ai_service.generate_test_case_from_requirement(
-                req_data, 
-                provider=model, 
-                use_rag=True, 
-                explicit_context=explicit_context if explicit_context else None
-            )
-            
-            if res.get('success'):
-                generated_testcases.append({
-                    "requirement_id": requirement.id,
-                    "requirement_title": requirement.title,
-                    "testcase": res.get('test_case'),
-                    "used_rag": res.get('used_rag', False),
-                    "explicit_knowledge": res.get('explicit_knowledge', False)
-                })
-        
-        return {
-            "message": "测试用例生成成功",
-            "version_id": version_id,
-            "model": model,
-            "generated_count": len(generated_testcases),
-            "testcases": generated_testcases
-        }
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"生成测试用例失败: {str(e)}"
-        )
+    return {
+        "message": "AI分配任务已提交，系统正在后台生成并保存测试用例",
+        "version_id": version_id,
+        "model": model,
+        "generated_count": 0,
+        "testcases": []
+    }

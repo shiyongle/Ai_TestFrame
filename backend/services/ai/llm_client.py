@@ -29,21 +29,22 @@ class BaseLLMProvider(ABC):
         pass
 
 class OpenAIProvider(BaseLLMProvider):
-    """OpenAI模型提供商"""
+    """大模型OpenAI兼容接口提供商"""
     
-    def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1"):
+    def __init__(self, api_key: str, base_url: str = "https://api.openai.com/v1", default_model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
+        self.default_model = default_model
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
     
     async def chat_completion(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
-        """OpenAI聊天完成"""
+        """OpenAI聘天完成"""
         url = f"{self.base_url}/chat/completions"
         data = {
-            "model": kwargs.get("model", "gpt-3.5-turbo"),
+            "model": kwargs.get("model", self.default_model),
             "messages": messages,
             "temperature": kwargs.get("temperature", 0.7),
             "max_tokens": kwargs.get("max_tokens", 2000)
@@ -61,33 +62,13 @@ class OpenAIProvider(BaseLLMProvider):
                     }
                 else:
                     error_text = await response.text()
-                    logger.error(f"OpenAI API调用失败: {error_text}")
+                    logger.error(f"调用 {self.default_model} API失败: {error_text}")
                     return {"success": False, "error": error_text}
     
     async def text_completion(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """OpenAI文本完成"""
-        url = f"{self.base_url}/completions"
-        data = {
-            "model": kwargs.get("model", "text-davinci-003"),
-            "prompt": prompt,
-            "temperature": kwargs.get("temperature", 0.7),
-            "max_tokens": kwargs.get("max_tokens", 2000)
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=data, headers=self.headers) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    return {
-                        "success": True,
-                        "content": result["choices"][0]["text"],
-                        "usage": result.get("usage", {}),
-                        "model": result["model"]
-                    }
-                else:
-                    error_text = await response.text()
-                    logger.error(f"OpenAI API调用失败: {error_text}")
-                    return {"success": False, "error": error_text}
+        """文本完成（复用chat接口实现，兼容DeepSeek等不支持旧式/completions的模型"""
+        messages = [{"role": "user", "content": prompt}]
+        return await self.chat_completion(messages, **kwargs)
 
 class GLMProvider(BaseLLMProvider):
     """智谱GLM模型提供商"""
@@ -214,9 +195,9 @@ class LLMClient:
         # DeepSeek
         deepseek_key = db_settings.get('DEEPSEEK_API_KEY') or getattr(settings, 'DEEPSEEK_API_KEY', None)
         deepseek_base_url = db_settings.get('DEEPSEEK_BASE_URL') or getattr(settings, 'DEEPSEEK_BASE_URL', "https://api.deepseek.com/v1")
-        # Can utilize OpenAIProvider for DeepSeek since they are API compatible
+        # DeepSeek 兼容OpenAI接口，但需要指定默认模型名 deepseek-chat
         if deepseek_key:
-            self.providers['deepseek'] = OpenAIProvider(api_key=deepseek_key, base_url=deepseek_base_url)
+            self.providers['deepseek'] = OpenAIProvider(api_key=deepseek_key, base_url=deepseek_base_url, default_model='deepseek-chat')
         
         logger.info(f"已初始化的大模型提供商: {list(self.providers.keys())}")
     

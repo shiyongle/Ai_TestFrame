@@ -108,10 +108,15 @@ const AiKnowledge: React.FC = () => {
     setReqKeys([]);
   };
 
-  const handleDelete = (id: number) => {
-    setDocuments(prev => prev.filter(d => d.id !== id));
-    if (selectedDoc?.id === id) setSelectedDoc(null);
-    message.success('Document deleted');
+  const handleDelete = async (id: number) => {
+    try {
+      await aiApi.deleteKnowledgeDocument(id);
+      setDocuments(prev => prev.filter(d => d.id !== id));
+      if (selectedDoc?.id === id) setSelectedDoc(null);
+      message.success('文档删除成功');
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '删除失败');
+    }
   };
 
   const handleAddSubmit = async () => {
