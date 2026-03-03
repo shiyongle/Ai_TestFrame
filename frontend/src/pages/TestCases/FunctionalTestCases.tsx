@@ -160,10 +160,15 @@ const FunctionalTestCases: React.FC = () => {
     Modal.confirm({
       title: '确认删除',
       content: `确定要删除测试用例 "${record.name}" 吗？`,
-      onOk: () => {
-        setTestCases(testCases.filter(item => item.id !== record.id));
-        if (selectedCase?.id === record.id) setSelectedCase(null);
-        message.success('删除成功');
+      onOk: async () => {
+        try {
+          await testcaseApi.deleteTestCase(record.id);
+          setTestCases(testCases.filter(item => item.id !== record.id));
+          if (selectedCase?.id === record.id) setSelectedCase(null);
+          message.success('删除成功');
+        } catch (e: any) {
+          message.error(e?.response?.data?.detail || '删除失败');
+        }
       },
       okButtonProps: { danger: true }
     });

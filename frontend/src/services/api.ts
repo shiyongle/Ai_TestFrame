@@ -53,6 +53,7 @@ export const testcaseApi = {
   getTestCases: (projectId: number): Promise<any[]> => api.get(`/api/v1/projects/${projectId}/testcases`),
   createTestCase: (projectId: number, data: any): Promise<any> => api.post(`/api/v1/projects/${projectId}/testcases`, data),
   getAllTestCases: (): Promise<any[]> => api.get('/api/v1/testcases'),
+  deleteTestCase: (id: number): Promise<any> => api.delete(`/api/v1/testcases/${id}`),
 };
 
 // 测试相关API

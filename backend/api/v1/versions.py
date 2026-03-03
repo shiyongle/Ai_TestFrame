@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from datetime import datetime
 from services.ai_generator import ai_generator
 from services.ai.ai_service import ai_service
-from models.database_models import KnowledgeDocument
+from models.database_models import KnowledgeDocument, TestSuite, TestSuiteCase
+from datetime import datetime
 
 router = APIRouter()
 
@@ -369,7 +370,8 @@ async def generate_test_cases_for_version(
         reqs: List[Requirement],
         req_explicit_context: str,
         ai_model: str,
-        proj_id: int
+        proj_id: int,
+        ver_number: str
     ):
         """后台异步处理测使用例生成和入库逻辑"""
         try:
@@ -415,7 +417,37 @@ async def generate_test_cases_for_version(
                         )
                         bg_db.add(new_tc)
                 
-                # Commit ALL generated test cases
+                # Flush the session to get the auto-incremented IDs for the new test cases
+                bg_db.flush()
+                
+                # Identify the newly created test cases
+                newly_created_test_cases = [tc for tc in bg_db.new if isinstance(tc, TestCase)]
+                
+                # If we generated at least one test case, create a Test Suite
+                if newly_created_test_cases:
+                    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                    suite_name = f"AI-Generate-{timestamp}"
+                    suite_desc = f"基于版本 {ver_number} / 需求生成的 AI 测试用例集合"
+                    
+                    new_suite = TestSuite(
+                        name=suite_name,
+                        description=suite_desc,
+                        project_id=proj_id
+                    )
+                    bg_db.add(new_suite)
+                    bg_db.flush() # Get suite ID
+                    
+                    # Link them together
+                    suite_id = new_suite.id
+                    for idx, tc in enumerate(newly_created_test_cases):
+                        suite_case_link = TestSuiteCase(
+                            suite_id=suite_id,
+                            testcase_id=tc.id,
+                            order_index=idx
+                        )
+                        bg_db.add(suite_case_link)
+                
+                # Commit ALL generated test cases and the suite
                 bg_db.commit()
                 print(f"[AI Generate] Successfully saved generated test cases for Version ID {version_id}.")
         except Exception as bg_e:
@@ -428,7 +460,8 @@ async def generate_test_cases_for_version(
         requirements,
         explicit_context,
         model,
-        project_id
+        project_id,
+        version.version_number
     )
     
     return {
