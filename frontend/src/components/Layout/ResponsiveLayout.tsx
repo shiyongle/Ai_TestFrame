@@ -22,6 +22,12 @@ import {
   SafetyCertificateOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  ReloadOutlined,
+  AppstoreOutlined,
+  ScheduleOutlined,
+  FolderOpenOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -109,9 +115,19 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         },
         {
           key: 'testcases',
-          icon: <FileTextOutlined />,
-          label: '测试用例',
+          icon: <AppstoreOutlined />,
+          label: '测试中心',
           children: [
+            {
+              key: '/testcases/plans',
+              icon: <ScheduleOutlined />,
+              label: '测试计划',
+            },
+            {
+              key: '/testcases/suites',
+              icon: <FolderOpenOutlined />,
+              label: '测试用例集',
+            },
             {
               key: '/testcases/functional',
               icon: <FileTextOutlined />,
@@ -119,7 +135,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             },
             {
               key: '/testcases/interface',
-              icon: <CodeOutlined />,
+              icon: <ApiOutlined />,
               label: '接口测试用例',
             },
           ],

@@ -31,28 +31,25 @@ import {
   CheckCircleFilled,
   CloseCircleFilled,
   ClockCircleFilled,
-  MoreOutlined
+  MoreOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import { testcaseApi } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Step } = Steps;
 
 interface FunctionalTestCase {
-  id: string;
+  id: number;
   name: string;
   description: string;
-  module: string;
-  priority: 'high' | 'medium' | 'low';
-  status: 'active' | 'inactive';
-  steps: string;
-  expectedResult: string;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-  lastExecutionResult?: 'pass' | 'fail' | 'blocked' | null;
+  protocol: string;
+  config: any;
+  project_id: number;
+  created_at: string;
+  updated_at: string;
 }
 
 const FunctionalTestCases: React.FC = () => {
@@ -62,58 +59,24 @@ const FunctionalTestCases: React.FC = () => {
   const [selectedCase, setSelectedCase] = useState<FunctionalTestCase | null>(null);
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
-  const [filterModule, setFilterModule] = useState<string>('');
-  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
-  // 模拟数据
   useEffect(() => {
-    const mockData: FunctionalTestCase[] = [
-      {
-        id: '1',
-        name: '用户登录功能测试',
-        description: '测试用户使用正确的用户名和密码登录系统',
-        module: '用户管理',
-        priority: 'high',
-        status: 'active',
-        steps: '1. 打开登录页面\n2. 输入正确的用户名\n3. 输入正确的密码\n4. 点击登录按钮',
-        expectedResult: '成功登录系统，跳转到首页',
-        createdBy: '张三',
-        createdAt: '2024-01-15',
-        updatedAt: '2024-01-15',
-        lastExecutionResult: 'pass'
-      },
-      {
-        id: '2',
-        name: '用户注册功能测试',
-        description: '测试新用户注册功能',
-        module: '用户管理',
-        priority: 'medium',
-        status: 'active',
-        steps: '1. 打开注册页面\n2. 填写用户信息\n3. 点击注册按钮',
-        expectedResult: '注册成功，显示成功提示',
-        createdBy: '李四',
-        createdAt: '2024-01-16',
-        updatedAt: '2024-01-16',
-        lastExecutionResult: null
-      },
-      {
-        id: '3',
-        name: '商品搜索功能测试',
-        description: '测试商品搜索功能',
-        module: '商品管理',
-        priority: 'high',
-        status: 'active',
-        steps: '1. 进入商品页面\n2. 输入搜索关键词\n3. 点击搜索按钮',
-        expectedResult: '显示相关商品列表',
-        createdBy: '王五',
-        createdAt: '2024-01-17',
-        updatedAt: '2024-01-17',
-        lastExecutionResult: 'fail'
-      }
-    ];
-    setTestCases(mockData);
-    if (mockData.length > 0) setSelectedCase(mockData[0]);
+    fetchTestCases();
   }, []);
+
+  const fetchTestCases = async () => {
+    setLoading(true);
+    try {
+      const data = await testcaseApi.getAllTestCases();
+      setTestCases(data);
+      if (data.length > 0) setSelectedCase(data[0]);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '获取用例列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const columns: ColumnsType<FunctionalTestCase> = [
     {
@@ -123,51 +86,26 @@ const FunctionalTestCases: React.FC = () => {
       filteredValue: searchText ? [searchText] : null,
       onFilter: (value, record) =>
         record.name.toLowerCase().includes(value.toString().toLowerCase()),
-      render: (text: string, record) => (
+      render: (text: string) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 4, height: 32, borderRadius: 2,
-            background: record.priority === 'high' ? '#FF3B30' : record.priority === 'medium' ? '#FF9500' : '#34C759'
+            background: '#1677ff'
           }} />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <Text strong style={{ fontSize: 14 }}>{text}</Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>{record.module}</Text>
           </div>
         </div>
       )
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
+      title: '协议',
+      dataIndex: 'protocol',
+      key: 'protocol',
       width: 100,
-      filters: [
-        { text: '激活', value: 'active' },
-        { text: '停用', value: 'inactive' },
-      ],
-      filteredValue: filterStatus ? [filterStatus] : null,
-      onFilter: (value, record) => record.status === value,
-      render: (status: string) => {
-        const color = status === 'active' ? 'processing' : 'default';
-        const text = status === 'active' ? '激活' : '停用';
-        return <Tag color={color} bordered={false}>{text}</Tag>;
+      render: (protocol: string) => {
+        return <Tag color="blue">{protocol?.toUpperCase()}</Tag>;
       },
-    },
-    {
-      title: '上一次执行',
-      dataIndex: 'lastExecutionResult',
-      key: 'lastExecutionResult',
-      width: 120,
-      render: (result: string) => {
-        if (!result) return <Tag color="default" bordered={false}>未执行</Tag>;
-        const map: any = {
-          pass: { color: 'success', text: '通过', icon: <CheckCircleFilled /> },
-          fail: { color: 'error', text: '失败', icon: <CloseCircleFilled /> },
-          blocked: { color: 'warning', text: '阻塞', icon: <ClockCircleFilled /> }
-        };
-        const conf = map[result];
-        return <Tag color={conf.color} icon={conf.icon} bordered={false}>{conf.text}</Tag>;
-      }
     },
     {
       title: '操作',
@@ -210,9 +148,7 @@ const FunctionalTestCases: React.FC = () => {
   };
 
   const handleCopy = (record: FunctionalTestCase) => {
-    const newCase = { ...record, id: Date.now().toString(), name: `${record.name} - 副本` };
-    setTestCases([...testCases, newCase]);
-    message.success('用例复制成功');
+    // 稍后实现
   };
 
   const handleExecute = (record: FunctionalTestCase) => {
@@ -243,42 +179,46 @@ const FunctionalTestCases: React.FC = () => {
             : item
         ));
         message.success('更新成功');
-      } else {
-        const newCase: FunctionalTestCase = {
-          ...values,
-          id: Date.now().toString(),
-          createdBy: '当前用户',
-          createdAt: new Date().toISOString().split('T')[0],
-          updatedAt: new Date().toISOString().split('T')[0],
-          lastExecutionResult: null
-        };
-        setTestCases([...testCases, newCase]);
         message.success('创建成功');
       }
       setModalVisible(false);
       form.resetFields();
+      fetchTestCases();
     } catch (error) {
       console.error('表单验证失败:', error);
     }
   };
 
-  const renderSteps = (stepsStr: string) => {
-    const steps = stepsStr.split('\n').filter(s => s.trim());
-    return (
-      <div style={{ marginTop: 16 }}>
-        {steps.map((step, idx) => (
-          <div key={idx} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: 12, background: 'rgba(0,0,0,0.05)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: '#666',
-              flexShrink: 0
-            }}>
-              {idx + 1}
+  const renderConfig = (cfg: any) => {
+    if (!cfg) return <Text type="secondary">暂无详细配置数据</Text>;
+
+    // 如果AI生成了 steps 数组，渲染步骤
+    if (cfg.steps && Array.isArray(cfg.steps)) {
+      return (
+        <div style={{ marginTop: 16 }}>
+          {cfg.steps.map((step: any, idx: number) => (
+            <div key={idx} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
+              <div style={{
+                width: 24, height: 24, borderRadius: 12, background: 'rgba(0,0,0,0.05)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: '#666',
+                flexShrink: 0
+              }}>
+                {idx + 1}
+              </div>
+              <Text style={{ lineHeight: 1.6, flex: 1 }}>
+                {typeof step === 'string' ? step : (step.action || step.description || JSON.stringify(step))}
+              </Text>
             </div>
-            <Text style={{ lineHeight: 1.6, flex: 1 }}>{step.replace(/^\d+\.\s*/, '')}</Text>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      );
+    }
+
+    // 否则展示原始结构化 JSON
+    return (
+      <pre style={{ padding: 12, background: 'rgba(0,0,0,0.03)', borderRadius: 8, whiteSpace: 'pre-wrap', fontSize: 12 }}>
+        {JSON.stringify(cfg, null, 2)}
+      </pre>
     );
   };
 
@@ -308,19 +248,15 @@ const FunctionalTestCases: React.FC = () => {
               value={searchText}
               onChange={e => setSearchText(e.target.value)}
             />
-            <Select placeholder="模块" style={{ width: 120 }} allowClear value={filterModule} onChange={setFilterModule}>
-              <Select.Option value="用户管理">用户管理</Select.Option>
-              <Select.Option value="商品管理">商品管理</Select.Option>
-              <Select.Option value="订单管理">订单管理</Select.Option>
-            </Select>
+            <Button icon={<ReloadOutlined />} onClick={fetchTestCases} loading={loading} />
           </div>
           <Table
             columns={columns}
             dataSource={testCases.filter(c =>
-              (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true) &&
-              (filterModule ? c.module === filterModule : true)
+              (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true)
             )}
             rowKey="id"
+            loading={loading}
             pagination={{ pageSize: 15, showSizeChanger: false, size: 'small' }}
             style={{ background: 'transparent' }}
             onRow={(record) => ({
@@ -352,35 +288,37 @@ const FunctionalTestCases: React.FC = () => {
 
               <Row gutter={24} style={{ marginBottom: 24 }}>
                 <Col span={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>模块</Text>
-                  <div style={{ fontWeight: 500 }}>{selectedCase.module}</div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>协议</Text>
+                  <div style={{ fontWeight: 500 }}>{selectedCase.protocol?.toUpperCase()}</div>
                 </Col>
                 <Col span={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>优先级</Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>项目ID</Text>
                   <div>
-                    <Tag color={selectedCase.priority === 'high' ? 'red' : selectedCase.priority === 'medium' ? 'orange' : 'green'}>
-                      {selectedCase.priority.toUpperCase()}
-                    </Tag>
+                    <Tag color="geekblue">{selectedCase.project_id || '未关联'}</Tag>
                   </div>
                 </Col>
               </Row>
 
               <Divider />
 
-              <Title level={5}><FileTextOutlined /> 测试步骤</Title>
-              {renderSteps(selectedCase.steps)}
+              <Title level={5}><FileTextOutlined /> 测试配置 / 自动生成步骤</Title>
+              {renderConfig(selectedCase.config)}
 
               <Divider />
 
-              <Title level={5}><CheckCircleFilled /> 预期结果</Title>
-              <Paragraph style={{ padding: '12px 16px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, color: '#389e0d' }}>
-                {selectedCase.expectedResult}
-              </Paragraph>
+              {selectedCase.config?.expected_result && (
+                <>
+                  <Title level={5}><CheckCircleFilled /> 预期结果</Title>
+                  <Paragraph style={{ padding: '12px 16px', background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, color: '#389e0d' }}>
+                    {selectedCase.config.expected_result}
+                  </Paragraph>
+                  <Divider />
+                </>
+              )}
 
-              <Divider />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#999' }}>
-                <span>创建人: {selectedCase.createdBy}</span>
-                <span>更新于: {selectedCase.updatedAt}</span>
+                <span>创建于: {new Date(selectedCase.created_at).toLocaleString()}</span>
+                <span>更新于: {new Date(selectedCase.updated_at).toLocaleString()}</span>
               </div>
             </div>
           ) : (

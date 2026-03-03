@@ -41,6 +41,29 @@ class TestCase(Base):
     
     project = relationship("Project", back_populates="testcases")
     test_results = relationship("TestResult", back_populates="testcase")
+    suites = relationship("TestSuite", secondary="test_suite_cases", back_populates="testcases")
+
+# 测试用例集表
+class TestSuite(Base):
+    __tablename__ = "test_suites"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    project = relationship("Project")
+    testcases = relationship("TestCase", secondary="test_suite_cases", back_populates="suites")
+
+# 用例集与用例的多对多关联表
+class TestSuiteCase(Base):
+    __tablename__ = "test_suite_cases"
+    
+    suite_id = Column(Integer, ForeignKey("test_suites.id", ondelete="CASCADE"), primary_key=True)
+    testcase_id = Column(Integer, ForeignKey("testcases.id", ondelete="CASCADE"), primary_key=True)
+    order_index = Column(Integer, default=0)
 
 # 测试结果表
 class TestResult(Base):

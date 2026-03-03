@@ -64,6 +64,17 @@ export const testApi = {
   getReport: (id: number) => api.get(`/api/v1/reports/${id}`),
 };
 
+// 测试用例集API
+export const testSuiteApi = {
+  getTestSuites: (projectId: number): Promise<any[]> => api.get(`/api/v1/${projectId}/test-suites`),
+  createTestSuite: (projectId: number, data: any): Promise<any> => api.post(`/api/v1/${projectId}/test-suites`, data),
+  getTestSuite: (id: number): Promise<any> => api.get(`/api/v1/test-suites/${id}`),
+  updateTestSuite: (id: number, data: any): Promise<any> => api.put(`/api/v1/test-suites/${id}`, data),
+  deleteTestSuite: (id: number): Promise<any> => api.delete(`/api/v1/test-suites/${id}`),
+  addCasesToSuite: (suiteId: number, testcaseIds: number[]): Promise<any> => api.post(`/api/v1/test-suites/${suiteId}/cases`, { testcase_ids: testcaseIds }),
+  removeCasesFromSuite: (suiteId: number, testcaseIds: number[]): Promise<any> => api.request({ method: 'DELETE', url: `/api/v1/test-suites/${suiteId}/cases`, data: { testcase_ids: testcaseIds } }),
+};
+
 // 版本管理API
 export const versionApi = {
   getVersions: (projectId?: number): Promise<any[]> =>

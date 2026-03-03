@@ -18,6 +18,8 @@ import AesCrypto from './pages/Tools/AesCrypto';
 import TestMenu from './TestMenu';
 import FunctionalTestCases from './pages/TestCases/FunctionalTestCases';
 import InterfaceTestCases from './pages/TestCases/InterfaceTestCases';
+import TestPlans from './pages/TestCases/TestPlans';
+import TestSuites from './pages/TestCases/TestSuites';
 import ApiAutomation from './pages/ApiAutomation';
 import Requirements from './pages/Requirements';
 import RuleConfig from './pages/RuleConfig';
@@ -70,9 +72,13 @@ const App: React.FC = () => {
               <Route path="/projects" element={<Projects />} />
               <Route path="/projects/:projectId/testcases" element={<TestCases />} />
               <Route path="/requirements" element={<Requirements />} />
+              {/* 测试中心 (Test Center) */}
+              <Route path="/testcases/plans" element={<TestPlans />} />
+              <Route path="/testcases/suites" element={<TestSuites />} />
               <Route path="/testcases/functional" element={<FunctionalTestCases />} />
               <Route path="/testcases/interface" element={<InterfaceTestCases />} />
               <Route path="/api-automation" element={<ApiAutomation />} />
+              {/* 测试执行 (Test Execution) */}
               <Route path="/test/http" element={<HttpTest />} />
               <Route path="/test/tcp" element={<TcpTest />} />
               <Route path="/test/mq" element={<MqTest />} />

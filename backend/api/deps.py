@@ -9,10 +9,15 @@ from services.project_service import ProjectService
 from services.testcase_service import TestCaseService
 from services.test_execution_service import TestExecutionService
 from services.version_service import VersionService
+from services.test_suite_service import TestSuiteService
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
     return ProjectService()
+
+def get_test_suite_service() -> TestSuiteService:
+    """获取测试用例集服务实例"""
+    return TestSuiteService()
 
 def get_testcase_service() -> TestCaseService:
     """获取测试用例服务实例"""
