@@ -377,6 +377,7 @@ async def generate_test_cases_for_version(
         try:
             # We must use a short-lived DB session in the background
             with SessionLocal() as bg_db:
+                newly_created_test_cases = []
                 for req in reqs:
                     req_data = {
                         'title': req.title,
@@ -416,12 +417,10 @@ async def generate_test_cases_for_version(
                             project_id=proj_id
                         )
                         bg_db.add(new_tc)
+                        newly_created_test_cases.append(new_tc)
                 
                 # Flush the session to get the auto-incremented IDs for the new test cases
                 bg_db.flush()
-                
-                # Identify the newly created test cases
-                newly_created_test_cases = [tc for tc in bg_db.new if isinstance(tc, TestCase)]
                 
                 # If we generated at least one test case, create a Test Suite
                 if newly_created_test_cases:
