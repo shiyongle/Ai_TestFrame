@@ -424,16 +424,22 @@ const Versions: React.FC = () => {
                 <Title level={4}><FileTextOutlined /> 关联需求</Title>
                 <List
                   dataSource={selectedVersion.requirements || []}
-                  renderItem={(item: any) => (
+                  renderItem={(item: any) => {
+                    let plainText = '';
+                    if (item.description) {
+                      const doc = new DOMParser().parseFromString(item.description, 'text/html');
+                      plainText = doc.body.textContent || "";
+                    }
+                    return (
                     <List.Item>
                       <List.Item.Meta
                         avatar={<Avatar style={{ backgroundColor: '#87d068' }} icon={<UserOutlined />} />}
                         title={item.title}
-                        description={item.description}
+                        description={plainText}
                       />
                       <Tag color="blue">{item.priority}</Tag>
                     </List.Item>
-                  )}
+                  )}}
                   locale={{ emptyText: '暂无关联需求' }}
                 />
                 <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 16 }} onClick={handleOpenLinkModal}>关联更多需求</Button>

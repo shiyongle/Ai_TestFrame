@@ -32,6 +32,8 @@ import {
   PaperClipOutlined,
   MessageOutlined
 } from '@ant-design/icons';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { projectApi, requirementApi } from '../../services/api';
 import { Project } from '../../types';
 import dayjs from 'dayjs';
@@ -272,7 +274,13 @@ const Requirements: React.FC = () => {
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <List
               dataSource={filteredRequirements}
-              renderItem={item => (
+              renderItem={item => {
+              let plainText = '';
+              if (item.description) {
+                const doc = new DOMParser().parseFromString(item.description, 'text/html');
+                plainText = doc.body.textContent || "";
+              }
+              return (
                 <div
                   onClick={() => setSelectedRequirement(item)}
                   style={{
@@ -289,8 +297,9 @@ const Requirements: React.FC = () => {
                     <Text strong style={{ fontSize: 15, color: '#333' }}>{item.title}</Text>
                     {getStatusTag(item.status)}
                   </div>
+                  {/* Remove rich text tags for list preview */}
                   <Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ fontSize: 13, marginBottom: 8 }}>
-                    {item.description}
+                    {plainText}
                   </Paragraph>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: '#888' }}>
                     <Space size={4}>
@@ -305,7 +314,7 @@ const Requirements: React.FC = () => {
                     </Space>
                   </div>
                 </div>
-              )}
+              )}}
             />
           </div>
         </div>
@@ -338,9 +347,11 @@ const Requirements: React.FC = () => {
 
                 <div style={{ marginBottom: 32 }}>
                   <Text type="secondary" style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>Description</Text>
-                  <div style={{ marginTop: 8, lineHeight: 1.8, fontSize: 15 }}>
-                    {selectedRequirement.description}
-                  </div>
+                  <div 
+                    style={{ marginTop: 8, lineHeight: 1.8, fontSize: 15, background: 'rgba(0,0,0,0.01)', padding: 16, borderRadius: 8, border: '1px solid rgba(0,0,0,0.05)' }}
+                    className="rich-text-content"
+                    dangerouslySetInnerHTML={{ __html: selectedRequirement.description || '<span style="color: #999">暂无描述</span>' }}
+                  />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, padding: 20, background: 'rgba(0,0,0,0.02)', borderRadius: 12, marginBottom: 32 }}>
@@ -420,8 +431,8 @@ const Requirements: React.FC = () => {
           <Form.Item name="title" label="需求标题" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <TextArea rows={4} />
+          <Form.Item name="description" label="详细描述" style={{ marginBottom: 60 }}>
+            <ReactQuill theme="snow" style={{ height: 200 }} placeholder="请输入需求详细说明，支持富文本排版..." />
           </Form.Item>
           <Space size={16} style={{ display: 'flex' }}>
             <Form.Item name="priority" label="优先级" style={{ flex: 1 }}>
