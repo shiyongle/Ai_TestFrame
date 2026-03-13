@@ -70,7 +70,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
         <Space size="small" align="center">
           <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
           <Text strong style={{ fontSize: '17px', color: '#0b0f1a' }}>
-            投石问路
+            卷心菜
           </Text>
         </Space>
       </Space>

@@ -311,7 +311,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       >
         <Space size={collapsed ? 8 : 14} style={{ overflow: 'hidden' }}>
           <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
-          {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>投石问路</span>}
+          {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>卷心菜</span>}
         </Space>
         {!isMobile && (
           <div
@@ -366,7 +366,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           title={
             <div style={{ color: '#0b0f1a', display: 'flex', alignItems: 'center' }}>
               <ThunderboltOutlined style={{ marginRight: '8px', fontSize: '20px', color: '#0071e3' }} />
-              投石问路-智能化测试平台
+              卷心菜-智能化测试平台
             </div>
           }
           placement="left"

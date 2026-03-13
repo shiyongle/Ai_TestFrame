@@ -21,7 +21,7 @@ const AppSider: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   console.log('AppSider rendered, collapsed:', collapsed);
 
   const menuItems = [
@@ -160,8 +160,8 @@ const AppSider: React.FC = () => {
       }}
       theme="dark"
     >
-      <div 
-        className="logo" 
+      <div
+        className="logo"
         style={{
           height: '64px',
           margin: '16px',
@@ -178,7 +178,7 @@ const AppSider: React.FC = () => {
         }}
       >
         <ThunderboltOutlined style={{ marginRight: collapsed ? '0' : '8px', fontSize: '20px' }} />
-        {!collapsed && '投石问路'}
+        {!collapsed && '卷心菜'}
       </div>
       <Menu
         theme="dark"
