@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from core.database import get_db
-from models.database_models import Requirement, Project
+from core.database import get_db, SessionLocal
+from models.database_models import Requirement, Project, TestCase, TestSuite, TestSuiteCase
 from pydantic import BaseModel
 from datetime import datetime
+from services.ai.ai_service import ai_service
 
 router = APIRouter()
 
@@ -229,3 +230,122 @@ async def link_testcases_to_requirement(
     db.commit()
     
     return {"message": "测试用例关联成功"}
+
+
+@router.post("/requirements/{requirement_id}/generate-testcases")
+async def generate_test_cases_for_requirement(
+    requirement_id: int,
+    request: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """为单一需求生成测试用例（后台异步执行）"""
+    model = request.get("model", "glm")
+    
+    # 验证需求是否存在
+    requirement = db.query(Requirement).filter(Requirement.id == requirement_id).first()
+    if not requirement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="需求不存在"
+        )
+        
+    project_id = requirement.project_id
+
+    async def _bg_generate_testcases(
+        req: Requirement,
+        ai_model: str,
+        proj_id: int
+    ):
+        """后台异步处理独立需求的测试用例生成和入库逻辑"""
+        try:
+            # We must use a short-lived DB session in the background
+            with SessionLocal() as bg_db:
+                newly_created_test_cases = []
+                req_data = {
+                    'title': req.title,
+                    'description': req.description,
+                    'priority': req.priority,
+                    'type': req.type,
+                    'acceptance_criteria': req.acceptance_criteria,
+                    'business_value': req.business_value
+                }
+                
+                res = await ai_service.generate_test_case_from_requirement(
+                    req_data, 
+                    provider=ai_model, 
+                    use_rag=True, 
+                    explicit_context=None
+                )
+                
+                if res.get('success'):
+                    test_cases_json = res.get('test_case', [])
+                    
+                    if isinstance(test_cases_json, str):
+                        import json
+                        try:
+                            test_cases_json = json.loads(test_cases_json)
+                        except:
+                            test_cases_json = []
+
+                    if not isinstance(test_cases_json, list):
+                        test_cases_json = [test_cases_json]
+
+                    for tc_json in test_cases_json:
+                        if not isinstance(tc_json, dict):
+                            continue
+
+                        tc_name = tc_json.get('name') or tc_json.get('title') or f"[{req.title}] 自动生成用例"
+                        tc_desc = tc_json.get('description', '')
+                        tc_protocol = tc_json.get('protocol', 'http')
+                        
+                        new_tc = TestCase(
+                            name=tc_name,
+                            description=tc_desc,
+                            protocol=tc_protocol,
+                            config=tc_json,
+                            project_id=proj_id
+                        )
+                        bg_db.add(new_tc)
+                        newly_created_test_cases.append(new_tc)
+                
+                bg_db.flush()
+                
+                if newly_created_test_cases:
+                    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                    suite_name = f"AI-Req{req.id}-{timestamp}"
+                    suite_desc = f"基于需求: {req.title} 生成的 AI 测试用例集合"
+                    
+                    new_suite = TestSuite(
+                        name=suite_name,
+                        description=suite_desc,
+                        project_id=proj_id
+                    )
+                    bg_db.add(new_suite)
+                    bg_db.flush() 
+                    
+                    suite_id = new_suite.id
+                    for idx, tc in enumerate(newly_created_test_cases):
+                        suite_case_link = TestSuiteCase(
+                            suite_id=suite_id,
+                            testcase_id=tc.id,
+                            order_index=idx
+                        )
+                        bg_db.add(suite_case_link)
+                
+                bg_db.commit()
+                
+        except Exception as e:
+            print(f"Agentic 生成单一需求测试用例流程中发生崩溃: {e}")
+            import traceback
+            traceback.print_exc()
+
+    # 提交后台任务
+    background_tasks.add_task(
+        _bg_generate_testcases,
+        req=requirement,
+        ai_model=model,
+        proj_id=project_id,
+    )
+    
+    return {"message": "AI 开始在后台生成用例，请稍后在测试大库中查看"}

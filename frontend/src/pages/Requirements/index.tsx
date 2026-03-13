@@ -72,6 +72,10 @@ const Requirements: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedRequirement, setSelectedRequirement] = useState<Requirement | null>(null);
 
+  // AI Generation State
+  const [generateModalVisible, setGenerateModalVisible] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
   // Modal State
   const [modalVisible, setModalVisible] = useState(false);
   const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
@@ -208,6 +212,24 @@ const Requirements: React.FC = () => {
     };
     const conf = map[s] || { color: 'default', text: s };
     return <Tag color={conf.color} bordered={false}>{conf.text}</Tag>;
+  };
+
+  const handleGenerateTestCases = () => {
+    setGenerateModalVisible(true);
+  };
+
+  const handleGenerate = async (model: string) => {
+    if (!selectedRequirement) return;
+    setGenerating(true);
+    try {
+      const res = await requirementApi.generateTestCases(Number(selectedRequirement.id), model);
+      message.success(res.message || '✅ 生成请求已提交至后台处理中，稍后请在测试用例库查看');
+      setGenerateModalVisible(false);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '提交生成任务失败');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const filteredRequirements = requirements.filter(r =>
@@ -383,7 +405,7 @@ const Requirements: React.FC = () => {
                   </Text>
                   <Divider style={{ margin: '12px 0' }} />
                   <Space split={<Divider type="vertical" />}>
-                    <Button type="link" size="small" style={{ padding: 0 }}>生成测试用例</Button>
+                    <Button type="link" size="small" style={{ padding: 0 }} onClick={handleGenerateTestCases}>生成测试用例</Button>
                     <Button type="link" size="small" style={{ padding: 0 }}>检查一致性</Button>
                   </Space>
                 </div>
@@ -453,6 +475,22 @@ const Requirements: React.FC = () => {
             <Input prefix={<UserOutlined />} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* AI Generate Modal */}
+      <Modal
+        title="AI生成功能测试用例"
+        open={generateModalVisible}
+        onCancel={() => setGenerateModalVisible(false)}
+        footer={null}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('glm')} loading={generating}>使用 GLM-4 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('openai')} loading={generating}>使用 GPT-4 / OpenAI 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('deepseek')} loading={generating}>使用 DeepSeek 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('tongyi')} loading={generating}>使用 通义千问 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('siliconflow')} loading={generating}>使用 硅基流动 生成</Button>
+        </div>
       </Modal>
 
     </div>

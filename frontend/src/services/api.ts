@@ -109,6 +109,7 @@ export const requirementApi = {
   getProjectRequirements: (projectId: number): Promise<any[]> => api.get(`/api/v1/projects/${projectId}/requirements`),
   addComment: (id: number, comment: any): Promise<any> => api.post(`/api/v1/requirements/${id}/comments`, comment),
   linkTestCases: (id: number, linkData: any): Promise<any> => api.post(`/api/v1/requirements/${id}/link-testcases`, linkData),
+  generateTestCases: (id: number, model: string): Promise<any> => api.post(`/api/v1/requirements/${id}/generate-testcases`, { model }),
 };
 
 // AI 知识库 API
