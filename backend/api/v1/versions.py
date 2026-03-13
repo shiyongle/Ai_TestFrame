@@ -435,7 +435,7 @@ async def generate_test_cases_for_version(
                 # If we generated at least one test case, create a Test Suite
                 if newly_created_test_cases:
                     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                    suite_name = f"AI-Generate-{timestamp}"
+                    suite_name = f"AI-{ver_number}-{timestamp}"
                     suite_desc = f"基于版本 {ver_number} / 需求生成的 AI 测试用例集合"
                     
                     new_suite = TestSuite(
