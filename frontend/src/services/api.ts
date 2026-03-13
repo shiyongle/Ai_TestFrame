@@ -130,4 +130,10 @@ export const systemApi = {
   updateSettings: (category: string, data: any): Promise<any> => api.put(`/api/v1/system/settings/${category}`, data),
 };
 
+// 仪表盘 API
+export const dashboardApi = {
+  getStats: (): Promise<any> => api.get('/api/v1/dashboard/stats'),
+  getActivities: (params?: { limit?: number; offset?: number }): Promise<any> => api.get('/api/v1/dashboard/activities', { params }),
+};
+
 export default api;

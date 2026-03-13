@@ -283,3 +283,16 @@ class TestCaseRule(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     rule_template = relationship("RuleTemplate", back_populates="testcase_rules")
+
+# 操作日志表
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user = Column(String(100), nullable=False, default="管理员")  # 操作用户
+    action = Column(String(50), nullable=False)  # create, update, delete, execute, generate
+    module = Column(String(50), nullable=False)  # project, requirement, testcase, version, testsuite
+    target_name = Column(String(200), nullable=False)  # 操作对象名称
+    detail = Column(Text)  # 详细描述
+    status = Column(String(20), default="success")  # success, failed
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -4,6 +4,7 @@ from typing import List
 from api.deps import get_database, get_project_service
 from schemas.response_schemas import ProjectCreate, ProjectResponse
 from models.database_models import Project
+from utils.activity_logger import log_activity
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ def create_project(
     logging.getLogger("main").info(f"DEBUG: Receiving create project request: {project.name}")
     try:
         result = project_service.create_project(db, project)
+        log_activity(db, action="create", module="项目", target_name=project.name)
         logging.getLogger("main").info(f"DEBUG: Project created successfully: {result.id}")
         return result
     except Exception as e:
@@ -60,6 +62,7 @@ def update_project(
     project = project_service.update_project(db, project_id, project_update)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    log_activity(db, action="update", module="项目", target_name=project.name)
     return project
 
 
@@ -73,6 +76,7 @@ def delete_project(
     success = project_service.delete_project(db, project_id)
     if not success:
         raise HTTPException(status_code=404, detail="项目不存在")
+    log_activity(db, action="delete", module="项目", target_name=f"ID={project_id}")
     return {"message": "项目删除成功"}
 
 
