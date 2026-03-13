@@ -21,6 +21,7 @@ router = APIRouter()
 # 请求模型
 class TestCaseGenerationRequest(BaseModel):
     """测试用例生成请求"""
+    requirement_id: Optional[int] = Field(None, description="需求ID")
     title: str = Field(..., description="需求标题")
     description: str = Field(..., description="需求描述")
     priority: str = Field("medium", description="优先级")
@@ -86,6 +87,7 @@ async def generate_test_case(
     """生成测试用例"""
     try:
         requirement_data = {
+            'id': request.requirement_id,
             'title': request.title,
             'description': request.description,
             'priority': request.priority,
@@ -235,6 +237,48 @@ async def search_knowledge(
     except Exception as e:
             logger.error(f"搜索知识API错误: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/knowledge/rebuild", response_model=APIResponse)
+async def rebuild_knowledge_embeddings(
+    background_tasks: BackgroundTasks,
+    current_user: Dict = Depends(get_current_user)
+):
+    """重建所有知识库向量"""
+    try:
+        from core.database import SessionLocal
+        from models.database_models import KnowledgeDocument, DocumentEmbedding
+        from services.ai.rag_engine import rag_engine
+        
+        async def rebuild_task():
+            logger.info("[Background] 开始重建知识库 Embedding...")
+            try:
+                with SessionLocal() as db:
+                    db.query(DocumentEmbedding).delete()
+                    db.commit()
+                    
+                    docs = db.query(KnowledgeDocument).all()
+                    
+                for idx, doc in enumerate(docs):
+                    logger.info(f"[Background] 处理文档 {idx+1}/{len(docs)}: {doc.title}")
+                    try:
+                        await rag_engine._build_embeddings_for_doc_async(doc.doc_id, doc.content)
+                    except Exception as e:
+                        logger.error(f"[Background] 文档 {doc.title} 向量化失败: {e}")
+                        
+                logger.info("[Background] 知识库向量重建完成")
+            except Exception as e:
+                logger.error(f"[Background] 向量重建任务致命失败: {e}")
+                
+        background_tasks.add_task(rebuild_task)
+        
+        return APIResponse(
+            success=True,
+            message="向量重建任务已在后台启动",
+        )
+            
+    except Exception as e:
+        logger.error(f"重建知识库向量接口错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/knowledge/import", response_model=APIResponse)
 async def import_knowledge_files(

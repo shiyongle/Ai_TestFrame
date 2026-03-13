@@ -396,28 +396,38 @@ async def generate_test_cases_for_version(
                     )
                     
                     if res.get('success'):
-                        test_case_json = res.get('test_case', {})
-                        if isinstance(test_case_json, str):
+                        test_cases_json = res.get('test_case', [])
+                        
+                        # Handle potential string format error in case parsing fails earlier
+                        if isinstance(test_cases_json, str):
                             import json
                             try:
-                                test_case_json = json.loads(test_case_json)
+                                test_cases_json = json.loads(test_cases_json)
                             except:
-                                test_case_json = {}
-                        
-                        tc_name = test_case_json.get('name') or test_case_json.get('title') or f"[{req.title}] 自动生成用例"
-                        tc_desc = test_case_json.get('description', '')
-                        tc_protocol = test_case_json.get('protocol', 'http')
-                        
-                        # Save directly into TestCase model
-                        new_tc = TestCase(
-                            name=tc_name,
-                            description=tc_desc,
-                            protocol=tc_protocol,
-                            config=test_case_json,
-                            project_id=proj_id
-                        )
-                        bg_db.add(new_tc)
-                        newly_created_test_cases.append(new_tc)
+                                test_cases_json = []
+
+                        # Force format to iterable array
+                        if not isinstance(test_cases_json, list):
+                            test_cases_json = [test_cases_json]
+
+                        for tc_json in test_cases_json:
+                            if not isinstance(tc_json, dict):
+                                continue
+
+                            tc_name = tc_json.get('name') or tc_json.get('title') or f"[{req.title}] 自动生成用例"
+                            tc_desc = tc_json.get('description', '')
+                            tc_protocol = tc_json.get('protocol', 'http')
+                            
+                            # Save directly into TestCase model
+                            new_tc = TestCase(
+                                name=tc_name,
+                                description=tc_desc,
+                                protocol=tc_protocol,
+                                config=tc_json,
+                                project_id=proj_id
+                            )
+                            bg_db.add(new_tc)
+                            newly_created_test_cases.append(new_tc)
                 
                 # Flush the session to get the auto-incremented IDs for the new test cases
                 bg_db.flush()

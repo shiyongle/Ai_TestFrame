@@ -77,6 +77,9 @@ const SystemSettings: React.FC = () => {
             'TONGYI_BASE_URL': '通义千问 接口地址 (支持覆盖代理)',
             'DEEPSEEK_API_KEY': 'DeepSeek API Key',
             'DEEPSEEK_BASE_URL': 'DeepSeek 接口地址 (支持覆盖代理)',
+            'SILICONFLOW_API_KEY': '硅基流动 (Siliconflow) API Key',
+            'SILICONFLOW_BASE_URL': '硅基流动 接口地址',
+            'SILICONFLOW_CHAT_MODEL': '硅基流动 对话模型名称',
         };
         return map[key] || '';
     };
@@ -92,13 +95,13 @@ const SystemSettings: React.FC = () => {
             </div>
 
             <Card bordered={false} className="glass-panel" style={{ borderRadius: 16 }}>
-                <Tabs defaultActiveKey="ai" tabPosition="left">
+                <Tabs defaultActiveKey="ai" tabPosition="left" style={{ minHeight: 600 }}>
 
                     <TabPane
                         tab={<span><RobotOutlined /> AI 大模型配置</span>}
                         key="ai"
                     >
-                        <div style={{ maxWidth: 800, padding: '0 24px' }}>
+                        <div style={{ padding: '0 24px' }}>
                             <Title level={4}><SafetyCertificateOutlined /> LLM API 凭证管理</Title>
                             <Paragraph type="secondary" style={{ marginBottom: 24 }}>
                                 在这里配置各类商业大模型的通讯凭证。系统支持热更新，保存后即刻生效，无需重启后端服务。如果留空，系统将尝试从后端的 <code>.env</code> 文件读取。
@@ -106,10 +109,10 @@ const SystemSettings: React.FC = () => {
 
                             <Alert
                                 message="安全提示"
-                                description="您的 API Key 将被明文持久化储存于系统数据库 (system_settings) 内，请确保您的数据库和内网环境安全可靠。"
+                                description="您的 API Key 将被明文持久化储存于系统数据库内，请确保您的数据库和内网环境安全可靠。"
                                 type="warning"
                                 showIcon
-                                style={{ marginBottom: 24 }}
+                                style={{ marginBottom: 32, borderRadius: 8 }}
                             />
 
                             <Form
@@ -120,44 +123,72 @@ const SystemSettings: React.FC = () => {
                                     OPENAI_BASE_URL: 'https://api.openai.com/v1',
                                     GLM_BASE_URL: 'https://open.bigmodel.cn/api/paas/v4',
                                     DEEPSEEK_BASE_URL: 'https://api.deepseek.com/v1',
-                                    TONGYI_BASE_URL: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation'
+                                    TONGYI_BASE_URL: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+                                    SILICONFLOW_BASE_URL: 'https://api.siliconflow.cn/v1',
+                                    SILICONFLOW_CHAT_MODEL: 'Qwen/Qwen2.5-7B-Instruct'
                                 }}
                             >
-                                <Divider orientation="left">OpenAI 系列</Divider>
-                                <Form.Item label="OpenAI API Key" name="OPENAI_API_KEY" tooltip="以 sk- 开头的凭证">
-                                    <Input.Password placeholder="sk-..." />
-                                </Form.Item>
-                                <Form.Item label="OpenAI Base URL" name="OPENAI_BASE_URL" tooltip="用于配置国内API代理地址">
-                                    <Input placeholder="https://api.openai.com/v1" />
-                                </Form.Item>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '24px' }}>
+                                    {/* OpenAI Card */}
+                                    <Card size="small" title="OpenAI" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="OPENAI_API_KEY" tooltip="以 sk- 开头的接口凭证">
+                                            <Input.Password placeholder="sk-..." />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="OPENAI_BASE_URL" tooltip="用于配置国内API代理地址">
+                                            <Input placeholder="https://api.openai.com/v1" />
+                                        </Form.Item>
+                                    </Card>
 
-                                <Divider orientation="left">国内大模型</Divider>
-                                <Form.Item label="智谱清言 (GLM) API Key" name="GLM_API_KEY">
-                                    <Input.Password placeholder="输入智谱大模型开放平台的 API Key" />
-                                </Form.Item>
-                                <Form.Item label="智谱清言 Base URL" name="GLM_BASE_URL" tooltip="用于配置接口代理地址">
-                                    <Input placeholder="https://open.bigmodel.cn/api/paas/v4" />
-                                </Form.Item>
+                                    {/* DeepSeek Card */}
+                                    <Card size="small" title="DeepSeek" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="DEEPSEEK_API_KEY">
+                                            <Input.Password placeholder="DeepSeek API Key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="DEEPSEEK_BASE_URL" tooltip="支持替换为代理地址">
+                                            <Input placeholder="https://api.deepseek.com/v1" />
+                                        </Form.Item>
+                                    </Card>
 
-                                <Form.Item label="DeepSeek API Key" name="DEEPSEEK_API_KEY">
-                                    <Input.Password placeholder="输入 DeepSeek 开放平台的 API Key" />
-                                </Form.Item>
-                                <Form.Item label="DeepSeek Base URL" name="DEEPSEEK_BASE_URL" tooltip="用于配置接口代理地址">
-                                    <Input placeholder="https://api.deepseek.com/v1" />
-                                </Form.Item>
+                                    {/* GLM Card */}
+                                    <Card size="small" title="智谱清言 (GLM)" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="GLM_API_KEY">
+                                            <Input.Password placeholder="智谱大模型开放平台 API Key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="GLM_BASE_URL">
+                                            <Input placeholder="https://open.bigmodel.cn/api/paas/v4" />
+                                        </Form.Item>
+                                    </Card>
 
-                                <Form.Item label="通义千问 API Key" name="TONGYI_API_KEY">
-                                    <Input.Password placeholder="输入阿里云百炼 API Key" />
-                                </Form.Item>
-                                <Form.Item label="通义千问 Base URL" name="TONGYI_BASE_URL" tooltip="用于配置接口代理地址">
-                                    <Input placeholder="https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation" />
-                                </Form.Item>
+                                    {/* Tongyi Card */}
+                                    <Card size="small" title="通义千问 (Qwen)" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="TONGYI_API_KEY">
+                                            <Input.Password placeholder="阿里云百炼 API Key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="TONGYI_BASE_URL">
+                                            <Input placeholder="https://dashscope.aliyuncs.com..." />
+                                        </Form.Item>
+                                    </Card>
 
-                                <Form.Item style={{ marginTop: 32 }}>
-                                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading} size="large">
-                                        保存配置
+                                    {/* Siliconflow Card */}
+                                    <Card size="small" title="硅基流动 (Siliconflow)" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="SILICONFLOW_API_KEY">
+                                            <Input.Password placeholder="硅基流动平台 API Key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="SILICONFLOW_BASE_URL">
+                                            <Input placeholder="https://api.siliconflow.cn/v1" />
+                                        </Form.Item>
+                                        <Form.Item label="对话模型" name="SILICONFLOW_CHAT_MODEL" tooltip="用于对话和生成的模型名称，如 Qwen/Qwen2.5-7B-Instruct">
+                                            <Input placeholder="Qwen/Qwen2.5-7B-Instruct" />
+                                        </Form.Item>
+                                    </Card>
+                                </div>
+
+                                <Divider />
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                                    <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading} size="large" style={{ minWidth: 160, borderRadius: 8 }}>
+                                        保存所有配置
                                     </Button>
-                                </Form.Item>
+                                </div>
                             </Form>
                         </div>
                     </TabPane>

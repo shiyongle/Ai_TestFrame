@@ -120,16 +120,16 @@ class KnowledgeDocument(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-class DocumentEmbedding(Base):
-    """文档向量表"""
-    __tablename__ = "document_embeddings"
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    doc_id = Column(String(100), nullable=False)
-    chunk_index = Column(Integer, nullable=False)
-    chunk_content = Column(Text, nullable=False)
-    embedding = Column(Text)  # JSON格式的向量
-    # We will query and insert directly.
+# 已废弃：自2.3.x版本引入ChromaDB后不再使用表存向量
+# class DocumentEmbedding(Base):
+#     """文档向量表"""
+#     __tablename__ = "document_embeddings"
+#     
+#     id = Column(Integer, primary_key=True, autoincrement=True)
+#     doc_id = Column(String(100), nullable=False)
+#     chunk_index = Column(Integer, nullable=False)
+#     chunk_content = Column(Text, nullable=False)
+#     embedding = Column(Text)  # JSON格式的向量
 
 # 版本管理表
 class Version(Base):

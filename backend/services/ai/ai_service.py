@@ -29,11 +29,12 @@ class AIService:
         use_rag: bool = True,
         explicit_context: Optional[str] = None
     ) -> Dict[str, Any]:
-        """根据需求生成测试用例"""
+        """根据需求生成测试用例（直连AITestCaseGenerator的Agentic工作流）"""
         try:
             # 构建需求对象
             from models.database_models import Requirement
             requirement = Requirement(
+                id=requirement_data.get('id'),
                 title=requirement_data.get('title', ''),
                 description=requirement_data.get('description', ''),
                 priority=requirement_data.get('priority', 'medium'),
@@ -42,64 +43,54 @@ class AIService:
                 business_value=requirement_data.get('business_value', '')
             )
             
-            # 如果启用RAG，获取相关知识（或者使用传入的明确知识片段）
-            context = explicit_context or ""
-            if not context and use_rag:
-                context = await rag_engine.get_context_for_query(
-                    f"{requirement.title} {requirement.description}",
-                    max_context_length=1500
-                )
-            
-            # 构建增强的提示词
-            if context:
-                enhanced_prompt = self._build_rag_enhanced_prompt(requirement, context)
-                result = await llm_client.text_completion(
-                    prompt=enhanced_prompt,
-                    provider=provider,
-                    max_tokens=2000
-                )
+            # 1. 查询显性关联的知识片段
+            context_parts = []
+            if explicit_context:
+                context_parts.append(explicit_context)
                 
-                if result.get('success'):
-                    try:
-                        test_case = json.loads(result['content'])
-                        return {
-                            'success': True,
-                            'test_case': test_case,
-                            'provider': provider,
-                            'used_rag': True,
-                            'explicit_knowledge': bool(explicit_context),
-                            'context_sources': len(context.split('【')) - 1 if context else 0
-                        }
-                    except json.JSONDecodeError:
-                        logger.warning("AI返回的不是有效JSON，使用备用生成器")
-                        # 使用备用生成器
-                        return await self._fallback_generation(requirement, provider)
-                else:
-                    logger.error(f"AI生成失败: {result.get('error')}")
-                    return await self._fallback_generation(requirement, provider)
-            else:
-                # 使用原有的生成器
-                test_case = await self.test_case_generator.generate_test_case_from_requirement(
-                    requirement, provider
-                )
-                return {
-                    'success': True,
-                    'test_case': test_case,
-                    'provider': provider,
-                    'used_rag': False
-                }
+            req_id = requirement.id
+            if req_id:
+                from core.database import SessionLocal
+                from models.database_models import KnowledgeDocument
+                with SessionLocal() as db:
+                    all_docs = db.query(KnowledgeDocument).all()
+                    for doc in all_docs:
+                        try:
+                            meta = json.loads(doc.doc_metadata) if doc.doc_metadata else {}
+                            if req_id in meta.get('linked_requirements', []):
+                                context_parts.append(f"【手工强关联业务规则 - {doc.title}】\n{doc.content}")
+                        except Exception:
+                            pass
+            
+            final_explicit_context = "\n\n".join(context_parts)
+            
+            # 2. 调用5步生成器，其内部自动调用Step2进行RAG隐性检索补全
+            test_cases = await self.test_case_generator.generate_test_case_from_requirement(
+                requirement=requirement,
+                model=provider,
+                explicit_context=final_explicit_context,
+                use_rag=use_rag
+            )
+            
+            return {
+                'success': True,
+                'test_case': test_cases,
+                'provider': provider,
+                'used_rag': use_rag,
+                'explicit_knowledge': bool(final_explicit_context)
+            }
                 
         except Exception as e:
-            logger.error(f"生成测试用例失败: {e}")
+            logger.error(f"生成测试用例失败: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
             }
     
     def _build_rag_enhanced_prompt(self, requirement, context: str) -> str:
-        """构建RAG增强的提示词"""
+        """构建RAG增强的提示词(要求生成数组)"""
         return f"""
-作为专业的软件测试工程师，请根据以下需求和相关知识库内容生成详细的功能测试用例：
+作为专业的软件测试工程师，请根据以下需求和相关知识库内容，发散思维，提取多个测试场景，生成一个包含多个详细功能测试用例的JSON数组：
 
 相关知识库内容：
 {context}
@@ -112,33 +103,34 @@ class AIService:
 - 验收标准：{requirement.acceptance_criteria}
 - 业务价值：{requirement.business_value}
 
-请参考知识库中的相似案例和最佳实践，生成JSON格式的测试用例，包含以下字段：
-{{
-  "title": "测试用例标题",
-  "description": "测试用例描述",
-  "preconditions": "前置条件",
-  "test_steps": [
-    {{
-      "step": 1,
-      "action": "操作步骤",
-      "expected": "预期结果"
-    }}
-  ],
-  "test_data": "测试数据",
-  "priority": "高/中/低",
-  "expected_result": "预期结果",
-  "notes": "注意事项"
-}}
+请参考知识库中的相似案例和最佳实践，充分考虑正常流程、异常流程、边界条件等，生成一个 **JSON 数组 (`[ {{...}}, {{...}} ]`)**，每个元素是一个独立测试用例，包含以下字段：
+[
+  {{
+    "title": "测试用例标题（如：正常登录测试）",
+    "description": "测试用例描述",
+    "preconditions": "前置条件",
+    "test_steps": [
+      {{
+        "step": 1,
+        "action": "操作步骤",
+        "expected": "预期结果"
+      }}
+    ],
+    "test_data": "测试数据",
+    "priority": "高/中/低",
+    "expected_result": "预期结果",
+    "notes": "注意事项"
+  }},
+  {{ ... 其他独立测试场景的代码 ... }}
+]
 
 请确保：
-1. 测试步骤详细且可执行
-2. 覆盖正常流程和异常流程
-3. 基于验收标准设计测试点
-4. 考虑业务价值和优先级
+1. 生成**至少 2-5 个**独立的测试用例（根据需求复杂度而定）
+2. 每个测试用例中包含的字段都要精简扼要，避免文字过多（防止内容超长）
+3. 必须覆盖正常流程和异常出错流程
+4. 基于验收标准设计针对性的测试点
 5. 参考知识库中的最佳实践
-6. 返回标准JSON格式
-
-只返回JSON，不要包含其他文字。
+6. 必须返回标准的 JSON 数组格式，不要包含 ```json 标签以外的其他文字说明。
 """
     
     async def _fallback_generation(self, requirement, provider: str) -> Dict[str, Any]:

@@ -54,10 +54,14 @@ class Settings(BaseSettings):
     # AI配置 - DeepSeek
     DEEPSEEK_API_KEY: Optional[str] = None
     
+    # Embedding配置
+    EMBEDDING_PROVIDER: str = "siliconflow"  # 默认的Embedding服务提供商，Deepseek等不支持时将回退到此提供商
+    
     # RAG配置
     RAG_CHUNK_SIZE: int = 500
     RAG_CHUNK_OVERLAP: int = 50
     RAG_MAX_FEATURES: int = 1000
+    CHROMA_PERSIST_DIR: str = ".chroma"  # ChromaDB本地持久化目录
     
     # Workflow配置
     WORKFLOW_MAX_EXECUTION_TIME: int = 3600  # 1小时

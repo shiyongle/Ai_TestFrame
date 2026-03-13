@@ -499,6 +499,7 @@ const Versions: React.FC = () => {
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('openai')} loading={generating}>使用 GPT-4 / OpenAI 生成</Button>
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('deepseek')} loading={generating}>使用 DeepSeek 生成</Button>
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('tongyi')} loading={generating}>使用 通义千问 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('siliconflow')} loading={generating}>使用 硅基流动 生成</Button>
         </div>
       </Modal>
 

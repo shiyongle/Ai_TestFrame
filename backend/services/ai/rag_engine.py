@@ -15,13 +15,14 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import jieba
 import re
+import os
+import chromadb
+from chromadb.config import Settings as ChromaSettings
 
 from config.settings import settings
-from models.database_models import KnowledgeDocument, DocumentEmbedding
+from models.database_models import KnowledgeDocument
 
 logger = logging.getLogger(__name__)
 Base = declarative_base()
@@ -59,16 +60,20 @@ class RAGEngine:
         )
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine)
-        self.vectorizer = TfidfVectorizer(
-            max_features=1000,
-            stop_words=None,
-            ngram_range=(1, 2)
-        )
-        self._fit_vectorizer = False
-        self._vectorizer_lock = threading.Lock()
         self.document_cache = {}
         self._ensure_metadata_column()
-        logger.info("RAG引擎初始化完成")
+        
+        # 初始化 ChromaDB 客户端
+        chroma_persist_dir = getattr(settings, 'CHROMA_PERSIST_DIR', '.chroma')
+        os.makedirs(chroma_persist_dir, exist_ok=True)
+        self.chroma_client = chromadb.PersistentClient(path=chroma_persist_dir)
+        # 获取或创建集合 (知识库集合)
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="knowledge_base",
+            metadata={"hnsw:space": "cosine"} # 使用余弦相似度
+        )
+        
+        logger.info("RAG引擎初始化完成 (已成功挂载 ChromaDB)")
 
     def _ensure_metadata_column(self) -> None:
         """确保知识文档表包含 doc_metadata 列"""
@@ -104,31 +109,49 @@ class RAGEngine:
         return ' '.join(words)
     
     def _chunk_document(self, content: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
-        """文档分块"""
+        """按Markdown层级与长度进行高级切分"""
         if len(content) <= chunk_size:
-            return [content]
-        
+            return [content.strip()]
+            
         chunks = []
-        start = 0
+        # 以Markdown标题进行粗切分 (H1-H4)
+        sections = re.split(r'\n(?=#{1,4}\s)', content)
         
-        while start < len(content):
-            end = start + chunk_size
-            if end >= len(content):
-                chunks.append(content[start:])
-                break
+        current_chunk = ""
+        for sec in sections:
+            sec = sec.strip()
+            if not sec: continue
             
-            # 尝试在句号、换行符等处分割
-            split_pos = end
-            for sep in ['\n\n', '\n', '。', '！', '？', '.', '!', '?']:
-                pos = content.rfind(sep, start, end)
-                if pos > start:
-                    split_pos = pos + 1
-                    break
+            # 如果当前块 + 新段落 < 限制，直接合并
+            if len(current_chunk) + len(sec) < chunk_size + overlap:
+                current_chunk = current_chunk + "\n\n" + sec if current_chunk else sec
+            else:
+                # current_chunk已比较饱满，归档旧的
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                
+                # 处理超长新段落
+                if len(sec) >= chunk_size:
+                    start = 0
+                    while start < len(sec):
+                        end = start + chunk_size
+                        # 努力在换行符/句号处切分
+                        if end < len(sec):
+                            for sep in ['\n\n', '\n', '。', '！', '？', '.', '!', '?']:
+                                pos = sec.rfind(sep, start, end)
+                                if pos > start + (chunk_size // 2):
+                                    end = pos + 1
+                                    break
+                        chunks.append(sec[start:end].strip())
+                        start = end - overlap if end < len(sec) else len(sec)
+                    current_chunk = ""
+                else:
+                    current_chunk = sec
+                    
+        if current_chunk:
+            chunks.append(current_chunk.strip())
             
-            chunks.append(content[start:split_pos])
-            start = split_pos - overlap if split_pos > overlap else 0
-        
-        return [chunk.strip() for chunk in chunks if chunk.strip()]
+        return [c for c in chunks if c]
     
     def _generate_doc_id(self, title: str, content: str) -> str:
         """生成文档ID"""
@@ -148,9 +171,8 @@ class RAGEngine:
             self._add_document_sync, title, content, source, category, metadata
         )
         
-        # 在独立的线程池中构建向量，因为外层API已经接入了FastAPI的BackgroundTasks，
-        # 所以这里的 await 不会阻塞用户的HTTP响应时间，且能保证任务绝对执行完毕。
-        await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
+        # 异步构建基于真实大模型 Embedding 的向量任务
+        asyncio.create_task(self._build_embeddings_for_doc_async(doc_id, content))
         
         return doc_id
 
@@ -195,140 +217,70 @@ class RAGEngine:
         except Exception as e:
             logger.error(f"添加文档失败: {e}")
             raise
-    
-    def _update_vectorizer_sync(self, new_texts=None, new_chunk_ids=None):
-        """更新向量化器 - 支持增量更新（同步）"""
+
+    async def _build_embeddings_for_doc_async(self, doc_id: str, content: str) -> None:
+        """为单个文档异步构建基于LLM的Embedding"""
         try:
-            with self._vectorizer_lock:
-                with self.SessionLocal() as session:
-                    # 如果是新文档，只处理新添加的文档块
-                    if new_texts and new_chunk_ids:
-                        texts = new_texts
-                        chunk_ids = new_chunk_ids
-                    else:
-                        # 获取所有没有向量的文档块（兼容旧逻辑）
-                        chunks = session.query(DocumentEmbedding).filter(
-                            DocumentEmbedding.embedding == ""
-                        ).all()
-                        texts = [self._preprocess_text(chunk.chunk_content) for chunk in chunks]
-                        chunk_ids = [chunk.id for chunk in chunks]
-                    
-                    if not texts:
-                        return
-                    
-                    # 如果向量化器未训练，需要先训练
-                    if not self._fit_vectorizer:
-                        # 获取所有已有文档块进行训练
-                        all_chunks = session.query(DocumentEmbedding).all()
-                        all_texts = [self._preprocess_text(chunk.chunk_content) for chunk in all_chunks]
-                        if all_texts:
-                            self.vectorizer.fit(all_texts)
-                            self._fit_vectorizer = True
-                            logger.info(f"向量化器训练完成，使用 {len(all_texts)} 个文档块")
-                            
-                            # 重新训练后，需要更新所有文档块的向量
-                            all_embeddings = self.vectorizer.transform(all_texts).toarray()
-                            for i, chunk in enumerate(all_chunks):
-                                session.query(DocumentEmbedding).filter(
-                                    DocumentEmbedding.id == chunk.id
-                                ).update({
-                                    DocumentEmbedding.embedding: json.dumps(all_embeddings[i].tolist())
-                                })
-                            session.commit()
-                            logger.info(f"已更新所有 {len(all_chunks)} 个文档块的向量")
-                            return
-                    
-                    # 计算新文档块的向量
-                    embeddings = self.vectorizer.transform(texts).toarray()
-                    
-                    # 批量更新向量
-                    for chunk_id, embedding in zip(chunk_ids, embeddings):
-                        session.query(DocumentEmbedding).filter(
-                            DocumentEmbedding.id == chunk_id
-                        ).update({
-                            DocumentEmbedding.embedding: json.dumps(embedding.tolist())
-                        })
-                    
-                    session.commit()
-                    logger.info(f"成功更新 {len(texts)} 个文档块的向量")
-                
-        except Exception as e:
-            logger.error(f"更新向量化器失败: {e}")
-            raise
-
-    async def _update_vectorizer(self, new_texts=None, new_chunk_ids=None):
-        """更新向量化器 - 支持增量更新（异步封装）"""
-        await asyncio.to_thread(self._update_vectorizer_sync, new_texts, new_chunk_ids)
-
-    async def _schedule_vectorizer_update(self, new_texts=None, new_chunk_ids=None) -> None:
-        """后台更新向量化器，避免阻塞请求"""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # 不在事件循环中，回退为同步等待
-            await self._update_vectorizer(new_texts, new_chunk_ids)
-            return
-
-        async def _run():
-            try:
-                await self._update_vectorizer(new_texts, new_chunk_ids)
-            except Exception as e:
-                logger.error(f"后台更新向量化器失败: {e}")
-
-        loop.create_task(_run())
-
-    def _build_embeddings_for_doc_sync(self, doc_id: str, content: str) -> None:
-        """为单个文档构建向量化数据（同步）"""
-        with self.SessionLocal() as session:
-            existing_chunks = session.query(DocumentEmbedding).filter(
-                DocumentEmbedding.doc_id == doc_id
-            ).all()
-
-            # 如果已有向量，直接跳过
-            if existing_chunks and any(chunk.embedding for chunk in existing_chunks):
-                return
-
-            if existing_chunks:
-                session.query(DocumentEmbedding).filter(
-                    DocumentEmbedding.doc_id == doc_id
-                ).delete()
-                session.commit()
+            from services.ai.llm_client import llm_client
+            # Fetch default provider from db config
+            db_settings = {}
+            with self.SessionLocal() as db:
+                from models.database_models import SystemSetting
+                records = db.query(SystemSetting).filter(SystemSetting.category == 'llm').all()
+                for rec in records:
+                    db_settings[rec.setting_key] = rec.setting_value
+            
+            provider = "glm"
+            if db_settings.get("OPENAI_API_KEY"): provider = "openai"
+            elif db_settings.get("GLM_API_KEY"): provider = "glm"
+            elif db_settings.get("TONGYI_API_KEY"): provider = "tongyi"
 
             chunks = self._chunk_document(content)
-            new_chunk_ids = []
-            new_texts = []
-            for i, chunk in enumerate(chunks):
-                processed_text = self._preprocess_text(chunk)
-                embedding_doc = DocumentEmbedding(
-                    doc_id=doc_id,
-                    chunk_index=i,
-                    chunk_content=chunk,
-                    embedding=""
+            
+            # 删除此文档在 Chroma 里的旧 chunks
+            try:
+                self.collection.delete(
+                    where={"doc_id": doc_id}
                 )
-                session.add(embedding_doc)
-                session.flush()
-                new_chunk_ids.append(embedding_doc.id)
-                new_texts.append(processed_text)
+            except Exception as e:
+                logger.warning(f"从 ChromaDB 删除旧 chunk 失败: {e}")
 
-            session.commit()
-
-        # 向量化更新放到独立逻辑，避免占用DB会话时间
-        self._update_vectorizer_sync(new_texts, new_chunk_ids)
-
-    async def _schedule_embedding_build(self, doc_id: str, content: str) -> None:
-        """后台构建向量化数据，由于外层已使用BackgroundTasks或处于async下，直接await线程构建即可"""
-        try:
-            await asyncio.to_thread(self._build_embeddings_for_doc_sync, doc_id, content)
+            # 收集用于批量存入的列表
+            chunk_ids = []
+            chunk_embeddings = []
+            chunk_texts = []
+            chunk_metadatas = []
+            
+            for i, chunk_text in enumerate(chunks):
+                # Request Embedding (llm_client 内部已做 fallback)
+                response = await llm_client.create_embedding(text=chunk_text, provider=provider)
+                
+                if response.get("success"):
+                    embedding_vector = response["embedding"]
+                    # 只有成功生成了 embedding 时，才计入存入列表
+                    chunk_id = f"{doc_id}_chunk_{i}"
+                    chunk_ids.append(chunk_id)
+                    chunk_embeddings.append(embedding_vector)
+                    chunk_texts.append(chunk_text)
+                    chunk_metadatas.append({
+                        "doc_id": doc_id,
+                        "chunk_index": i
+                    })
+                else:
+                    logger.error(f"构建Embedding失败(chunk {i}): {response.get('error')}")
+                    
+            # 批量写入 ChromaDB
+            if chunk_ids:
+                self.collection.add(
+                    ids=chunk_ids,
+                    embeddings=chunk_embeddings,
+                    documents=chunk_texts,
+                    metadatas=chunk_metadatas
+                )
+            
+            logger.info(f"增量构建Embedding成功: {doc_id}, 共存入 ChromaDB {len(chunk_ids)} 块")
         except Exception as e:
-            logger.error(f"后台构建向量化数据失败: {e}")
-
-    def _schedule_embedding_build_sync(self, doc_id: str, content: str) -> None:
-        """同步场景下的后台构建"""
-        threading.Thread(
-            target=self._build_embeddings_for_doc_sync,
-            args=(doc_id, content),
-            daemon=True
-        ).start()
+            logger.error(f"异步构建结构化知识库向量失败: {e}", exc_info=True)
     
     async def search(
         self, 
@@ -336,72 +288,98 @@ class RAGEngine:
         top_k: int = 5, 
         category: str = None
     ) -> List[Dict[str, Any]]:
-        """搜索相关文档"""
+        """搜索相关文档(升级版基于稠密向量)"""
         try:
-            if not self._fit_vectorizer:
-                logger.warning("向量化器未训练，无法进行搜索")
+            from services.ai.llm_client import llm_client
+            # Fetch default provider from db config
+            db_settings = {}
+            with self.SessionLocal() as db:
+                from models.database_models import SystemSetting
+                records = db.query(SystemSetting).filter(SystemSetting.category == 'llm').all()
+                for rec in records:
+                    db_settings[rec.setting_key] = rec.setting_value
+            
+            provider = "glm"
+            if db_settings.get("OPENAI_API_KEY"): provider = "openai"
+            elif db_settings.get("GLM_API_KEY"): provider = "glm"
+            elif db_settings.get("TONGYI_API_KEY"): provider = "tongyi"
+
+            # 生成查询向量
+            response = await llm_client.create_embedding(text=query, provider=provider)
+            if not response.get("success"):
+                logger.error("检索查询向量生成失败，无法基于语义搜索")
                 return []
+                
+            query_vector = np.array(response["embedding"])
             
-            # 预处理查询
-            processed_query = self._preprocess_text(query)
-            query_vector = self.vectorizer.transform([processed_query]).toarray()[0]
-            
+            # 获取所有相关文档元数据以便验证
             with self.SessionLocal() as session:
-                # 获取所有文档块
-                chunks = session.query(DocumentEmbedding).all()
+                doc_query = session.query(KnowledgeDocument)
                 if category:
-                    # 过滤分类
-                    doc_ids = session.query(KnowledgeDocument.doc_id).filter(
-                        KnowledgeDocument.category == category
-                    ).all()
-                    doc_ids = [doc_id[0] for doc_id in doc_ids]
-                    chunks = [chunk for chunk in chunks if chunk.doc_id in doc_ids]
+                    doc_query = doc_query.filter(KnowledgeDocument.category == category)
                 
-                # 计算相似度
-                results = []
-                for chunk in chunks:
-                    if chunk.embedding:
-                        chunk_vector = np.array(json.loads(chunk.embedding))
-                        similarity = cosine_similarity([query_vector], [chunk_vector])[0][0]
-                        
-                        results.append({
-                            'doc_id': chunk.doc_id,
-                            'chunk_index': chunk.chunk_index,
-                            'content': chunk.chunk_content,
-                            'similarity': float(similarity)
-                        })
+                valid_docs = doc_query.all()
+                valid_doc_map = {d.doc_id: d for d in valid_docs}
                 
-                # 按相似度排序
-                results.sort(key=lambda x: x['similarity'], reverse=True)
+                if not valid_doc_map:
+                    return []
+            
+            # 使用 ChromaDB 进行查询
+            query_filter = None
+            # 如果没有特别指定分类，可以不传 filter。但由于我们的 schema category 在 MySQL 中，
+            # 这里 Chroma 返回结果后再根据 valid_doc_map 进行过滤，这是一种联表策略。
+            
+            chroma_results = self.collection.query(
+                query_embeddings=[query_vector],
+                n_results=top_k * 3  # 多取一些，方便业务端结合分类/权限进行过滤
+            )
+            
+            if not chroma_results['ids'] or not chroma_results['ids'][0]:
+                return []
                 
-                # 获取文档详细信息
-                top_results = results[:top_k]
-                doc_ids = list(set([result['doc_id'] for result in top_results]))
-                documents = session.query(KnowledgeDocument).filter(
-                    KnowledgeDocument.doc_id.in_(doc_ids)
-                ).all()
+            results = []
+            
+            distances = chroma_results['distances'][0]
+            metadatas = chroma_results['metadatas'][0]
+            documents = chroma_results['documents'][0]
+            
+            # ChromaDB 余弦距离: 越小表示越相似 (Distance = 1 - Cosine Similarity)
+            for i in range(len(chroma_results['ids'][0])):
+                meta = metadatas[i]
+                doc_id = meta.get("doc_id")
                 
-                doc_map = {doc.doc_id: doc for doc in documents}
-                
-                # 组装最终结果
-                final_results = []
-                for result in top_results:
-                    doc = doc_map.get(result['doc_id'])
-                    if doc:
-                        final_results.append({
-                            'doc_id': result['doc_id'],
-                            'title': doc.title,
-                            'content': result['content'],
-                            'source': doc.source,
-                            'category': doc.category,
-                            'metadata': json.loads(doc.doc_metadata) if doc.doc_metadata else {},
-                            'similarity': result['similarity']
-                        })
-                
-                return final_results
+                if doc_id in valid_doc_map:
+                    # 转换距离为相似度
+                    similarity = 1.0 - distances[i] if distances[i] is not None else 0.0
+                    results.append({
+                        'doc_id': doc_id,
+                        'chunk_index': meta.get('chunk_index', 0),
+                        'content': documents[i],
+                        'similarity': float(similarity)
+                    })
+            
+            # 因为取余弦相似度所以降序排列
+            results.sort(key=lambda x: x['similarity'], reverse=True)
+            top_results = results[:top_k]
+            
+            final_results = []
+            for result in top_results:
+                doc = valid_doc_map.get(result['doc_id'])
+                if doc:
+                    final_results.append({
+                        'doc_id': result['doc_id'],
+                        'title': doc.title,
+                        'content': result['content'],
+                        'source': doc.source,
+                        'category': doc.category,
+                        'metadata': json.loads(doc.doc_metadata) if doc.doc_metadata else {},
+                        'similarity': result['similarity']
+                    })
+            
+            return final_results
                 
         except Exception as e:
-            logger.error(f"搜索失败: {e}")
+            logger.error(f"知识库检索失败: {e}", exc_info=True)
             return []
     
     async def get_context_for_query(self, query: str, max_context_length: int = 2000) -> str:
@@ -481,9 +459,15 @@ class RAGEngine:
                     return {'success': False, 'error': '文档不存在'}
 
                 doc_id = doc.doc_id
-                session.query(DocumentEmbedding).filter(
-                    DocumentEmbedding.doc_id == doc_id
-                ).delete()
+                
+                # 同步删除 ChromaDB 中的向量块
+                try:
+                    self.collection.delete(
+                        where={"doc_id": doc_id}
+                    )
+                except Exception as ce:
+                    logger.warning(f"同步删除 ChromaDB 数据失败: {ce}")
+                    
                 session.delete(doc)
                 session.commit()
 

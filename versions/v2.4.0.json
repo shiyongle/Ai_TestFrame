@@ -1,0 +1,59 @@
+{
+    "version": "2.4.0",
+    "date": "2026-03-13",
+    "title": "向量数据库迁移至 ChromaDB 与 Embedding 多模型回退机制",
+    "description": "本次发布对 AI 知识库检索引擎（RAG Engine）进行了重大重构：将原有基于 MySQL 手工实现的稠密向量存储方案替换为专业向量数据库 ChromaDB，并修复了 Deepseek 等不支持 Embedding 能力的模型在生成测试用例时报错"检索查询向量生成失败"的问题。同步新增了硅基流动（Siliconflow）平台作为新的大模型配置选项。",
+    "features": [
+        {
+            "title": "ChromaDB 向量数据库集成",
+            "items": [
+                "引入 **ChromaDB** 作为专用向量数据库，替代之前基于 MySQL `document_embeddings` 表的自研向量存储方案。",
+                "使用 ChromaDB 的 `PersistentClient` 进行本地持久化存储，collection 名称为 `knowledge_base`，支持余弦相似度（cosine）检索。",
+                "向量数据本地存储于 `backend/.chroma/` 目录，路径可通过 `.env` 中的 `CHROMA_PERSIST_DIR` 自定义配置。",
+                "文档分块（chunk）及对应 Embedding 向量全部写入 ChromaDB；文档元数据（标题、分类、来源等）仍由 MySQL `knowledge_documents` 表管理，两者通过 `doc_id` 保持同步。"
+            ]
+        },
+        {
+            "title": "Embedding 多模型回退机制",
+            "items": [
+                "新增 `EMBEDDING_PROVIDER` 配置项（默认值 `glm`），用于明确指定 Embedding 向量生成所使用的模型提供商，解耦对话主模型与 Embedding 模型。",
+                "当主模型（如 Deepseek）不支持 Embedding API 时，系统自动按以下优先级回退：1. `EMBEDDING_PROVIDER` 指定的提供商；2. 系统内任意一个已配置 API Key 的可用提供商。",
+                "修复了 API Key 为空字符串时被误判为「有效提供商」的 Bug，避免系统尝试调用空 Key 接口导致失败。"
+            ]
+        },
+        {
+            "title": "硅基流动（Siliconflow）平台支持",
+            "items": [
+                "前端「系统设置 → AI 大模型配置」页面新增「第三方聚合平台」分组，包含**硅基流动 API Key** 与 **Base URL** 输入框（默认地址：`https://api.siliconflow.cn/v1`）。",
+                "`OpenAIProvider` 新增 `default_embedding_model` 参数，允许不同平台配置各自的 Embedding 模型名称，避免 OpenAI 默认模型名（`text-embedding-3-small`）不被其他平台识别的问题。",
+                "硅基流动初始化时默认使用 `Qwen/Qwen3-Embedding-8B` 作为 Embedding 生成模型。"
+            ]
+        }
+    ],
+    "improvements": [
+        "ChromaDB 语义检索替代 MySQL 手工余弦相似度计算，检索性能与可扩展性大幅提升。",
+        "删除文档时同步清理 ChromaDB 中对应向量块，保持 MySQL 与 ChromaDB 的数据一致性。",
+        "`.env` 文件中新增 `CHROMA_PERSIST_DIR` 配置注释说明，便于运维人员自定义向量数据存储路径。"
+    ],
+    "fixes": [
+        "修复 Deepseek 作为主模型时，调用「AI 生成测试用例」功能报错「检索查询向量生成失败，无法基于语义搜索」的问题。",
+        "修复 llm_client.py 初始化时将数据库中空字符串 API Key 误判为有效凭证并注册提供商，导致回退逻辑选中无效提供商的 Bug。"
+    ],
+    "file_changes": {
+        "modified": [
+            "backend/services/ai/rag_engine.py",
+            "backend/services/ai/llm_client.py",
+            "backend/config/settings.py",
+            "backend/requirements.txt",
+            "frontend/src/pages/SystemSettings.tsx",
+            "backend/.env"
+        ],
+        "deprecated": [
+            "backend/models/database_models.py - DocumentEmbedding 模型（已注释，由 ChromaDB 取代）"
+        ]
+    },
+    "notes": [
+        "升级后知识库内已有文档的向量需重新建立索引（在知识库管理页对文档执行重新解析/向量化操作）。",
+        "需在「系统设置 → AI 大模型配置」中配置至少一个支持 Embedding 能力的模型 API Key（如：硅基流动 Qwen3-Embedding-8B、智谱 GLM embedding-3 等）才能正常使用知识库语义检索功能。"
+    ]
+}
