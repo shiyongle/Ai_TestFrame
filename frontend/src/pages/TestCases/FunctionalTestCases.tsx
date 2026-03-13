@@ -255,22 +255,29 @@ const FunctionalTestCases: React.FC = () => {
             />
             <Button icon={<ReloadOutlined />} onClick={fetchTestCases} loading={loading} />
           </div>
-          <Table
-            columns={columns}
-            dataSource={testCases.filter(c =>
-              (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true)
-            )}
-            rowKey="id"
-            loading={loading}
-            pagination={{ pageSize: 15, showSizeChanger: false, size: 'small' }}
-            style={{ background: 'transparent' }}
-            onRow={(record) => ({
-              onClick: () => setSelectedCase(record),
-              style: { cursor: 'pointer' }
-            })}
-            rowClassName={(record) => selectedCase?.id === record.id ? 'ant-table-row-selected' : 'table-row-hover'}
-            size="middle"
-          />
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <Table
+              columns={columns}
+              dataSource={testCases.filter(c =>
+                (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true)
+              )}
+              rowKey="id"
+              pagination={{ 
+                pageSize: 15, 
+                showSizeChanger: true, 
+                showQuickJumper: true,
+                size: 'small',
+                position: ['bottomCenter'],
+                showTotal: (total) => `共 ${total} 条`
+              }}
+              onRow={(record) => ({
+                onClick: () => setSelectedCase(record),
+                style: { cursor: 'pointer' }
+              })}
+              rowClassName={(record) => selectedCase?.id === record.id ? 'ant-table-row-selected' : 'table-row-hover'}
+              size="middle"
+            />
+          </div>
         </div>
 
         {/* Right: Test Case Detail & Execution */}

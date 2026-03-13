@@ -209,11 +209,11 @@ const TestCases: React.FC = () => {
               rowKey="id"
               loading={loading}
               pagination={{
-                total: testcases.length,
                 pageSize: 10,
                 showSizeChanger: true,
                 showQuickJumper: true,
                 showTotal: (total) => `共 ${total} 条记录`,
+                position: ['bottomCenter']
               }}
               onRow={(record) => ({
                 onClick: () => setSelectedTestcase(record),
