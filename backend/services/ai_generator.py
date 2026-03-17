@@ -18,6 +18,87 @@ class AITestCaseGenerator:
     
     def __init__(self):
         logger.info("AI测试用例生成器初始化成功（升级为5步Agentic工作流）")
+        self._ai_tone_phrases = [
+            "确保",
+            "全面覆盖",
+            "覆盖所有场景",
+            "无懈可击",
+            "建议补充",
+            "建议增加",
+            "通常情况下",
+            "尽量",
+            "可以考虑",
+            "需要注意的是",
+            "从而提升",
+            "进一步优化",
+            "最佳实践"
+        ]
+
+    def _strip_ai_tone(self, text: Any) -> str:
+        """移除常见空泛AI腔表达，保留可执行信息"""
+        if not isinstance(text, str):
+            return ""
+        cleaned = text.strip()
+        for phrase in self._ai_tone_phrases:
+            cleaned = cleaned.replace(phrase, "")
+        # 规整多余空白与标点
+        while "  " in cleaned:
+            cleaned = cleaned.replace("  ", " ")
+        cleaned = cleaned.replace("，，", "，").replace("。。", "。").strip("，。； ")
+        return cleaned
+
+    def _post_process_cases(self, cases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """生成后做结构和文风清洗，减少AI味"""
+        polished_cases: List[Dict[str, Any]] = []
+
+        for idx, case in enumerate(cases):
+            if not isinstance(case, dict):
+                continue
+
+            title = self._strip_ai_tone(case.get("title") or case.get("name") or f"自动生成用例-{idx+1}")[:80]
+            description = self._strip_ai_tone(case.get("description", ""))[:160]
+            preconditions = self._strip_ai_tone(case.get("preconditions", "")) or "无"
+            test_data = self._strip_ai_tone(case.get("test_data", ""))[:240]
+            expected_result = self._strip_ai_tone(case.get("expected_result", ""))[:240]
+            notes = self._strip_ai_tone(case.get("notes", ""))[:240]
+            priority = case.get("priority", "中")
+
+            # 清洗步骤，保留动作+可验证结果
+            raw_steps = case.get("test_steps", [])
+            steps = []
+            if isinstance(raw_steps, list):
+                for sidx, step in enumerate(raw_steps):
+                    if not isinstance(step, dict):
+                        continue
+                    action = self._strip_ai_tone(step.get("action", ""))
+                    expected = self._strip_ai_tone(step.get("expected", ""))
+                    if not action or not expected:
+                        continue
+                    steps.append({
+                        "step": len(steps) + 1,
+                        "action": action[:160],
+                        "expected": expected[:200]
+                    })
+
+            if not steps:
+                steps = [{
+                    "step": 1,
+                    "action": "执行目标操作",
+                    "expected": "返回结果与验收标准一致"
+                }]
+
+            polished_cases.append({
+                "title": title or f"自动生成用例-{idx+1}",
+                "description": description or "基于需求生成的功能测试场景",
+                "preconditions": preconditions,
+                "test_steps": steps,
+                "test_data": test_data or "按需求字段准备有效/无效输入",
+                "priority": priority,
+                "expected_result": expected_result or "系统返回符合验收标准，关键字段可断言",
+                "notes": notes
+            })
+
+        return polished_cases
 
     async def _extract_json_from_text(self, text: str) -> Any:
         """从不可靠的LLM文本输出中安全提取JSON"""
@@ -138,6 +219,7 @@ class AITestCaseGenerator:
             # Step 5: 自我反思/漏测检查
             logger.info("➡️ Step 5: 自我审计与漏测补全 (Review & Self-Correction)")
             final_cases = await self._step5_review_and_correct(requirement, blueprint, generated_cases, provider, llm_client)
+            final_cases = self._post_process_cases(final_cases)
 
             logger.info(f"=== 测试用例 Agentic 生成完成，共产出 {len(final_cases)} 条用例 ===")
             return final_cases
@@ -209,6 +291,11 @@ class AITestCaseGenerator:
 请基于 等价类划分、边界值分析、正向业务流程、异常流程容忍度、安全与并发 等多维度，
 列举出此需求所有必须测试的关键点(Test Points 大纲)。
 
+输出风格要求（严格）：
+1. 每条测试点是“业务动作 + 触发条件 + 可观察结果”的短句，不写空话。
+2. 禁止出现“确保/全面覆盖/建议补充/最佳实践/进一步优化”等泛化表达。
+3. 每条长度控制在 18~60 字，优先使用项目术语与字段名。
+
 必须返回一个纯 JSON 的字符串数组格式：
 [
     "当正确输入全部必填项且属于白名单时的保存正向流程",
@@ -266,6 +353,11 @@ class AITestCaseGenerator:
 1. 绝对不要返回任何不符合 JSON 结构的文本解释。
 2. test_steps 必须是数组。
 3. 请确保能够完全将下面列出的全部点转化为结构化用例，一个都不能少。
+4. 文风必须“工程化、可执行、可验证”，禁止出现空泛AI措辞（如：确保、全面覆盖、无懈可击、建议补充、最佳实践）。
+5. title/description 必须贴近业务语义，不要写“测试场景用例标题”这类模板话。
+6. test_steps.action 只写具体操作；test_steps.expected 只写可观察结果（状态码、字段值、提示文案、数据落库等）。
+7. 禁止出现“可能/通常/尽量/建议”等不确定措辞。
+8. 如果上下文中有历史用例风格，请模仿其表达习惯（短句、术语一致），但不要复制内容。
 
 【要展开转换的测试大纲点】：
 {points_str}
@@ -301,6 +393,7 @@ class AITestCaseGenerator:
 1. 分析是否遗漏了致命的安全漏洞测试、异常断网、或者显而易见的极端边界。
 2. 分析是否遗漏了【验收标准】中明确指出的某一条细节。
 3. 如果发现漏测，请补充最多 1 到 3 条全新的测试用例。如果没有明显的遗漏，或者已完全覆盖，则必须返回空数组 []。
+4. 补充用例文风要求与主用例一致：简短、可执行、可断言；禁止空泛AI表达。
 
 请务必直接返回补充用例构成的纯 JSON 数组（格式与正常用例保持绝对一致）。例如：
 [
