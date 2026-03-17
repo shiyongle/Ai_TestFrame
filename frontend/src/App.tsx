@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from 'antd';
 import AppHeader from './components/Layout/AppHeader';
 import ResponsiveLayout from './components/Layout/ResponsiveLayout';
@@ -26,10 +26,12 @@ import RuleConfig from './pages/RuleConfig';
 import AiKnowledge from './pages/AiKnowledge';
 import SystemSettings from './pages/SystemSettings';
 import TaskCenter from './pages/TaskCenter';
+import Login from './pages/Login';
+import { authStorage } from './services/api';
 
 const { Content } = Layout;
 
-const App: React.FC = () => {
+const AppLayout: React.FC = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
 
@@ -99,6 +101,28 @@ const App: React.FC = () => {
         </Content>
       </Layout>
     </ResponsiveLayout>
+  );
+};
+
+const App: React.FC = () => {
+  const location = useLocation();
+  const isAuthenticated = Boolean(authStorage.getToken());
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />}
+      />
+      <Route
+        path="*"
+        element={
+          isAuthenticated
+            ? <AppLayout />
+            : <Navigate to="/login" replace state={{ from: location.pathname }} />
+        }
+      />
+    </Routes>
   );
 };
 

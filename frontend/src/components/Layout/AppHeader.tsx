@@ -13,6 +13,7 @@ import type { MenuProps } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { taskCenter } from '../../services/taskCenter';
 import CabbageIcon from '../common/CabbageIcon';
+import { authApi, authStorage } from '../../services/api';
 
 const { Header } = Layout;
 const { Text } = Typography;
@@ -25,6 +26,7 @@ interface AppHeaderProps {
 const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = false }) => {
   const navigate = useNavigate();
   const [runningTaskCount, setRunningTaskCount] = React.useState(0);
+  const currentUser = authStorage.getUser();
 
   React.useEffect(() => {
     const syncCount = () => setRunningTaskCount(taskCenter.getRunningCount());
@@ -54,6 +56,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
       danger: true,
     },
   ];
+
+  const handleUserMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'logout') {
+      authApi.logout();
+      navigate('/login');
+      return;
+    }
+
+    if (key === 'settings') {
+      navigate('/settings');
+    }
+  };
 
   return (
     <Header
@@ -100,10 +114,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
             onClick={() => navigate('/tasks')}
           />
         </Badge>
-        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+        <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
           <Space style={{ cursor: 'pointer' }}>
             <Avatar icon={<UserOutlined />} />
-            {!isMobile && <Text>管理员</Text>}
+            {!isMobile && <Text>{currentUser?.username || '管理员'}</Text>}
           </Space>
         </Dropdown>
       </Space>

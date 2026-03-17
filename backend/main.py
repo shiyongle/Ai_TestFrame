@@ -8,7 +8,9 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans
+from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans
+from core.security import decode_access_token, ensure_default_admin
+from fastapi import HTTPException
 
 # 设置日志
 main_logger, request_logger, _, _ = setup_logging()
@@ -29,6 +31,30 @@ app.add_middleware(
     allow_methods=settings.cors_methods,
     allow_headers=settings.cors_headers,
 )
+
+# 认证中间件
+@app.middleware("http")
+async def authenticate_request(request: Request, call_next):
+    public_paths = {"/", "/health", "/openapi.json", "/api/v1/auth/login"}
+    if request.url.path.startswith("/docs") or request.url.path.startswith("/redoc"):
+        return await call_next(request)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    if request.url.path.startswith("/api/v1") and request.url.path not in public_paths:
+        authorization = request.headers.get("authorization", "")
+        if not authorization.lower().startswith("bearer "):
+            return JSONResponse(status_code=401, content={"detail": "未登录或认证信息缺失"})
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            request.state.user = decode_access_token(token)
+        except Exception as exc:
+            if isinstance(exc, HTTPException):
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            return JSONResponse(status_code=401, content={"detail": "认证失败"})
+
+    return await call_next(request)
+
 
 # 请求日志中间件
 @app.middleware("http")
@@ -125,6 +151,7 @@ async def health_check():
 
 # 注册API路由
 try:
+    app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
     app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
     app.include_router(testcases.router, prefix="/api/v1", tags=["testcases"])
     app.include_router(interface_testcases.router, prefix="/api/v1", tags=["interface_testcases"])
@@ -149,12 +176,17 @@ async def startup_event():
     try:
         main_logger.info(f"正在检查数据库连接... URL: {settings.database_url.replace(settings.mysql_password, '******')}")
         from sqlalchemy import text
-        from core.database import engine
+        from core.database import engine, SessionLocal
         with engine.connect() as connection:
             result = connection.execute(text("SELECT 1"))
             main_logger.info(f"数据库连接测试成功! Result: {result.scalar()}")
             
         create_tables()
+        db = SessionLocal()
+        try:
+            ensure_default_admin(db)
+        finally:
+            db.close()
         main_logger.info("数据库表创建/验证成功")
     except Exception as e:
         main_logger.error(f"数据库初始化失败: {str(e)}")

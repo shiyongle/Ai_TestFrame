@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     log_file: str = "backend.log"
     request_log_file: str = "requests.log"
     sql_log_file: str = "sql.log"
+
+    # 认证配置
+    auth_secret_key: str = "ai_testframe_default_secret"
+    auth_token_expire_hours: int = 24
     
     # 测试配置
     default_http_timeout: int = 30

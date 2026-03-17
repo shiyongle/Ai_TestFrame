@@ -17,10 +17,39 @@ const uploadApi = axios.create({
   timeout: 120000,
 });
 
+const AUTH_TOKEN_KEY = 'auth_token';
+const AUTH_USER_KEY = 'auth_user';
+
+export const authStorage = {
+  getToken: () => localStorage.getItem(AUTH_TOKEN_KEY),
+  setToken: (token: string) => localStorage.setItem(AUTH_TOKEN_KEY, token),
+  clearToken: () => localStorage.removeItem(AUTH_TOKEN_KEY),
+  getUser: () => {
+    const raw = localStorage.getItem(AUTH_USER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  },
+  setUser: (user: any) => {
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    localStorage.setItem('username', user.username);
+  },
+  clearUser: () => {
+    localStorage.removeItem(AUTH_USER_KEY);
+    localStorage.removeItem('username');
+  },
+  clear: () => {
+    authStorage.clearToken();
+    authStorage.clearUser();
+  },
+};
+
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    // 可以在这里添加认证token等
+    const token = authStorage.getToken();
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -35,8 +64,26 @@ api.interceptors.response.use(
   },
   (error) => {
     console.error('API Error:', error);
+    if (error?.response?.status === 401) {
+      authStorage.clear();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   }
+);
+
+uploadApi.interceptors.request.use(
+  (config) => {
+    const token = authStorage.getToken();
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
 
 // 项目相关API
@@ -162,6 +209,13 @@ export const reportApi = {
   getOverview: (params?: { start_date?: string; end_date?: string; limit?: number; offset?: number }): Promise<any> =>
     api.get('/api/v1/reports/overview/stats', { params }),
 };
+
+export const authApi = {
+  login: (data: { username: string; password: string }): Promise<any> => api.post('/api/v1/auth/login', data),
+  me: (): Promise<any> => api.get('/api/v1/auth/me'),
+  logout: () => authStorage.clear(),
+};
+
 export default api;
 
 

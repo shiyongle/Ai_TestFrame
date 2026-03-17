@@ -20,6 +20,23 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: datetime
 
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1, max_length=100)
+
+class UserProfileResponse(ORMModel):
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    user: UserProfileResponse
+
 # 测试用例相关模型
 class TestCaseBase(ORMModel):
     name: str = Field(..., max_length=100)
