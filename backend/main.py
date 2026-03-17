@@ -8,7 +8,7 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import projects, testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard
+from api.v1 import projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard
 
 # 设置日志
 main_logger, request_logger, _, _ = setup_logging()
@@ -127,6 +127,7 @@ async def health_check():
 try:
     app.include_router(projects.router, prefix="/api/v1", tags=["projects"])
     app.include_router(testcases.router, prefix="/api/v1", tags=["testcases"])
+    app.include_router(interface_testcases.router, prefix="/api/v1", tags=["interface_testcases"])
     app.include_router(tests.router, prefix="/api/v1", tags=["tests"])
     app.include_router(versions.router, prefix="/api/v1", tags=["versions"])
     app.include_router(requirements.router, prefix="/api/v1", tags=["requirements"])

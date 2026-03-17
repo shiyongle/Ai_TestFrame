@@ -53,7 +53,17 @@ export const testcaseApi = {
   getTestCases: (projectId: number): Promise<any[]> => api.get(`/api/v1/projects/${projectId}/testcases`),
   createTestCase: (projectId: number, data: any): Promise<any> => api.post(`/api/v1/projects/${projectId}/testcases`, data),
   getAllTestCases: (): Promise<any[]> => api.get('/api/v1/testcases'),
+  updateTestCase: (id: number, data: any): Promise<any> => api.put(`/api/v1/testcases/${id}`, data),
   deleteTestCase: (id: number): Promise<any> => api.delete(`/api/v1/testcases/${id}`),
+};
+
+// 接口测试用例（独立数据表）API
+export const interfaceTestcaseApi = {
+  getAll: (projectId?: number): Promise<any[]> => api.get('/api/v1/interface-testcases', { params: { project_id: projectId } }),
+  getOne: (id: number): Promise<any> => api.get(`/api/v1/interface-testcases/${id}`),
+  create: (data: any): Promise<any> => api.post('/api/v1/interface-testcases', data),
+  update: (id: number, data: any): Promise<any> => api.put(`/api/v1/interface-testcases/${id}`, data),
+  delete: (id: number): Promise<any> => api.delete(`/api/v1/interface-testcases/${id}`),
 };
 
 // 测试相关API

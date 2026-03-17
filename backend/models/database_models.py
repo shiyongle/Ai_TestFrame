@@ -14,6 +14,7 @@ class Project(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     testcases = relationship("TestCase", back_populates="project")
+    interface_testcases = relationship("InterfaceTestCase", back_populates="project")
 
 # 系统设置表
 class SystemSetting(Base):
@@ -42,6 +43,34 @@ class TestCase(Base):
     project = relationship("Project", back_populates="testcases")
     test_results = relationship("TestResult", back_populates="testcase")
     suites = relationship("TestSuite", secondary="test_suite_cases", back_populates="testcases")
+
+# 接口测试用例表（独立于通用 testcases）
+class InterfaceTestCase(Base):
+    __tablename__ = "interface_testcases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text)
+    protocol = Column(String(20), nullable=False, default="http")  # http, tcp, mq
+    method = Column(String(10), nullable=False, default="GET")
+    url = Column(Text)
+    headers = Column(JSON)
+    params = Column(JSON)
+    body = Column(Text)
+    assertions = Column(Text)
+    preconditions = Column(Text)
+    test_data = Column(Text)
+    notes = Column(Text)
+    module = Column(String(100))
+    priority = Column(String(20), nullable=False, default="medium")
+    status = Column(String(20), nullable=False, default="active")
+    last_run_status = Column(String(10))
+    last_run_time = Column(DateTime)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project", back_populates="interface_testcases")
 
 # 测试用例集表
 class TestSuite(Base):
