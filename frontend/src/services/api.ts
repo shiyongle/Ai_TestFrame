@@ -64,6 +64,7 @@ export const interfaceTestcaseApi = {
   create: (data: any): Promise<any> => api.post('/api/v1/interface-testcases', data),
   update: (id: number, data: any): Promise<any> => api.put(`/api/v1/interface-testcases/${id}`, data),
   delete: (id: number): Promise<any> => api.delete(`/api/v1/interface-testcases/${id}`),
+  importCases: (data: FormData): Promise<any> => uploadApi.post('/api/v1/interface-testcases/import', data).then((res) => res.data),
 };
 
 // 测试相关API

@@ -10,7 +10,6 @@ import {
   BarChartOutlined,
   HistoryOutlined,
   SettingOutlined,
-  ThunderboltOutlined,
   ToolOutlined,
   IdcardOutlined,
   MobileOutlined,
@@ -29,6 +28,7 @@ import {
   ScheduleOutlined,
   FolderOpenOutlined,
 } from '@ant-design/icons';
+import CabbageIcon from '../common/CabbageIcon';
 
 const { Sider } = Layout;
 
@@ -310,7 +310,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         }}
       >
         <Space size={collapsed ? 8 : 14} style={{ overflow: 'hidden' }}>
-          <ThunderboltOutlined style={{ fontSize: '22px', color: '#0071e3' }} />
+          <CabbageIcon size={22} />
           {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>卷心菜</span>}
         </Space>
         {!isMobile && (
@@ -365,7 +365,9 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         <Drawer
           title={
             <div style={{ color: '#0b0f1a', display: 'flex', alignItems: 'center' }}>
-              <ThunderboltOutlined style={{ marginRight: '8px', fontSize: '20px', color: '#0071e3' }} />
+              <span style={{ marginRight: '8px', display: 'inline-flex' }}>
+                <CabbageIcon size={20} />
+              </span>
               卷心菜-智能化测试平台
             </div>
           }

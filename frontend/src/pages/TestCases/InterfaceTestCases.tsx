@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Avatar,
   Button,
@@ -15,6 +15,7 @@ import {
   Space,
   Tag,
   Tooltip,
+  Upload,
   Typography,
   message,
 } from 'antd';
@@ -24,16 +25,20 @@ import {
   DeleteOutlined,
   EditOutlined,
   GlobalOutlined,
+  InboxOutlined,
   MinusCircleOutlined,
   PlusOutlined,
   PlayCircleFilled,
   SearchOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import type { UploadFile } from 'antd/es/upload/interface';
 import { interfaceTestcaseApi, projectApi, testApi } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const { Dragger } = Upload;
 
 type Protocol = 'HTTP' | 'TCP' | 'MQ';
 type Priority = 'high' | 'medium' | 'low';
@@ -213,8 +218,14 @@ const InterfaceTestCases: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCaseId, setEditingCaseId] = useState<string>('');
   const [form] = Form.useForm();
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importProjectId, setImportProjectId] = useState<number | undefined>(undefined);
+  const [importModule, setImportModule] = useState<string>('导入用例');
+  const [maxImportCases, setMaxImportCases] = useState<number>(300);
+  const [importFileList, setImportFileList] = useState<UploadFile[]>([]);
 
-  const loadCases = async () => {
+  const loadCases = useCallback(async () => {
     setLoading(true);
     try {
       const rawList = await interfaceTestcaseApi.getAll(projectFilter !== 'all' ? Number(projectFilter) : undefined);
@@ -226,24 +237,24 @@ const InterfaceTestCases: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectFilter, selectedCaseId]);
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const list = await projectApi.getProjects();
       setProjects(list || []);
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '加载项目列表失败');
     }
-  };
-
-  useEffect(() => {
-    loadProjects();
   }, []);
 
   useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
     loadCases();
-  }, [projectFilter]);
+  }, [loadCases]);
 
   const filteredCases = useMemo(
     () =>
@@ -474,6 +485,61 @@ const InterfaceTestCases: React.FC = () => {
     }
   };
 
+  const openImportModal = () => {
+    const defaultProjectId =
+      projectFilter !== 'all'
+        ? Number(projectFilter)
+        : (projects[0]?.id || undefined);
+    setImportProjectId(defaultProjectId);
+    setImportModule('导入用例');
+    setMaxImportCases(300);
+    setImportFileList([]);
+    setImportModalVisible(true);
+  };
+
+  const handleImport = async () => {
+    if (!importProjectId) {
+      message.error('请选择所属项目');
+      return;
+    }
+    if (!importFileList.length) {
+      message.error('请先选择导入文件');
+      return;
+    }
+    const fileObj = importFileList[0]?.originFileObj;
+    if (!fileObj) {
+      message.error('读取上传文件失败');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileObj);
+    formData.append('project_id', String(importProjectId));
+    formData.append('module', importModule || '导入用例');
+    formData.append('max_cases', String(maxImportCases || 300));
+
+    setImporting(true);
+    try {
+      const result = await interfaceTestcaseApi.importCases(formData);
+      const created = (result?.created_cases || []).map(mapRawCase);
+      setTestCases((prev) => [...created, ...prev]);
+      if (created.length) {
+        setSelectedCaseId(created[0].id);
+      }
+      message.success(`导入成功，新增 ${result?.imported_count || created.length} 条接口用例`);
+      setImportModalVisible(false);
+      if (projectFilter !== 'all' && Number(projectFilter) !== importProjectId) {
+        setProjectFilter(String(importProjectId));
+      } else {
+        loadCases();
+      }
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div
       className="app-content fade-in"
@@ -518,6 +584,9 @@ const InterfaceTestCases: React.FC = () => {
               { value: 'low', label: '低' },
             ]}
           />
+          <Button icon={<UploadOutlined />} shape="round" size="large" onClick={openImportModal}>
+            导入接口文档
+          </Button>
           <Button type="primary" icon={<PlusOutlined />} shape="round" size="large" onClick={handleCreate}>
             新增接口用例
           </Button>
@@ -665,11 +734,37 @@ const InterfaceTestCases: React.FC = () => {
 
               <Card size="small" style={{ borderRadius: 10, marginBottom: 12 }}>
                 <Text type="secondary">请求地址</Text>
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <GlobalOutlined style={{ color: '#8c8c8c' }} />
-                  <Text code style={{ fontSize: 12 }}>
-                    {selectedCase.url || '未配置 URL'}
-                  </Text>
+                <div
+                  style={{
+                    marginTop: 10,
+                    borderRadius: 12,
+                    border: '1px solid #91caff',
+                    background: 'linear-gradient(135deg, #e6f4ff 0%, #f0f5ff 100%)',
+                    padding: '12px 14px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <Tag style={{ margin: 0, color: getMethodColor(selectedCase.method), borderColor: `${getMethodColor(selectedCase.method)}66`, background: '#fff' }}>
+                      {selectedCase.method}
+                    </Tag>
+                    <Text strong style={{ color: '#0958d9', fontSize: 13 }}>
+                      Endpoint
+                    </Text>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <GlobalOutlined style={{ color: '#1677ff', marginTop: 3 }} />
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: '#003a8c',
+                        lineHeight: 1.6,
+                        wordBreak: 'break-all',
+                      }}
+                    >
+                      {selectedCase.url || '未配置 URL'}
+                    </Text>
+                  </div>
                 </div>
               </Card>
 
@@ -730,6 +825,74 @@ const InterfaceTestCases: React.FC = () => {
           )}
         </div>
       </div>
+
+      <Modal
+        title="导入接口文档并生成用例"
+        open={importModalVisible}
+        onCancel={() => setImportModalVisible(false)}
+        onOk={handleImport}
+        confirmLoading={importing}
+        okText="开始导入"
+        width={760}
+      >
+        <Form layout="vertical">
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="所属项目" required>
+                <Select
+                  placeholder="请选择项目"
+                  value={importProjectId}
+                  onChange={(v) => setImportProjectId(v)}
+                  options={projects.map((p) => ({ value: p.id, label: p.name }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="归属模块">
+                <Input
+                  value={importModule}
+                  onChange={(e) => setImportModule(e.target.value)}
+                  placeholder="默认：导入用例"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item label="最大导入数量">
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={maxImportCases}
+                  onChange={(e) => setMaxImportCases(Number(e.target.value) || 300)}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="支持格式">
+                <Input value="Swagger/OpenAPI、Postman、JSON、JMX" disabled />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Dragger
+            maxCount={1}
+            fileList={importFileList}
+            beforeUpload={() => false}
+            onChange={(info) => setImportFileList(info.fileList.slice(-1))}
+            accept=".json,.jmx,.yaml,.yml"
+            style={{ padding: 24 }}
+          >
+            <p className="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p className="ant-upload-text">点击或拖拽上传接口文档文件</p>
+            <p className="ant-upload-hint">导入后会按常见规则自动生成接口测试用例（正向校验、必填项缺失校验等）</p>
+          </Dragger>
+        </Form>
+      </Modal>
 
       <Modal
         title={editingCaseId ? '编辑接口用例' : '新增接口用例'}
