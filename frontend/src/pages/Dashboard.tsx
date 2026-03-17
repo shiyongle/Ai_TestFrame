@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import { dashboardApi } from '../services/api';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
 
 const { Title, Text } = Typography;
 
@@ -47,6 +48,7 @@ const ACTION_MAP: Record<string, { icon: React.ReactNode; color: string; label: 
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     totalProjects: 0,
     totalTestCases: 0,
@@ -119,6 +121,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleCreateProject = () => {
+    navigate('/projects?open=create');
+  };
+
+  const handleQuickTest = () => {
+    navigate('/testcases/plans');
+  };
+
 
   const BentoCard = ({ children, style, className, title, extra }: any) => (
     <div
@@ -153,8 +163,8 @@ const Dashboard: React.FC = () => {
           </Title>
         </div>
         <Space>
-          <Button icon={<PlusOutlined />}>新建项目</Button>
-          <Button type="primary" icon={<ThunderboltFilled />}>快速测试</Button>
+          <Button icon={<PlusOutlined />} onClick={handleCreateProject}>新建项目</Button>
+          <Button type="primary" icon={<ThunderboltFilled />} onClick={handleQuickTest}>快速测试</Button>
         </Space>
       </div>
 

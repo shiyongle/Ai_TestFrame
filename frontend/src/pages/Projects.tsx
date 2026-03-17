@@ -23,7 +23,7 @@ import {
   SearchOutlined,
   MoreOutlined
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { projectApi } from '../services/api';
 import { Project } from '../types';
 import dayjs from 'dayjs';
@@ -40,10 +40,18 @@ const Projects: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     loadProjects();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get('open') === 'create') {
+      handleCreate();
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const loadProjects = async () => {
     setLoading(true);
