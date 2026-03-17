@@ -94,6 +94,75 @@ class TestSuiteCase(Base):
     testcase_id = Column(Integer, ForeignKey("testcases.id", ondelete="CASCADE"), primary_key=True)
     order_index = Column(Integer, default=0)
 
+# 测试计划表
+class TestPlan(Base):
+    __tablename__ = "test_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    owner = Column(String(100))
+    status = Column(String(20), default="draft")  # draft, ready, running, completed, archived
+    execution_mode = Column(String(20), default="serial")  # serial, parallel
+    priority = Column(String(20), default="medium")
+    entry_criteria = Column(Text)
+    exit_criteria = Column(Text)
+    schedule = Column(String(100))
+    tags = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_executed_at = Column(DateTime)
+
+    project = relationship("Project")
+    functional_cases = relationship("TestPlanFunctionalCase", back_populates="plan", cascade="all, delete-orphan")
+    interface_cases = relationship("TestPlanInterfaceCase", back_populates="plan", cascade="all, delete-orphan")
+    executions = relationship("TestPlanExecution", back_populates="plan", cascade="all, delete-orphan")
+
+# 测试计划关联功能测试用例
+class TestPlanFunctionalCase(Base):
+    __tablename__ = "test_plan_functional_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    test_plan_id = Column(Integer, ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False)
+    testcase_id = Column(Integer, ForeignKey("testcases.id", ondelete="CASCADE"), nullable=False)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    plan = relationship("TestPlan", back_populates="functional_cases")
+    testcase = relationship("TestCase")
+
+# 测试计划关联接口测试用例
+class TestPlanInterfaceCase(Base):
+    __tablename__ = "test_plan_interface_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    test_plan_id = Column(Integer, ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False)
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id", ondelete="CASCADE"), nullable=False)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    plan = relationship("TestPlan", back_populates="interface_cases")
+    interface_testcase = relationship("InterfaceTestCase")
+
+# 测试计划执行记录
+class TestPlanExecution(Base):
+    __tablename__ = "test_plan_executions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    test_plan_id = Column(Integer, ForeignKey("test_plans.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="running")  # running, completed, completed_with_issues, failed
+    total_items = Column(Integer, default=0)
+    passed_items = Column(Integer, default=0)
+    failed_items = Column(Integer, default=0)
+    error_items = Column(Integer, default=0)
+    skipped_items = Column(Integer, default=0)
+    summary = Column(JSON)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+
+    plan = relationship("TestPlan", back_populates="executions")
+
 # 测试结果表
 class TestResult(Base):
     __tablename__ = "test_results"

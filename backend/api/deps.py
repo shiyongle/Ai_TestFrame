@@ -11,6 +11,7 @@ from services.test_execution_service import TestExecutionService
 from services.version_service import VersionService
 from services.test_suite_service import TestSuiteService
 from services.interface_testcase_service import InterfaceTestCaseService
+from services.test_plan_service import TestPlanService
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -35,3 +36,7 @@ def get_version_service() -> VersionService:
 def get_interface_testcase_service() -> InterfaceTestCaseService:
     """获取接口测试用例服务实例"""
     return InterfaceTestCaseService()
+
+def get_test_plan_service() -> TestPlanService:
+    """获取测试计划服务实例"""
+    return TestPlanService()

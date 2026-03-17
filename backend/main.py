@@ -8,7 +8,7 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports
+from api.v1 import projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans
 
 # 设置日志
 main_logger, request_logger, _, _ = setup_logging()
@@ -135,6 +135,7 @@ try:
     app.include_router(ai.router, prefix="/api/v1/ai", tags=["ai"])
     app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
     app.include_router(test_suites.router, prefix="/api/v1", tags=["test_suites"])
+    app.include_router(test_plans.router, prefix="/api/v1", tags=["test_plans"])
     app.include_router(dashboard.router, prefix="/api/v1", tags=["dashboard"])
     app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
     main_logger.info("API路由注册成功")

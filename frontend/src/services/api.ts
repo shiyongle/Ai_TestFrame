@@ -87,6 +87,16 @@ export const testSuiteApi = {
   removeCasesFromSuite: (suiteId: number, testcaseIds: number[]): Promise<any> => api.request({ method: 'DELETE', url: `/api/v1/test-suites/${suiteId}/cases`, data: { testcase_ids: testcaseIds } }),
 };
 
+// 测试计划 API
+export const testPlanApi = {
+  getTestPlans: (projectId?: number): Promise<any[]> => api.get('/api/v1/test-plans', { params: { project_id: projectId } }),
+  getTestPlan: (id: number): Promise<any> => api.get(`/api/v1/test-plans/${id}`),
+  createTestPlan: (data: any): Promise<any> => api.post('/api/v1/test-plans', data),
+  updateTestPlan: (id: number, data: any): Promise<any> => api.put(`/api/v1/test-plans/${id}`, data),
+  deleteTestPlan: (id: number): Promise<any> => api.delete(`/api/v1/test-plans/${id}`),
+  executeTestPlan: (id: number): Promise<any> => api.post(`/api/v1/test-plans/${id}/execute`),
+};
+
 // 版本管理API
 export const versionApi = {
   getVersions: (projectId?: number): Promise<any[]> =>
