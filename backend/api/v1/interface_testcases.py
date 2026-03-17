@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from api.deps import get_database, get_interface_testcase_service
 from models.database_models import Project
 from services.interface_import_service import InterfaceImportService
+from utils.activity_logger import log_activity
 
 router = APIRouter()
 
@@ -79,8 +80,12 @@ async def get_all_interface_testcases(
     service=Depends(get_interface_testcase_service),
 ):
     if project_id:
-        return service.get_by_project(db, project_id)
-    return service.get_all(db)
+        items = service.get_by_project(db, project_id)
+        log_activity(db, action="query", module="接口测试用例", target_name=f"项目ID={project_id}", detail=f"数量={len(items)}")
+        return items
+    items = service.get_all(db)
+    log_activity(db, action="query", module="接口测试用例", target_name="全部接口测试用例", detail=f"数量={len(items)}")
+    return items
 
 
 @router.get("/interface-testcases/{case_id}", response_model=InterfaceTestCaseResponse)
@@ -92,6 +97,7 @@ async def get_interface_testcase(
     obj = service.get_one(db, case_id)
     if not obj:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
+    log_activity(db, action="query", module="接口测试用例", target_name=obj.name, detail=f"用例ID={case_id}")
     return obj
 
 
@@ -101,7 +107,9 @@ async def create_interface_testcase(
     db: Session = Depends(get_database),
     service=Depends(get_interface_testcase_service),
 ):
-    return service.create(db, payload.model_dump())
+    created = service.create(db, payload.model_dump())
+    log_activity(db, action="create", module="接口测试用例", target_name=created.name, detail=f"用例ID={created.id}")
+    return created
 
 
 @router.put("/interface-testcases/{case_id}", response_model=InterfaceTestCaseResponse)
@@ -114,6 +122,7 @@ async def update_interface_testcase(
     obj = service.update(db, case_id, payload.model_dump(exclude_unset=True))
     if not obj:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
+    log_activity(db, action="update", module="接口测试用例", target_name=obj.name, detail=f"用例ID={case_id}")
     return obj
 
 
@@ -123,9 +132,13 @@ async def delete_interface_testcase(
     db: Session = Depends(get_database),
     service=Depends(get_interface_testcase_service),
 ):
+    obj = service.get_one(db, case_id)
+    if not obj:
+        raise HTTPException(status_code=404, detail="接口测试用例不存在")
     ok = service.delete(db, case_id)
     if not ok:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
+    log_activity(db, action="delete", module="接口测试用例", target_name=obj.name, detail=f"用例ID={case_id}")
     return {"message": "接口测试用例删除成功"}
 
 
@@ -163,6 +176,13 @@ async def import_interface_testcases(
             raise HTTPException(status_code=400, detail="未识别到可导入的接口定义")
 
         created_cases = service.bulk_create(db, cases_payload)
+        log_activity(
+            db,
+            action="create",
+            module="接口测试用例",
+            target_name="批量导入",
+            detail=f"project_id={project_id}, source={source_type}, imported={len(created_cases)}",
+        )
 
         return InterfaceTestCaseImportResponse(
             imported_count=len(created_cases),

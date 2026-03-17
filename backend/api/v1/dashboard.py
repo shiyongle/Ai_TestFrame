@@ -58,9 +58,10 @@ def get_activity_logs(
     db: Session = Depends(get_db)
 ):
     """获取最近的操作动态"""
-    total = db.query(func.count(ActivityLog.id)).scalar() or 0
+    base_query = db.query(ActivityLog).filter(ActivityLog.action != "query")
+    total = base_query.with_entities(func.count(ActivityLog.id)).scalar() or 0
     logs = (
-        db.query(ActivityLog)
+        base_query
         .order_by(ActivityLog.created_at.desc())
         .offset(offset)
         .limit(limit)

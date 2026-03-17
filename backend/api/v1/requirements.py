@@ -6,6 +6,7 @@ from models.database_models import Requirement, Project, TestCase, TestSuite, Te
 from pydantic import BaseModel
 from datetime import datetime
 from services.ai.ai_service import ai_service
+from utils.activity_logger import log_activity
 
 router = APIRouter()
 
@@ -65,6 +66,13 @@ async def get_requirements(
         query = query.filter(Requirement.priority == priority)
     
     requirements = query.offset(skip).limit(limit).all()
+    log_activity(
+        db,
+        action="query",
+        module="需求",
+        target_name="需求列表",
+        detail=f"project_id={project_id if project_id is not None else 'all'}, status={status or 'all'}, priority={priority or 'all'}, 数量={len(requirements)}",
+    )
     return requirements
 
 @router.get("/requirements/{requirement_id}", response_model=RequirementResponse)
@@ -76,6 +84,7 @@ async def get_requirement(requirement_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="需求不存在"
         )
+    log_activity(db, action="query", module="需求", target_name=requirement.title, detail=f"需求ID={requirement_id}")
     return requirement
 
 @router.post("/requirements", response_model=RequirementResponse)
@@ -96,6 +105,7 @@ async def create_requirement(
     db.add(db_requirement)
     db.commit()
     db.refresh(db_requirement)
+    log_activity(db, action="create", module="需求", target_name=db_requirement.title, detail=f"需求ID={db_requirement.id}")
     return db_requirement
 
 @router.put("/requirements/{requirement_id}", response_model=RequirementResponse)
@@ -128,6 +138,7 @@ async def update_requirement(
     db_requirement.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_requirement)
+    log_activity(db, action="update", module="需求", target_name=db_requirement.title, detail=f"需求ID={requirement_id}")
     return db_requirement
 
 @router.delete("/requirements/{requirement_id}")
@@ -141,6 +152,7 @@ async def delete_requirement(requirement_id: int, db: Session = Depends(get_db))
         )
     
     try:
+        target_title = db_requirement.title
         # 先删除与版本的关联关系
         from models.database_models import VersionRequirement
         db.query(VersionRequirement).filter(VersionRequirement.requirement_id == requirement_id).delete()
@@ -148,6 +160,7 @@ async def delete_requirement(requirement_id: int, db: Session = Depends(get_db))
         # 删除需求
         db.delete(db_requirement)
         db.commit()
+        log_activity(db, action="delete", module="需求", target_name=target_title, detail=f"需求ID={requirement_id}")
         return {"message": "需求删除成功"}
     except Exception as e:
         db.rollback()
@@ -171,6 +184,7 @@ async def get_project_requirements(
         )
     
     requirements = db.query(Requirement).filter(Requirement.project_id == project_id).all()
+    log_activity(db, action="query", module="需求", target_name=f"项目ID={project_id}", detail=f"查看项目需求，数量={len(requirements)}")
     return requirements
 
 @router.post("/requirements/{requirement_id}/comments")
@@ -201,7 +215,7 @@ async def add_requirement_comment(
     db_requirement.comments.append(comment_data)
     db_requirement.updated_at = datetime.utcnow()
     db.commit()
-    
+    log_activity(db, action="update", module="需求", target_name=db_requirement.title, detail=f"添加评论，需求ID={requirement_id}")
     return {"message": "评论添加成功", "comment": comment_data}
 
 @router.post("/requirements/{requirement_id}/link-testcases")
@@ -228,7 +242,13 @@ async def link_testcases_to_requirement(
     
     db_requirement.updated_at = datetime.utcnow()
     db.commit()
-    
+    log_activity(
+        db,
+        action="update",
+        module="需求",
+        target_name=db_requirement.title,
+        detail=f"关联测试用例，functional={db_requirement.linked_functional_test_cases}, interface={db_requirement.linked_interface_test_cases}",
+    )
     return {"message": "测试用例关联成功"}
 
 
@@ -249,6 +269,13 @@ async def generate_test_cases_for_requirement(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="需求不存在"
         )
+    log_activity(
+        db,
+        action="generate",
+        module="需求",
+        target_name=requirement.title,
+        detail=f"开始生成测试用例，model={model}",
+    )
         
     project_id = requirement.project_id
 
@@ -348,4 +375,4 @@ async def generate_test_cases_for_requirement(
         proj_id=project_id,
     )
     
-    return {"message": "AI 开始在后台生成用例，请稍后在测试大库中查看"}
+    return {"message": "AI 开始在后台生成用例，请稍后在测试大库中查看"}

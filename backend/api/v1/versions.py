@@ -9,6 +9,7 @@ from services.ai_generator import ai_generator
 from services.ai.ai_service import ai_service
 from models.database_models import KnowledgeDocument, TestSuite, TestSuiteCase
 from datetime import datetime
+from utils.activity_logger import log_activity
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ async def create_version(
         db.add(db_version)
         db.commit()
         db.refresh(db_version)
+        log_activity(db, action="create", module="版本", target_name=db_version.version_number)
         return db_version
     except Exception as e:
         db.rollback()
@@ -64,6 +66,13 @@ async def get_versions(
         if project_id:
             query = query.filter(Version.project_id == project_id)
         versions = query.order_by(Version.created_at.desc()).all()
+        log_activity(
+            db,
+            action="query",
+            module="版本",
+            target_name="版本列表",
+            detail=f"project_id={project_id if project_id is not None else 'all'}, 数量={len(versions)}",
+        )
         
         # 为每个版本添加关联的需求信息
         result = []
@@ -122,6 +131,7 @@ async def get_version(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="版本不存在"
         )
+    log_activity(db, action="query", module="版本", target_name=version.version_number, detail=f"版本ID={version_id}")
     return version
 
 @router.put("/versions/{version_id}", response_model=VersionResponse)
@@ -144,6 +154,7 @@ async def update_version(
                 setattr(version, field, value)
         db.commit()
         db.refresh(version)
+        log_activity(db, action="update", module="版本", target_name=version.version_number, detail=f"版本ID={version_id}")
         return version
     except Exception as e:
         db.rollback()
@@ -166,12 +177,14 @@ async def delete_version(
         )
     
     try:
+        version_name = version.version_number
         # 先删除与需求的关联关系
         db.query(VersionRequirement).filter(VersionRequirement.version_id == version_id).delete()
         
         # 删除版本
         db.delete(version)
         db.commit()
+        log_activity(db, action="delete", module="版本", target_name=version_name, detail=f"版本ID={version_id}")
         return {"message": "版本删除成功"}
     except Exception as e:
         db.rollback()
@@ -191,6 +204,7 @@ async def get_latest_version(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="没有找到任何版本"
         )
+    log_activity(db, action="query", module="版本", target_name=version.version_number, detail="查看最新版本")
     return version
 
 @router.post("/versions/{version_id}/requirements")
@@ -226,6 +240,13 @@ async def add_requirements_to_version(
             db.add(version_requirement)
     
     db.commit()
+    log_activity(
+        db,
+        action="update",
+        module="版本",
+        target_name=version.version_number,
+        detail=f"添加需求: {','.join(map(str, requirement_ids))}",
+    )
     return {"message": "需求已成功添加到版本"}
 
 @router.delete("/versions/{version_id}/requirements/{requirement_id}")
@@ -242,9 +263,16 @@ async def remove_requirement_from_version(
     
     if not version_requirement:
         raise HTTPException(status_code=404, detail="关联关系不存在")
-    
+    version = db.query(Version).filter(Version.id == version_id).first()
     db.delete(version_requirement)
     db.commit()
+    log_activity(
+        db,
+        action="update",
+        module="版本",
+        target_name=version.version_number if version else f"ID={version_id}",
+        detail=f"移除需求: {requirement_id}",
+    )
     return {"message": "需求已从版本中移除"}
 
 @router.get("/versions/{version_id}/requirements")
@@ -268,7 +296,13 @@ async def get_version_requirements(
     
     requirement_ids = [vr.requirement_id for vr in version_requirements]
     requirements = db.query(Requirement).filter(Requirement.id.in_(requirement_ids)).all()
-    
+    log_activity(
+        db,
+        action="query",
+        module="版本",
+        target_name=version.version_number,
+        detail=f"查看关联需求，数量={len(requirements)}",
+    )
     return requirements
 
 @router.post("/versions/{version_id}/knowledge")
@@ -295,6 +329,13 @@ async def link_knowledge_to_version(
         db.add(new_link)
         
     db.commit()
+    log_activity(
+        db,
+        action="update",
+        module="版本",
+        target_name=version.version_number,
+        detail=f"关联知识文档: {','.join(map(str, knowledge_ids))}",
+    )
     return {"message": "知识文档已成功关联到版本"}
 
 @router.get("/versions/{version_id}/knowledge")
@@ -310,6 +351,13 @@ async def get_version_knowledge(
     links = db.query(VersionKnowledge).filter(VersionKnowledge.version_id == version_id).all()
     doc_ids = [link.knowledge_doc_id for link in links]
     docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(doc_ids)).all()
+    log_activity(
+        db,
+        action="query",
+        module="版本",
+        target_name=version.version_number,
+        detail=f"查看关联知识文档，数量={len(docs)}",
+    )
     return docs
 
 @router.post("/versions/{version_id}/generate-testcases")
@@ -365,6 +413,13 @@ async def generate_test_cases_for_version(
         explicit_context = "\n\n".join(parts)
         
     project_id = version.project_id
+    log_activity(
+        db,
+        action="generate",
+        module="版本",
+        target_name=version.version_number,
+        detail=f"开始生成测试用例，model={model}",
+    )
 
     async def _bg_generate_testcases(
         reqs: List[Requirement],

@@ -35,7 +35,9 @@ def get_projects(
     project_service = Depends(get_project_service)
 ):
     """获取所有测试项目"""
-    return project_service.get_projects(db)
+    projects = project_service.get_projects(db)
+    log_activity(db, action="query", module="项目", target_name="项目列表", detail=f"数量={len(projects)}")
+    return projects
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
@@ -48,6 +50,7 @@ def get_project(
     project = project_service.get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
+    log_activity(db, action="query", module="项目", target_name=project.name, detail=f"项目ID={project_id}")
     return project
 
 
@@ -90,4 +93,5 @@ def get_project_statistics(
     statistics = project_service.get_project_statistics(db, project_id)
     if not statistics:
         raise HTTPException(status_code=404, detail="项目不存在")
+    log_activity(db, action="query", module="项目", target_name=f"ID={project_id}", detail="查看项目统计")
     return statistics
