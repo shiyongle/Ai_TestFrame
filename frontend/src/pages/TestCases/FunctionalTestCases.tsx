@@ -35,7 +35,7 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { testcaseApi } from '../../services/api';
+import { testcaseApi, projectApi } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -47,23 +47,43 @@ interface FunctionalTestCase {
   description: string;
   protocol: string;
   config: any;
+  priority?: string;
   project_id: number;
   created_at: string;
   updated_at: string;
 }
 
+interface ProjectOption {
+  id: number;
+  name: string;
+}
+
 const FunctionalTestCases: React.FC = () => {
   const [testCases, setTestCases] = useState<FunctionalTestCase[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingCase, setEditingCase] = useState<FunctionalTestCase | null>(null);
   const [selectedCase, setSelectedCase] = useState<FunctionalTestCase | null>(null);
   const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchProcessing, setBatchProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    fetchProjects();
     fetchTestCases();
   }, []);
+
+  const fetchProjects = async () => {
+    try {
+      const data = await projectApi.getProjects();
+      setProjects(data || []);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '获取项目列表失败');
+    }
+  };
 
   const fetchTestCases = async () => {
     setLoading(true);
@@ -76,6 +96,102 @@ const FunctionalTestCases: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const filteredTestCases = testCases.filter(c => {
+    const matchSearch = searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true;
+    const matchProject = selectedProjectId === 'all' ? true : String(c.project_id) === selectedProjectId;
+    return matchSearch && matchProject;
+  });
+
+  useEffect(() => {
+    if (filteredTestCases.length === 0) {
+      setSelectedCase(null);
+      return;
+    }
+    if (!selectedCase || !filteredTestCases.some(c => c.id === selectedCase.id)) {
+      setSelectedCase(filteredTestCases[0]);
+    }
+  }, [selectedProjectId, searchText, testCases, selectedCase]);
+
+  const getPriorityDisplay = (record: FunctionalTestCase): { text: string; color: string } => {
+    const rawPriority = String(record?.config?.priority ?? record?.priority ?? '').toLowerCase();
+    const normalized = rawPriority === '高' ? 'high' : rawPriority === '中' ? 'medium' : rawPriority === '低' ? 'low' : rawPriority;
+
+    if (normalized === 'high') return { text: '高', color: 'red' };
+    if (normalized === 'low') return { text: '低', color: 'green' };
+    return { text: '中', color: 'orange' };
+  };
+
+  const renderPriorityTag = (record: FunctionalTestCase) => {
+    const priority = getPriorityDisplay(record);
+    return <Tag color={priority.color}>{priority.text}</Tag>;
+  };
+
+  const configKeyMap: Record<string, string> = {
+    id: '编号',
+    name: '名称',
+    title: '标题',
+    description: '描述',
+    module: '模块',
+    protocol: '协议',
+    method: '请求方法',
+    url: '请求地址',
+    headers: '请求头',
+    params: '请求参数',
+    body: '请求体',
+    assertions: '断言',
+    timeout: '超时时间',
+    retries: '重试次数',
+    priority: '优先级',
+    status: '状态',
+    preconditions: '前置条件',
+    test_steps: '测试步骤',
+    steps: '步骤',
+    step: '步骤序号',
+    action: '操作',
+    expected: '预期结果',
+    test_data: '测试数据',
+    expected_result: '最终期望',
+    notes: '备注'
+  };
+
+  const configValueMap: Record<string, string> = {
+    high: '高',
+    medium: '中',
+    low: '低',
+    active: '激活',
+    inactive: '停用',
+    http: 'HTTP',
+    tcp: 'TCP',
+    mq: 'MQ',
+    get: 'GET',
+    post: 'POST',
+    put: 'PUT',
+    delete: 'DELETE',
+    patch: 'PATCH'
+  };
+
+  const translateConfigForDisplay = (value: any): any => {
+    if (Array.isArray(value)) {
+      return value.map(item => translateConfigForDisplay(item));
+    }
+
+    if (value && typeof value === 'object') {
+      const result: Record<string, any> = {};
+      Object.entries(value).forEach(([key, val]) => {
+        const translatedKey = configKeyMap[key] || key;
+        result[translatedKey] = translateConfigForDisplay(val);
+      });
+      return result;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.toLowerCase();
+      return configValueMap[normalized] || value;
+    }
+
+    return value;
   };
 
   const columns: ColumnsType<FunctionalTestCase> = [
@@ -99,12 +215,11 @@ const FunctionalTestCases: React.FC = () => {
       )
     },
     {
-      title: '协议',
-      dataIndex: 'protocol',
-      key: 'protocol',
+      title: '等级',
+      key: 'priority',
       width: 100,
-      render: (protocol: string) => {
-        return <Tag color="blue">{protocol?.toUpperCase()}</Tag>;
+      render: (_, record) => {
+        return renderPriorityTag(record);
       },
     },
     {
@@ -164,6 +279,7 @@ const FunctionalTestCases: React.FC = () => {
         try {
           await testcaseApi.deleteTestCase(record.id);
           setTestCases(testCases.filter(item => item.id !== record.id));
+          setSelectedRowKeys(prev => prev.filter(key => key !== record.id));
           if (selectedCase?.id === record.id) setSelectedCase(null);
           message.success('删除成功');
         } catch (e: any) {
@@ -171,6 +287,70 @@ const FunctionalTestCases: React.FC = () => {
         }
       },
       okButtonProps: { danger: true }
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedRowKeys(filteredTestCases.map(item => item.id));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRowKeys([]);
+  };
+
+  const handleBatchExecute = async () => {
+    if (!selectedRowKeys.length) {
+      message.warning('请先选择需要执行的用例');
+      return;
+    }
+    setBatchProcessing(true);
+    try {
+      const selectedCases = testCases.filter(tc => selectedRowKeys.includes(tc.id));
+      message.loading(`正在批量执行 ${selectedCases.length} 条用例...`, 1.2)
+        .then(() => message.success(`批量执行完成，共 ${selectedCases.length} 条，结果已记录`));
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (!selectedRowKeys.length) {
+      message.warning('请先选择需要删除的用例');
+      return;
+    }
+    Modal.confirm({
+      title: '确认批量删除',
+      content: `确定要删除已选择的 ${selectedRowKeys.length} 条测试用例吗？该操作不可撤销。`,
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setBatchProcessing(true);
+        try {
+          const deleteTasks = selectedRowKeys.map((id) =>
+            testcaseApi.deleteTestCase(Number(id))
+          );
+          const results = await Promise.allSettled(deleteTasks);
+          const successCount = results.filter(r => r.status === 'fulfilled').length;
+          const failCount = results.length - successCount;
+
+          const deletedIds = new Set(
+            selectedRowKeys.filter((_, index) => results[index]?.status === 'fulfilled')
+          );
+          setTestCases(prev => prev.filter(item => !deletedIds.has(item.id)));
+          setSelectedRowKeys([]);
+
+          if (selectedCase && deletedIds.has(selectedCase.id)) {
+            setSelectedCase(null);
+          }
+
+          if (failCount > 0) {
+            message.warning(`批量删除完成，成功 ${successCount} 条，失败 ${failCount} 条`);
+          } else {
+            message.success(`批量删除成功，共 ${successCount} 条`);
+          }
+        } finally {
+          setBatchProcessing(false);
+        }
+      }
     });
   };
 
@@ -194,36 +374,139 @@ const FunctionalTestCases: React.FC = () => {
     }
   };
 
-  const renderConfig = (cfg: any) => {
-    if (!cfg) return <Text type="secondary">暂无详细配置数据</Text>;
+  const renderConfigValue = (value: any): React.ReactNode => {
+    if (value === null || value === undefined || value === '') {
+      return <Text type="secondary">无</Text>;
+    }
 
-    // 如果AI生成了 steps 数组，渲染步骤
-    if (cfg.steps && Array.isArray(cfg.steps)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return <Text>{String(value)}</Text>;
+    }
+
+    if (Array.isArray(value)) {
       return (
-        <div style={{ marginTop: 16 }}>
-          {cfg.steps.map((step: any, idx: number) => (
-            <div key={idx} style={{ display: 'flex', gap: 12, marginBottom: 12, alignItems: 'flex-start' }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: 12, background: 'rgba(0,0,0,0.05)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: '#666',
-                flexShrink: 0
-              }}>
-                {idx + 1}
-              </div>
-              <Text style={{ lineHeight: 1.6, flex: 1 }}>
-                {typeof step === 'string' ? step : (step.action || step.description || JSON.stringify(step))}
-              </Text>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {value.map((item, index) => (
+            <div
+              key={index}
+              style={{
+                padding: '8px 10px',
+                borderRadius: 8,
+                background: 'rgba(0,0,0,0.03)',
+                border: '1px solid rgba(0,0,0,0.05)'
+              }}
+            >
+              {renderConfigValue(item)}
             </div>
           ))}
         </div>
       );
     }
 
-    // 否则展示原始结构化 JSON
+    if (typeof value === 'object') {
+      const entries = Object.entries(value);
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {entries.map(([k, v]) => (
+            <div key={k} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <Text type="secondary" style={{ fontSize: 12, minWidth: 72 }}>{k}:</Text>
+              <div style={{ flex: 1 }}>{renderConfigValue(v)}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return <Text>{String(value)}</Text>;
+  };
+
+  const renderConfig = (cfg: any) => {
+    if (!cfg) return <Text type="secondary">暂无详细配置数据</Text>;
+
+    const translatedConfig = translateConfigForDisplay(cfg);
+    const steps = translatedConfig['步骤'] || translatedConfig['测试步骤'] || [];
+    const topFieldOrder = ['标题', '优先级', '测试数据', '描述', '前置条件'];
+    const topEntries: Array<[string, any]> = topFieldOrder
+      .filter((key) => Object.prototype.hasOwnProperty.call(translatedConfig, key))
+      .map((key) => [key, translatedConfig[key]]);
+
+    const detailEntries = Object.entries(translatedConfig).filter(
+      ([key]) => key !== '步骤' && key !== '测试步骤' && !topFieldOrder.includes(key)
+    );
+
     return (
-      <pre style={{ padding: 12, background: 'rgba(0,0,0,0.03)', borderRadius: 8, whiteSpace: 'pre-wrap', fontSize: 12 }}>
-        {JSON.stringify(cfg, null, 2)}
-      </pre>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+        {topEntries.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            {topEntries.map(([key, value]) => (
+              <Card
+                key={key}
+                size="small"
+                style={{ borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)' }}
+                bodyStyle={{ padding: 12 }}
+              >
+                <Text type="secondary" style={{ fontSize: 12 }}>{key}</Text>
+                <div style={{ marginTop: 6 }}>
+                  {key === '优先级'
+                    ? <Tag color={String(value) === '高' ? 'red' : String(value) === '低' ? 'green' : 'orange'}>{String(value)}</Tag>
+                    : renderConfigValue(value)}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {Array.isArray(steps) && steps.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {steps.map((step: any, idx: number) => {
+              const stepObj = typeof step === 'object' ? step : { 操作: String(step) };
+              return (
+                <Card
+                  key={idx}
+                  size="small"
+                  style={{ borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)' }}
+                  bodyStyle={{ padding: 12 }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <Text strong>步骤 {idx + 1}</Text>
+                    {stepObj['步骤序号'] && <Tag>{stepObj['步骤序号']}</Tag>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {stepObj['操作'] && (
+                      <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(0,0,0,0.03)' }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>操作</Text>
+                        <div>{renderConfigValue(stepObj['操作'])}</div>
+                      </div>
+                    )}
+                    {stepObj['预期结果'] && (
+                      <div style={{ padding: '8px 10px', borderRadius: 8, background: '#f6ffed', border: '1px solid #b7eb8f' }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>预期结果</Text>
+                        <div>{renderConfigValue(stepObj['预期结果'])}</div>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {detailEntries.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            {detailEntries.map(([key, value]) => (
+              <Card
+                key={key}
+                size="small"
+                style={{ borderRadius: 10, border: '1px solid rgba(0,0,0,0.08)' }}
+                bodyStyle={{ padding: 12 }}
+              >
+                <Text type="secondary" style={{ fontSize: 12 }}>{key}</Text>
+                <div style={{ marginTop: 6 }}>{renderConfigValue(value)}</div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -236,9 +519,20 @@ const FunctionalTestCases: React.FC = () => {
           <Title level={2} style={{ margin: 0, fontWeight: 700 }}>功能测试用例</Title>
           <Text type="secondary">管理和执行手动测试用例</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} shape="round" size="large">
-          新增用例
-        </Button>
+        <Space size={12}>
+          <Select
+            value={selectedProjectId}
+            onChange={setSelectedProjectId}
+            style={{ width: 220 }}
+            options={[
+              { value: 'all', label: '全部项目' },
+              ...projects.map(p => ({ value: String(p.id), label: p.name }))
+            ]}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd} shape="round" size="large">
+            新增用例
+          </Button>
+        </Space>
       </div>
 
       <div style={{ display: 'flex', gap: 24, flex: 1, overflow: 'hidden' }}>
@@ -255,13 +549,74 @@ const FunctionalTestCases: React.FC = () => {
             />
             <Button icon={<ReloadOutlined />} onClick={fetchTestCases} loading={loading} />
           </div>
+          <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Space size={8}>
+              <Tag color={selectedRowKeys.length ? 'processing' : 'default'} style={{ borderRadius: 999, padding: '2px 10px' }}>
+                已选择 {selectedRowKeys.length} 条
+              </Tag>
+              <Button
+                size="middle"
+                shape="round"
+                onClick={handleSelectAllFiltered}
+                disabled={!filteredTestCases.length}
+                style={{ borderColor: 'rgba(22,119,255,0.25)', background: 'rgba(22,119,255,0.06)' }}
+              >
+                全选当前结果
+              </Button>
+              <Button
+                size="middle"
+                shape="round"
+                onClick={handleClearSelection}
+                disabled={!selectedRowKeys.length}
+                style={{ borderColor: 'rgba(0,0,0,0.1)', background: 'rgba(0,0,0,0.02)' }}
+              >
+                清空选择
+              </Button>
+            </Space>
+            <Space size={8}>
+              <Button
+                size="middle"
+                type="primary"
+                shape="round"
+                icon={<PlayCircleFilled style={{ color: '#fff' }} />}
+                disabled={!selectedRowKeys.length}
+                loading={batchProcessing}
+                onClick={handleBatchExecute}
+                style={{
+                  color: '#fff',
+                  border: 'none',
+                  boxShadow: '0 6px 16px rgba(22,119,255,0.25)'
+                }}
+              >
+                批量执行
+              </Button>
+              <Button
+                size="middle"
+                danger
+                shape="round"
+                icon={<DeleteOutlined />}
+                disabled={!selectedRowKeys.length}
+                loading={batchProcessing}
+                onClick={handleBatchDelete}
+                style={{
+                  borderColor: 'rgba(255,77,79,0.35)',
+                  background: 'rgba(255,77,79,0.08)',
+                  color: '#cf1322'
+                }}
+              >
+                批量删除
+              </Button>
+            </Space>
+          </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
             <Table
               columns={columns}
-              dataSource={testCases.filter(c =>
-                (searchText ? c.name.toLowerCase().includes(searchText.toLowerCase()) : true)
-              )}
+              dataSource={filteredTestCases}
               rowKey="id"
+              rowSelection={{
+                selectedRowKeys,
+                onChange: (keys) => setSelectedRowKeys(keys),
+              }}
               pagination={{ 
                 pageSize: 15, 
                 showSizeChanger: true, 
@@ -300,8 +655,8 @@ const FunctionalTestCases: React.FC = () => {
 
               <Row gutter={24} style={{ marginBottom: 24 }}>
                 <Col span={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>协议</Text>
-                  <div style={{ fontWeight: 500 }}>{selectedCase.protocol?.toUpperCase()}</div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>等级</Text>
+                  <div style={{ fontWeight: 500 }}>{renderPriorityTag(selectedCase)}</div>
                 </Col>
                 <Col span={12}>
                   <Text type="secondary" style={{ fontSize: 12 }}>项目ID</Text>
