@@ -1,0 +1,81 @@
+{
+  "version": "2.5.0",
+  "date": "2026-03-17",
+  "title": "测试计划体系上线、Webhook 通知配置接入与品牌名称更新",
+  "description": "本次发布完成了测试计划模块的核心建设，补齐了测试计划的增删改查、功能/接口测试用例关联与整计划执行能力；同时在系统设置中新增 Webhook 通知渠道配置，并在后端提供统一的 webhook_service 以便后续业务直接复用。系统展示名称也由“卷心菜”统一更新为“投石问路”。",
+  "features": [
+    {
+      "title": "测试计划管理模块",
+      "items": [
+        "新增测试计划数据模型，支持名称、负责人、优先级、执行方式、排期、进入准则、退出准则、标签等计划级字段。",
+        "支持测试计划 CRUD，可按项目维度维护测试计划集合。",
+        "测试计划可同时关联功能测试用例与接口测试用例，形成统一的大集合管理视图。",
+        "测试计划详情页提供计划概览、覆盖统计、关联用例列表和最近一次执行结果摘要。"
+      ]
+    },
+    {
+      "title": "测试计划执行能力",
+      "items": [
+        "新增测试计划执行记录模型，保存总条目数、通过/失败/错误/跳过数量和执行明细摘要。",
+        "支持一键批量执行计划内全部内容，优先复用现有 HTTP/TCP/MQ 执行能力。",
+        "接口测试用例可直接调用现有执行服务完成真实请求；功能测试用例在具备协议配置时可自动执行，缺少可执行配置时标记为跳过。",
+        "前端任务中心已接入测试计划执行过程，支持在任务中心追踪执行状态。"
+      ]
+    },
+    {
+      "title": "Webhook 通知配置与统一服务",
+      "items": [
+        "系统设置新增 Webhook 通知配置页，支持钉钉、飞书、企微、Welink、OpenClaw 等渠道的 URL、Secret、Token、App ID 等参数配置。",
+        "新增 webhook 分类系统配置，沿用现有 system_settings 表按类别持久化，避免引入额外配置表。",
+        "后端新增统一 webhook_service，封装默认渠道读取、启用渠道识别、单渠道发送和多渠道批量发送能力。",
+        "统一通知服务预留给后续测试计划执行、AI 任务完成、告警通知等业务直接复用。"
+      ]
+    },
+    {
+      "title": "品牌名称更新",
+      "items": [
+        "系统展示名称由“卷心菜”统一更新为“投石问路”。",
+        "同步更新了前端页头、侧边栏、浏览器标题、README、部署文档和开发文档中的产品名称。",
+        "保留现有图标组件文件名以减少代码噪音，仅替换用户可见名称。"
+      ]
+    }
+  ],
+  "improvements": [
+    "测试计划页面改为桌面端稳定左右双栏布局，避免在宽屏场景下错误堆叠为上下结构。",
+    "系统设置页由单一 AI 配置扩展为多标签配置中心，便于后续继续扩展全局通知、集成和凭证管理能力。",
+    "Webhook 能力统一封装为服务层，减少后续各业务模块重复拼装平台报文和签名逻辑的成本。"
+  ],
+  "file_changes": {
+    "added": [
+      "backend/api/v1/test_plans.py",
+      "backend/schemas/test_plan_schemas.py",
+      "backend/services/test_plan_service.py",
+      "backend/services/webhook_service.py",
+      "versions/v2.5.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/main.py",
+      "backend/api/deps.py",
+      "backend/config/settings.py",
+      "backend/utils/activity_logger.py",
+      "frontend/src/pages/TestCases/TestPlans.tsx",
+      "frontend/src/pages/SystemSettings.tsx",
+      "frontend/src/services/api.ts",
+      "frontend/src/components/Layout/AppHeader.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/common/CabbageIcon.tsx",
+      "frontend/public/index.html",
+      "README.md",
+      "docs/开发文档.md",
+      "DOCKER_DEPLOY.md",
+      "backend/init_mysql.sql"
+    ]
+  },
+  "notes": [
+    "测试计划相关数据表会在应用启动时通过 create_tables 自动创建，首次升级后需重启后端服务。",
+    "Webhook 目前已完成统一封装与配置接入，后续具体业务如需发送通知，可直接调用 webhook_service。",
+    "不同平台的机器人协议细节仍可能因实际接入方式存在差异，真实对接时可在统一服务基础上继续精调。"
+  ]
+}

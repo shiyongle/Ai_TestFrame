@@ -7,23 +7,25 @@ import {
     message,
     Typography,
     Tabs,
-    Space,
     Divider,
-    Alert
+    Alert,
+    Switch
 } from 'antd';
 import {
     SettingOutlined,
     SaveOutlined,
     RobotOutlined,
-    SafetyCertificateOutlined
+    SafetyCertificateOutlined,
+    NotificationOutlined
 } from '@ant-design/icons';
 import { systemApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
-const { TabPane } = Tabs;
+const { TextArea } = Input;
 
 const SystemSettings: React.FC = () => {
-    const [form] = Form.useForm();
+    const [aiForm] = Form.useForm();
+    const [webhookForm] = Form.useForm();
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -33,13 +35,24 @@ const SystemSettings: React.FC = () => {
     const loadSettings = async () => {
         setLoading(true);
         try {
-            const res = await systemApi.getSettings('llm');
-            // res returns { "OPENAI_API_KEY": { value: "...", description: "..." }, ... }
-            const initValues: any = {};
-            Object.keys(res).forEach(key => {
-                initValues[key] = res[key].value;
+            const [llmRes, webhookRes] = await Promise.all([
+                systemApi.getSettings('llm'),
+                systemApi.getSettings('webhook')
+            ]);
+
+            const llmValues: any = {};
+            Object.keys(llmRes || {}).forEach(key => {
+                llmValues[key] = llmRes[key].value;
             });
-            form.setFieldsValue(initValues);
+
+            const webhookValues: any = {};
+            Object.keys(webhookRes || {}).forEach(key => {
+                const rawValue = webhookRes[key].value;
+                webhookValues[key] = rawValue === 'true' ? true : rawValue === 'false' ? false : rawValue;
+            });
+
+            aiForm.setFieldsValue(llmValues);
+            webhookForm.setFieldsValue(webhookValues);
         } catch (error) {
             message.error('加载系统配置失败');
         } finally {
@@ -66,6 +79,25 @@ const SystemSettings: React.FC = () => {
         }
     };
 
+    const handleSaveWebhookConfig = async (values: any) => {
+        setLoading(true);
+        try {
+            const settingsPayload = Object.keys(values).map(key => ({
+                setting_key: key,
+                setting_value: typeof values[key] === 'boolean' ? String(values[key]) : (values[key] || ''),
+                description: getWebhookDescription(key)
+            }));
+
+            await systemApi.updateSettings('webhook', { settings: settingsPayload });
+            message.success('Webhook 配置保存成功');
+            loadSettings();
+        } catch (error) {
+            message.error('保存失败');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // 映射英文Key和帮助说明
     const getAIDescription = (key: string) => {
         const map: any = {
@@ -84,6 +116,79 @@ const SystemSettings: React.FC = () => {
         return map[key] || '';
     };
 
+    const getWebhookDescription = (key: string) => {
+        const map: any = {
+            'WEBHOOK_DEFAULT_PROVIDER': '默认启用的 Webhook 渠道标识',
+            'WEBHOOK_MESSAGE_TEMPLATE': '默认通知消息模板',
+
+            'WEBHOOK_DINGTALK_ENABLED': '钉钉机器人开关',
+            'WEBHOOK_DINGTALK_URL': '钉钉机器人 Webhook 地址',
+            'WEBHOOK_DINGTALK_SECRET': '钉钉加签密钥',
+
+            'WEBHOOK_FEISHU_ENABLED': '飞书机器人开关',
+            'WEBHOOK_FEISHU_URL': '飞书机器人 Webhook 地址',
+            'WEBHOOK_FEISHU_SECRET': '飞书签名或校验密钥',
+
+            'WEBHOOK_WEWORK_ENABLED': '企微机器人开关',
+            'WEBHOOK_WEWORK_URL': '企微群机器人 Webhook 地址',
+            'WEBHOOK_WEWORK_SECRET': '企微附加密钥或占位字段',
+
+            'WEBHOOK_WELINK_ENABLED': 'Welink 机器人开关',
+            'WEBHOOK_WELINK_URL': 'Welink 机器人 Webhook 地址',
+            'WEBHOOK_WELINK_APP_ID': 'Welink 应用或机器人 ID',
+            'WEBHOOK_WELINK_APP_SECRET': 'Welink 应用密钥',
+
+            'WEBHOOK_OPENCLAW_ENABLED': 'OpenClaw 渠道开关',
+            'WEBHOOK_OPENCLAW_URL': 'OpenClaw Webhook 地址',
+            'WEBHOOK_OPENCLAW_TOKEN': 'OpenClaw Token / 密钥',
+        };
+        return map[key] || '';
+    };
+
+    const webhookCards = [
+        {
+            title: '钉钉',
+            fields: [
+                { type: 'switch', label: '启用渠道', name: 'WEBHOOK_DINGTALK_ENABLED' },
+                { label: 'Webhook URL', name: 'WEBHOOK_DINGTALK_URL', placeholder: 'https://oapi.dingtalk.com/robot/send?...' },
+                { label: '加签 Secret', name: 'WEBHOOK_DINGTALK_SECRET', placeholder: 'SEC...' }
+            ]
+        },
+        {
+            title: '飞书',
+            fields: [
+                { type: 'switch', label: '启用渠道', name: 'WEBHOOK_FEISHU_ENABLED' },
+                { label: 'Webhook URL', name: 'WEBHOOK_FEISHU_URL', placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/...' },
+                { label: '签名 Secret', name: 'WEBHOOK_FEISHU_SECRET', placeholder: '签名密钥，可选' }
+            ]
+        },
+        {
+            title: '企微',
+            fields: [
+                { type: 'switch', label: '启用渠道', name: 'WEBHOOK_WEWORK_ENABLED' },
+                { label: 'Webhook URL', name: 'WEBHOOK_WEWORK_URL', placeholder: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...' },
+                { label: '扩展 Secret', name: 'WEBHOOK_WEWORK_SECRET', placeholder: '如无需可留空' }
+            ]
+        },
+        {
+            title: 'Welink',
+            fields: [
+                { type: 'switch', label: '启用渠道', name: 'WEBHOOK_WELINK_ENABLED' },
+                { label: 'Webhook URL', name: 'WEBHOOK_WELINK_URL', placeholder: 'Welink 机器人地址' },
+                { label: 'App ID', name: 'WEBHOOK_WELINK_APP_ID', placeholder: '应用或机器人 ID' },
+                { label: 'App Secret', name: 'WEBHOOK_WELINK_APP_SECRET', placeholder: '应用密钥' }
+            ]
+        },
+        {
+            title: 'OpenClaw',
+            fields: [
+                { type: 'switch', label: '启用渠道', name: 'WEBHOOK_OPENCLAW_ENABLED' },
+                { label: 'Webhook URL', name: 'WEBHOOK_OPENCLAW_URL', placeholder: 'OpenClaw Webhook 地址' },
+                { label: 'Token', name: 'WEBHOOK_OPENCLAW_TOKEN', placeholder: '访问 Token / API Key' }
+            ]
+        }
+    ];
+
     return (
         <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
             <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -95,12 +200,15 @@ const SystemSettings: React.FC = () => {
             </div>
 
             <Card bordered={false} className="glass-panel" style={{ borderRadius: 16 }}>
-                <Tabs defaultActiveKey="ai" tabPosition="left" style={{ minHeight: 600 }}>
-
-                    <TabPane
-                        tab={<span><RobotOutlined /> AI 大模型配置</span>}
-                        key="ai"
-                    >
+                <Tabs
+                    defaultActiveKey="ai"
+                    tabPosition="left"
+                    style={{ minHeight: 600 }}
+                    items={[
+                        {
+                            key: 'ai',
+                            label: <span><RobotOutlined /> AI 大模型配置</span>,
+                            children: (
                         <div style={{ padding: '0 24px' }}>
                             <Title level={4}><SafetyCertificateOutlined /> LLM API 凭证管理</Title>
                             <Paragraph type="secondary" style={{ marginBottom: 24 }}>
@@ -116,7 +224,7 @@ const SystemSettings: React.FC = () => {
                             />
 
                             <Form
-                                form={form}
+                                form={aiForm}
                                 layout="vertical"
                                 onFinish={handleSaveAIConfig}
                                 initialValues={{
@@ -191,9 +299,86 @@ const SystemSettings: React.FC = () => {
                                 </div>
                             </Form>
                         </div>
-                    </TabPane>
+                            )
+                        },
+                        {
+                            key: 'webhook',
+                            label: <span><NotificationOutlined /> Webhook 通知配置</span>,
+                            children: (
+                                <div style={{ padding: '0 24px' }}>
+                                    <Title level={4}><NotificationOutlined /> Webhook 渠道管理</Title>
+                                    <Paragraph type="secondary" style={{ marginBottom: 24 }}>
+                                        配置测试执行、告警通知、AI 任务结果等场景可使用的 Webhook 渠道。当前支持钉钉、飞书、企微、Welink、OpenClaw，也预留了默认渠道和统一消息模板配置。
+                                    </Paragraph>
 
-                </Tabs>
+                                    <Alert
+                                        message="配置建议"
+                                        description="建议至少配置一个默认可用渠道。URL、Token、Secret 等字段按各平台机器人规范填写；未启用的渠道可留空。"
+                                        type="info"
+                                        showIcon
+                                        style={{ marginBottom: 32, borderRadius: 8 }}
+                                    />
+
+                                    <Form
+                                        form={webhookForm}
+                                        layout="vertical"
+                                        onFinish={handleSaveWebhookConfig}
+                                        initialValues={{
+                                            WEBHOOK_DEFAULT_PROVIDER: 'dingtalk',
+                                            // eslint-disable-next-line no-template-curly-in-string
+                                            WEBHOOK_MESSAGE_TEMPLATE: '【投石问路】${title}\n状态：${status}\n内容：${content}',
+                                            WEBHOOK_DINGTALK_ENABLED: false,
+                                            WEBHOOK_FEISHU_ENABLED: false,
+                                            WEBHOOK_WEWORK_ENABLED: false,
+                                            WEBHOOK_WELINK_ENABLED: false,
+                                            WEBHOOK_OPENCLAW_ENABLED: false,
+                                        }}
+                                    >
+                                        <Card size="small" title="全局策略" className="glass-panel" style={{ borderRadius: 12, marginBottom: 24 }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
+                                                <Form.Item label="默认渠道" name="WEBHOOK_DEFAULT_PROVIDER">
+                                                    <Input placeholder="dingtalk / feishu / wework / welink / openclaw" />
+                                                </Form.Item>
+                                                <Form.Item label="统一消息模板" name="WEBHOOK_MESSAGE_TEMPLATE" style={{ gridColumn: '1 / -1' }}>
+                                                    <TextArea rows={4} placeholder="支持保存默认通知模板，例如标题、状态、正文等变量占位内容。" />
+                                                </Form.Item>
+                                            </div>
+                                        </Card>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '24px' }}>
+                                            {webhookCards.map(card => (
+                                                <Card key={card.title} size="small" title={card.title} className="glass-panel" style={{ borderRadius: 12 }}>
+                                                    {card.fields.map((field: any) => (
+                                                        field.type === 'switch' ? (
+                                                            <Form.Item key={field.name} label={field.label} name={field.name} valuePropName="checked">
+                                                                <Switch checkedChildren="启用" unCheckedChildren="关闭" />
+                                                            </Form.Item>
+                                                        ) : (
+                                                            <Form.Item key={field.name} label={field.label} name={field.name}>
+                                                                {String(field.name).includes('SECRET') || String(field.name).includes('TOKEN') ? (
+                                                                    <Input.Password placeholder={field.placeholder} />
+                                                                ) : (
+                                                                    <Input placeholder={field.placeholder} />
+                                                                )}
+                                                            </Form.Item>
+                                                        )
+                                                    ))}
+                                                </Card>
+                                            ))}
+                                        </div>
+
+                                        <Divider />
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                                            <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading} size="large" style={{ minWidth: 160, borderRadius: 8 }}>
+                                                保存 Webhook 配置
+                                            </Button>
+                                        </div>
+                                    </Form>
+                                </div>
+                            )
+                        }
+                    ]}
+                />
             </Card>
         </div>
     );
