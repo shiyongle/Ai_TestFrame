@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """应用配置类"""
     
     # 应用基础配置
-    app_name: str = "卷心菜API"
+    app_name: str = "投石问路API"
     app_version: str = "1.0.0"
     debug: bool = False
     

@@ -3,7 +3,7 @@
 Usage:
     from utils.activity_logger import log_activity
 
-    log_activity(db, user="管理员", action="create", module="项目", target_name="卷心菜平台")
+    log_activity(db, user="管理员", action="create", module="项目", target_name="投石问路平台")
 """
 from models.database_models import ActivityLog
 from sqlalchemy.orm import Session

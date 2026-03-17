@@ -16,7 +16,7 @@ const CabbageIcon: React.FC<CabbageIconProps> = ({ size = 22, className, style }
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       style={style}
-      aria-label="Blue cabbage icon"
+      aria-label="TouShiWenLu icon"
     >
       <defs>
         <radialGradient id="cabbageCore" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(12 12.5) rotate(90) scale(9.8)">

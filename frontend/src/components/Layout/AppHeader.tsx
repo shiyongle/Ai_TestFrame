@@ -83,7 +83,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
         <Space size="small" align="center">
           <CabbageIcon size={22} />
           <Text strong style={{ fontSize: '17px', color: '#0b0f1a' }}>
-            卷心菜
+            投石问路
           </Text>
         </Space>
       </Space>

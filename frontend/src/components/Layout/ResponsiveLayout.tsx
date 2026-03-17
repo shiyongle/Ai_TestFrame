@@ -311,7 +311,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       >
         <Space size={collapsed ? 8 : 14} style={{ overflow: 'hidden' }}>
           <CabbageIcon size={22} />
-          {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>卷心菜</span>}
+          {!collapsed && <span style={{ whiteSpace: 'nowrap' }}>投石问路</span>}
         </Space>
         {!isMobile && (
           <div
@@ -368,7 +368,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               <span style={{ marginRight: '8px', display: 'inline-flex' }}>
                 <CabbageIcon size={20} />
               </span>
-              卷心菜-智能化测试平台
+              投石问路-智能化测试平台
             </div>
           }
           placement="left"

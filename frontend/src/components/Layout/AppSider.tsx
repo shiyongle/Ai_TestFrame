@@ -178,7 +178,7 @@ const AppSider: React.FC = () => {
         }}
       >
         <ThunderboltOutlined style={{ marginRight: collapsed ? '0' : '8px', fontSize: '20px' }} />
-        {!collapsed && '卷心菜'}
+        {!collapsed && '投石问路'}
       </div>
       <Menu
         theme="dark"

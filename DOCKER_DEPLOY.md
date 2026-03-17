@@ -1,6 +1,6 @@
 # Docker 部署指南
 
-本文档介绍如何使用 Docker 在 Linux/Ubuntu 服务器上部署卷心菜。
+本文档介绍如何使用 Docker 在 Linux/Ubuntu 服务器上部署投石问路。
 
 ## 系统要求
 
