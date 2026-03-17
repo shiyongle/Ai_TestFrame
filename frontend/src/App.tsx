@@ -25,6 +25,7 @@ import Requirements from './pages/Requirements';
 import RuleConfig from './pages/RuleConfig';
 import AiKnowledge from './pages/AiKnowledge';
 import SystemSettings from './pages/SystemSettings';
+import TaskCenter from './pages/TaskCenter';
 
 const { Content } = Layout;
 
@@ -92,6 +93,7 @@ const App: React.FC = () => {
               <Route path="/reports" element={<Reports />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
+              <Route path="/tasks" element={<TaskCenter />} />
             </Routes>
           </div>
         </Content>

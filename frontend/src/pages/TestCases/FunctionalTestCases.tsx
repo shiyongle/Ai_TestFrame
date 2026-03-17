@@ -27,6 +27,7 @@ import {
   SearchOutlined,
   CopyOutlined,
   PlayCircleFilled,
+  DownloadOutlined,
   FileTextOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
@@ -36,6 +37,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { testcaseApi, projectApi } from '../../services/api';
+import { taskCenter } from '../../services/taskCenter';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -304,10 +306,23 @@ const FunctionalTestCases: React.FC = () => {
       return;
     }
     setBatchProcessing(true);
+    const selectedCases = testCases.filter(tc => selectedRowKeys.includes(tc.id));
+    const taskId = taskCenter.createTask({
+      type: 'batch_execute_functional',
+      title: `批量执行功能用例（${selectedCases.length} 条）`,
+      detail: '正在初始化执行任务',
+      status: 'running',
+      progress: 10,
+    });
+    taskCenter.startAutoProgress(taskId, { max: 92, step: 12, intervalMs: 800 });
     try {
-      const selectedCases = testCases.filter(tc => selectedRowKeys.includes(tc.id));
       message.loading(`正在批量执行 ${selectedCases.length} 条用例...`, 1.2)
         .then(() => message.success(`批量执行完成，共 ${selectedCases.length} 条，结果已记录`));
+      setTimeout(() => {
+        taskCenter.markSuccess(taskId, `批量执行完成，共 ${selectedCases.length} 条`);
+      }, 1400);
+    } catch (e: any) {
+      taskCenter.markFailed(taskId, e?.response?.data?.detail || '批量执行失败');
     } finally {
       setBatchProcessing(false);
     }
@@ -352,6 +367,151 @@ const FunctionalTestCases: React.FC = () => {
         }
       }
     });
+  };
+
+  const toFlatText = (value: any): string => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.map(item => toFlatText(item)).filter(Boolean).join(' | ');
+    }
+    if (typeof value === 'object') {
+      try {
+        return Object.entries(value)
+          .map(([k, v]) => `${k}: ${toFlatText(v)}`)
+          .join(' ; ');
+      } catch {
+        return '';
+      }
+    }
+    return String(value);
+  };
+
+  const getConfigValue = (cfg: any, keys: string[]): any => {
+    if (!cfg || typeof cfg !== 'object') return '';
+    for (const key of keys) {
+      if (cfg[key] !== undefined && cfg[key] !== null && cfg[key] !== '') {
+        return cfg[key];
+      }
+    }
+    return '';
+  };
+
+  const getStepsText = (cfg: any): string => {
+    const steps = getConfigValue(cfg, ['test_steps', 'steps', '测试步骤', '步骤']);
+    if (!steps) return '';
+
+    if (Array.isArray(steps)) {
+      return steps.map((step, index) => {
+        if (typeof step === 'string') return `${index + 1}. ${step}`;
+        const action = step?.action ?? step?.操作 ?? '';
+        const expected = step?.expected ?? step?.预期结果 ?? '';
+        const stepNo = step?.step ?? step?.步骤序号 ?? (index + 1);
+        if (action || expected) {
+          return `${stepNo}. 操作: ${toFlatText(action)} | 预期: ${toFlatText(expected)}`;
+        }
+        return `${index + 1}. ${toFlatText(step)}`;
+      }).join('\n');
+    }
+    return toFlatText(steps);
+  };
+
+  const csvEscape = (value: any): string => {
+    const text = String(value ?? '');
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const handleExportCsv = () => {
+    const exportCases = selectedRowKeys.length
+      ? testCases.filter(tc => selectedRowKeys.includes(tc.id))
+      : testCases;
+
+    if (!exportCases.length) {
+      message.warning('暂无可导出的用例数据');
+      return;
+    }
+
+    const taskId = taskCenter.createTask({
+      type: 'batch_export_csv',
+      title: `导出功能用例 CSV（${selectedRowKeys.length ? '选中' : '全量'}）`,
+      detail: '正在生成导出文件',
+      status: 'running',
+      progress: 20,
+    });
+    taskCenter.startAutoProgress(taskId, { max: 90, step: 20, intervalMs: 300 });
+
+    try {
+      const headers = [
+      '用例ID',
+      '项目ID',
+      '用例标题',
+      '优先级',
+      '测试数据',
+      '描述',
+      '前置条件',
+      '步骤',
+      '预期结果',
+      '备注',
+      '创建时间',
+      '更新时间'
+    ];
+
+      const rows = exportCases.map((record) => {
+      const cfg = record.config || {};
+      const priority = getPriorityDisplay(record).text;
+      const title = getConfigValue(cfg, ['title', 'name', '标题', '名称']) || record.name || '';
+      const testData = getConfigValue(cfg, ['test_data', 'testData', '测试数据']);
+      const description = getConfigValue(cfg, ['description', '描述']) || record.description || '';
+      const preconditions = getConfigValue(cfg, ['preconditions', '前置条件']);
+      const expectedResult = getConfigValue(cfg, ['expected_result', 'expectedResult', '预期结果', '最终期望']);
+      const notes = getConfigValue(cfg, ['notes', 'remark', '备注']);
+      const stepsText = getStepsText(cfg);
+
+      return [
+        record.id,
+        record.project_id,
+        title,
+        priority,
+        toFlatText(testData),
+        toFlatText(description),
+        toFlatText(preconditions),
+        stepsText,
+        toFlatText(expectedResult),
+        toFlatText(notes),
+        record.created_at ? new Date(record.created_at).toLocaleString() : '',
+        record.updated_at ? new Date(record.updated_at).toLocaleString() : ''
+      ];
+    });
+
+      const csvContent = [
+      headers.map(csvEscape).join(','),
+      ...rows.map(row => row.map(csvEscape).join(','))
+      ].join('\r\n');
+
+      const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      link.href = url;
+      link.download = `功能测试用例_${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      taskCenter.markSuccess(taskId, `导出完成，共 ${exportCases.length} 条`);
+
+      if (selectedRowKeys.length) {
+        message.success(`导出成功，已导出 ${exportCases.length} 条选中用例`);
+      } else {
+        message.success(`导出成功，已导出全量 ${exportCases.length} 条用例`);
+      }
+    } catch (e: any) {
+      taskCenter.markFailed(taskId, e?.message || '导出失败');
+      message.error(e?.message || '导出失败');
+    }
   };
 
   const handleSubmit = async () => {
@@ -605,6 +765,20 @@ const FunctionalTestCases: React.FC = () => {
                 }}
               >
                 批量删除
+              </Button>
+              <Button
+                size="middle"
+                shape="round"
+                icon={<DownloadOutlined />}
+                onClick={handleExportCsv}
+                disabled={!testCases.length}
+                style={{
+                  borderColor: 'rgba(22,119,255,0.3)',
+                  background: 'rgba(22,119,255,0.08)',
+                  color: '#1677ff'
+                }}
+              >
+                导出 CSV
               </Button>
             </Space>
           </div>

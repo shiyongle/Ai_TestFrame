@@ -6,10 +6,13 @@ import {
   SettingOutlined,
   LogoutOutlined,
   BellOutlined,
+  HourglassOutlined,
   MenuOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
+import { useNavigate } from 'react-router-dom';
+import { taskCenter } from '../../services/taskCenter';
 
 const { Header } = Layout;
 const { Text } = Typography;
@@ -20,6 +23,16 @@ interface AppHeaderProps {
 }
 
 const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = false }) => {
+  const navigate = useNavigate();
+  const [runningTaskCount, setRunningTaskCount] = React.useState(0);
+
+  React.useEffect(() => {
+    const syncCount = () => setRunningTaskCount(taskCenter.getRunningCount());
+    syncCount();
+    const unsubscribe = taskCenter.subscribe(syncCount);
+    return unsubscribe;
+  }, []);
+
   const userMenuItems: MenuProps['items'] = [
     {
       key: 'profile',
@@ -76,9 +89,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
       </Space>
 
       <Space size="middle">
-
         <Badge dot>
           <Button type="text" icon={<BellOutlined />} style={{ fontSize: '16px' }} />
+        </Badge>
+        <Badge count={runningTaskCount} size="small" overflowCount={99}>
+          <Button
+            type="text"
+            icon={<HourglassOutlined />}
+            style={{ fontSize: '16px' }}
+            onClick={() => navigate('/tasks')}
+          />
         </Badge>
         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
           <Space style={{ cursor: 'pointer' }}>

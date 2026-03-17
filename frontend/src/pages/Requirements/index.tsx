@@ -35,6 +35,7 @@ import {
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { projectApi, requirementApi } from '../../services/api';
+import { taskCenter } from '../../services/taskCenter';
 import { Project } from '../../types';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -221,11 +222,21 @@ const Requirements: React.FC = () => {
   const handleGenerate = async (model: string) => {
     if (!selectedRequirement) return;
     setGenerating(true);
+    const taskId = taskCenter.createTask({
+      type: 'ai_generate_requirement',
+      title: `AI 生成用例（需求：${selectedRequirement.title}）`,
+      detail: `正在提交生成请求（模型：${model}）`,
+      status: 'running',
+      progress: 12,
+    });
+    taskCenter.startAutoProgress(taskId, { max: 88, step: 9, intervalMs: 1200 });
     try {
       const res = await requirementApi.generateTestCases(Number(selectedRequirement.id), model);
+      taskCenter.markSuccess(taskId, '任务已提交至后台执行，可在测试用例库查看生成结果');
       message.success(res.message || '✅ 生成请求已提交至后台处理中，稍后请在测试用例库查看');
       setGenerateModalVisible(false);
     } catch (e: any) {
+      taskCenter.markFailed(taskId, e?.response?.data?.detail || '提交生成任务失败');
       message.error(e?.response?.data?.detail || '提交生成任务失败');
     } finally {
       setGenerating(false);

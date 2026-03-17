@@ -42,6 +42,7 @@ import {
   ProjectOutlined
 } from '@ant-design/icons';
 import { versionApi, requirementApi, aiApi, projectApi } from '../services/api';
+import { taskCenter } from '../services/taskCenter';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -253,11 +254,21 @@ const Versions: React.FC = () => {
   const handleGenerate = async (model: string) => {
     if (!selectedVersion) return;
     setGenerating(true);
+    const taskId = taskCenter.createTask({
+      type: 'ai_generate_version',
+      title: `AI 生成用例（版本：${selectedVersion.version_number}）`,
+      detail: `正在提交生成请求（模型：${model}）`,
+      status: 'running',
+      progress: 12,
+    });
+    taskCenter.startAutoProgress(taskId, { max: 88, step: 9, intervalMs: 1200 });
     try {
       const res = await versionApi.generateTestCases(selectedVersion.id, model);
+      taskCenter.markSuccess(taskId, '任务已提交至后台执行，可在测试用例库查看生成结果');
       message.success(res.message || '✅ 生成请求已提交至后台处理中，稍后请在测试用例库查看');
       setGenerateModalVisible(false);
     } catch (e: any) {
+      taskCenter.markFailed(taskId, e?.response?.data?.detail || '提交生成任务失败');
       message.error(e?.response?.data?.detail || '提交生成任务失败');
     }
     finally { setGenerating(false); }
