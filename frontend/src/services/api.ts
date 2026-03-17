@@ -147,4 +147,11 @@ export const dashboardApi = {
   getActivities: (params?: { limit?: number; offset?: number }): Promise<any> => api.get('/api/v1/dashboard/activities', { params }),
 };
 
+// 测试报告 API
+export const reportApi = {
+  getOverview: (params?: { start_date?: string; end_date?: string; limit?: number; offset?: number }): Promise<any> =>
+    api.get('/api/v1/reports/overview/stats', { params }),
+};
 export default api;
+
+

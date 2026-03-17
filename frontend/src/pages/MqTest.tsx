@@ -1,343 +1,275 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Card,
-  Input,
+  Alert,
   Button,
-  Typography,
-  Space,
-  message,
-  Select,
-  Row,
+  Card,
   Col,
-  List,
+  Empty,
+  Input,
+  InputNumber,
+  Row,
+  Select,
+  Space,
   Tag,
-  Form,
-  Switch,
-  Tooltip,
-  Badge
+  Typography,
+  message,
 } from 'antd';
 import {
-  CloudServerOutlined,
+  ClockCircleOutlined,
+  HistoryOutlined,
   SendOutlined,
-  DisconnectOutlined,
-  LinkOutlined,
-  DatabaseOutlined,
-  NotificationOutlined,
-  PlayCircleOutlined,
-  StopOutlined,
-  ClearOutlined,
-  UserOutlined,
-  LockOutlined,
-  NumberOutlined
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import { testApi } from '../services/api';
+import { MqTestResponse } from '../types';
 
 const { Title, Text } = Typography;
-const { TextArea } = Input;
-const { Option } = Select;
+const { TextArea, Password } = Input;
 
-interface LogMessage {
-  id: string;
-  topic: string;
-  content: string;
-  time: string;
-  size: string;
-  qos?: number;
+interface HistoryItem {
+  mqType: string;
+  host: string;
+  port: number;
+  queueName: string;
+  executionTime: number;
+  success: boolean;
+  createdAt: string;
 }
 
+const codeBlockStyle: React.CSSProperties = {
+  margin: 0,
+  maxHeight: 300,
+  overflow: 'auto',
+  background: '#0f172a',
+  color: '#dbeafe',
+  padding: 12,
+  borderRadius: 8,
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
 const MqTest: React.FC = () => {
-  const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [logs, setLogs] = useState<LogMessage[]>([]);
+  const [result, setResult] = useState<MqTestResponse | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
-  // Connection State
-  const [brokerType, setBrokerType] = useState('mqtt');
-  const [host, setHost] = useState('broker.emqx.io'); // Public broker for demo
-  const [port, setPort] = useState('1883');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [clientId, setClientId] = useState(`client_${Math.random().toString(16).substr(2, 8)}`);
+  const [mqType, setMqType] = useState<'rabbitmq' | 'activemq' | 'kafka'>('rabbitmq');
+  const [host, setHost] = useState('127.0.0.1');
+  const [port, setPort] = useState(5672);
+  const [username, setUsername] = useState('guest');
+  const [password, setPassword] = useState('guest');
+  const [queueName, setQueueName] = useState('default');
+  const [exchange, setExchange] = useState('');
+  const [routingKey, setRoutingKey] = useState('');
+  const [timeout, setTimeoutValue] = useState(30);
+  const [messageBody, setMessageBody] = useState('');
 
-  // Producer State
-  const [pubTopic, setPubTopic] = useState('test/topic');
-  const [msgContent, setMsgContent] = useState('{"msg": "Hello World"}');
-  const [qos, setQos] = useState(0);
-  const [retain, setRetain] = useState(false);
+  const responseText = useMemo(() => {
+    if (!result) return '';
+    if (!result.response_data) return '';
+    return String(result.response_data);
+  }, [result]);
 
-  // Consumer State
-  const [subTopic, setSubTopic] = useState('#');
-  const [isSubscribing, setIsSubscribing] = useState(false);
-  const [subQos, setSubQos] = useState(0);
+  const handleSend = async () => {
+    if (!host.trim()) {
+      message.error('请输入 Host');
+      return;
+    }
+    if (!queueName.trim()) {
+      message.error('请输入队列名');
+      return;
+    }
+    if (!messageBody.trim()) {
+      message.error('请输入消息体');
+      return;
+    }
 
-  const handleConnect = () => {
     setLoading(true);
-    // Simulate Connection
-    setTimeout(() => {
-      setConnected(true);
+    try {
+      const res = await testApi.testMq({
+        host: host.trim(),
+        port,
+        queue_name: queueName.trim(),
+        message: messageBody,
+        exchange: exchange.trim() || undefined,
+        routing_key: routingKey.trim() || undefined,
+        timeout,
+        mq_type: mqType,
+        username: username || undefined,
+        password: password || undefined,
+      } as any);
+      setResult(res);
+      setHistory((prev) => [
+        {
+          mqType,
+          host: host.trim(),
+          port,
+          queueName: queueName.trim(),
+          executionTime: res.execution_time,
+          success: !!res.success,
+          createdAt: new Date().toLocaleTimeString(),
+        },
+        ...prev,
+      ].slice(0, 12));
+
+      if (res.success) message.success('MQ 测试成功');
+      else message.warning(res.error_message || 'MQ 测试失败');
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || 'MQ 测试失败');
+      setResult({
+        success: false,
+        execution_time: 0,
+        response_data: '',
+        error_message: e?.response?.data?.detail || 'MQ 测试失败',
+      });
+    } finally {
       setLoading(false);
-      message.success(`Connected to ${host}:${port}`);
-    }, 1000);
-  };
-
-  const handleDisconnect = () => {
-    setConnected(false);
-    setIsSubscribing(false);
-    message.info('Disconnected');
-  };
-
-  const handlePublish = () => {
-    if (!msgContent) return;
-    message.success(`Message sent to ${pubTopic} (QoS ${qos})`);
-
-    // If subscribing to matching pattern, echo for demo
-    if (isSubscribing) {
-      setTimeout(() => {
-        addLog(pubTopic, msgContent, qos);
-      }, 200);
     }
   };
-
-  const toggleSubscribe = () => {
-    if (isSubscribing) {
-      setIsSubscribing(false);
-      message.info('Stopped subscription');
-    } else {
-      setIsSubscribing(true);
-      message.success(`Subscribed to ${subTopic} (QoS ${subQos})`);
-    }
-  };
-
-  const addLog = (topic: string, content: string, qosVal: number) => {
-    setLogs(prev => [{
-      id: Date.now().toString(),
-      topic,
-      content,
-      time: dayjs().format('HH:mm:ss.SSS'),
-      size: `${content.length} B`,
-      qos: qosVal
-    }, ...prev].slice(0, 100)); // Keep last 100
-  };
-
-  const clearLogs = () => setLogs([]);
 
   return (
-    <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1600, margin: '0 auto', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <Title level={2} style={{ margin: 0, fontWeight: 700 }}>MQ 调试工具</Title>
-        <Text type="secondary">MQTT 消息代理服务连接与消息测试</Text>
+    <div
+      className="app-content fade-in"
+      style={{ padding: 24, maxWidth: 1600, margin: '0 auto', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}
+    >
+      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <Title level={2} style={{ margin: 0, fontWeight: 700 }}>MQ 测试</Title>
+          <Text type="secondary">连接消息中间件并快速验证发送链路与响应</Text>
+        </div>
+        <Space>
+          <Tag icon={<HistoryOutlined />} color="blue">最近记录 {history.length}</Tag>
+          <Tag icon={<ClockCircleOutlined />} color="geekblue">超时 {timeout}s</Tag>
+        </Space>
       </div>
 
-      <div className="glass-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
-
-        {/* Top Bar: Connection Config */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0f0f0', background: '#fafafa' }}>
-          <Row gutter={16} align="middle">
-            <Col>
-              <Select value={brokerType} onChange={setBrokerType} style={{ width: 90 }} disabled={connected}>
-                <Option value="mqtt">MQTT</Option>
-                <Option value="ws">WS</Option>
-              </Select>
-            </Col>
-            <Col flex="auto">
-              <Input.Group compact style={{ display: 'flex' }}>
-                <Input
-                  placeholder="Broker Host"
-                  value={host}
-                  onChange={e => setHost(e.target.value)}
-                  style={{ width: '35%' }}
-                  disabled={connected}
-                  prefix={<CloudServerOutlined style={{ color: '#ccc' }} />}
-                />
-                <Input
-                  placeholder="Port"
-                  value={port}
-                  onChange={e => setPort(e.target.value)}
-                  style={{ width: '15%' }}
-                  disabled={connected}
-                />
-                <Input
-                  placeholder="Username"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  style={{ width: '25%' }}
-                  disabled={connected}
-                  prefix={<UserOutlined style={{ color: '#ccc' }} />}
-                />
-                <Input.Password
-                  placeholder="Password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  style={{ width: '25%' }}
-                  disabled={connected}
-                  prefix={<LockOutlined style={{ color: '#ccc' }} />}
-                />
-              </Input.Group>
-            </Col>
-            <Col>
-              <Input
-                placeholder="Client ID"
-                value={clientId}
-                onChange={e => setClientId(e.target.value)}
-                style={{ width: 150 }}
-                disabled={connected}
+      <div style={{ display: 'grid', gridTemplateColumns: '58% 42%', gap: 14, flex: 1, minHeight: 0 }}>
+        <Card title="请求配置" style={{ borderRadius: 16 }} bodyStyle={{ overflow: 'auto' }}>
+          <Row gutter={[12, 12]}>
+            <Col span={8}>
+              <Text type="secondary">MQ 类型</Text>
+              <Select
+                style={{ marginTop: 6, width: '100%' }}
+                value={mqType}
+                onChange={setMqType}
+                options={[
+                  { value: 'rabbitmq', label: 'RabbitMQ' },
+                  { value: 'activemq', label: 'ActiveMQ' },
+                  { value: 'kafka', label: 'Kafka' },
+                ]}
               />
             </Col>
-            <Col>
-              {!connected ? (
-                <Button type="primary" icon={<LinkOutlined />} onClick={handleConnect} loading={loading}>连接</Button>
-              ) : (
-                <Button danger icon={<DisconnectOutlined />} onClick={handleDisconnect}>断开</Button>
-              )}
+            <Col span={10}>
+              <Text type="secondary">Host</Text>
+              <Input style={{ marginTop: 6 }} value={host} onChange={(e) => setHost(e.target.value)} />
+            </Col>
+            <Col span={6}>
+              <Text type="secondary">Port</Text>
+              <InputNumber min={1} max={65535} style={{ marginTop: 6, width: '100%' }} value={port} onChange={(v) => setPort(Number(v) || 5672)} />
+            </Col>
+
+            <Col span={12}>
+              <Text type="secondary">用户名</Text>
+              <Input style={{ marginTop: 6 }} value={username} onChange={(e) => setUsername(e.target.value)} />
+            </Col>
+            <Col span={12}>
+              <Text type="secondary">密码</Text>
+              <Password style={{ marginTop: 6 }} value={password} onChange={(e) => setPassword(e.target.value)} />
+            </Col>
+
+            <Col span={12}>
+              <Text type="secondary">队列名</Text>
+              <Input style={{ marginTop: 6 }} value={queueName} onChange={(e) => setQueueName(e.target.value)} />
+            </Col>
+            <Col span={12}>
+              <Text type="secondary">超时(秒)</Text>
+              <InputNumber min={1} max={300} style={{ marginTop: 6, width: '100%' }} value={timeout} onChange={(v) => setTimeoutValue(Number(v) || 30)} />
+            </Col>
+
+            <Col span={12}>
+              <Text type="secondary">Exchange（可选）</Text>
+              <Input style={{ marginTop: 6 }} value={exchange} onChange={(e) => setExchange(e.target.value)} />
+            </Col>
+            <Col span={12}>
+              <Text type="secondary">Routing Key（可选）</Text>
+              <Input style={{ marginTop: 6 }} value={routingKey} onChange={(e) => setRoutingKey(e.target.value)} />
+            </Col>
+
+            <Col span={24}>
+              <Text type="secondary">消息体</Text>
+              <TextArea
+                rows={11}
+                style={{ marginTop: 6, fontFamily: 'Consolas, Monaco, monospace', fontSize: 13, borderRadius: 10 }}
+                value={messageBody}
+                onChange={(e) => setMessageBody(e.target.value)}
+                placeholder='例如：{"event":"order.created","id":1001}'
+              />
             </Col>
           </Row>
-        </div>
 
-        {/* Main Area */}
-        <Row style={{ flex: 1 }} gutter={0}>
+          <div style={{ marginTop: 14 }}>
+            <Button type="primary" shape="round" size="large" icon={<SendOutlined />} loading={loading} onClick={handleSend} style={{ fontWeight: 700 }}>
+              发送并测试
+            </Button>
+          </div>
+        </Card>
 
-          {/* Left: Publisher */}
-          <Col span={9} style={{ borderRight: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column', background: '#fff' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0f0f0' }}>
-              <Title level={4} style={{ margin: 0 }}><SendOutlined /> 发布 (Publisher)</Title>
+        <Card
+          title="响应结果"
+          extra={<Tag color={result?.success ? 'success' : result ? 'error' : 'default'}>{result ? (result.success ? '成功' : '失败') : '待执行'}</Tag>}
+          style={{ borderRadius: 16 }}
+          bodyStyle={{ overflow: 'auto' }}
+        >
+          {!result ? (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="执行 MQ 测试后在这里查看结果" />
             </div>
-
-            <div style={{ padding: 24, flex: 1, overflowY: 'auto' }}>
-              <Form layout="vertical">
-                <Form.Item label="Target Topic">
-                  <Input
-                    prefix={<NumberOutlined style={{ color: '#ccc' }} />}
-                    value={pubTopic}
-                    onChange={e => setPubTopic(e.target.value)}
-                    disabled={!connected}
-                    placeholder="e.g. sensor/temp"
-                  />
-                </Form.Item>
-
-                <Row gutter={16}>
+          ) : (
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <div style={{ background: '#f7fbff', border: '1px solid #d6e4ff', borderRadius: 12, padding: 10 }}>
+                <Row gutter={10}>
                   <Col span={12}>
-                    <Form.Item label="QoS Level">
-                      <Select value={qos} onChange={setQos} disabled={!connected}>
-                        <Option value={0}>0 - At most once</Option>
-                        <Option value={1}>1 - At least once</Option>
-                        <Option value={2}>2 - Exactly once</Option>
-                      </Select>
-                    </Form.Item>
+                    <Text type="secondary">耗时</Text>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>{result.execution_time} ms</div>
                   </Col>
                   <Col span={12}>
-                    <Form.Item label="Options">
-                      <Space>
-                        <Tooltip title="Retain Message">
-                          <Switch
-                            checkedChildren="Retain"
-                            unCheckedChildren="Retain"
-                            checked={retain}
-                            onChange={setRetain}
-                            disabled={!connected}
-                          />
-                        </Tooltip>
-                      </Space>
-                    </Form.Item>
+                    <Text type="secondary">Message ID</Text>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{result.message_id || '--'}</div>
                   </Col>
                 </Row>
-
-                <Form.Item label="Payload (消息体)">
-                  <TextArea
-                    rows={12}
-                    placeholder="输入消息内容..."
-                    value={msgContent}
-                    onChange={e => setMsgContent(e.target.value)}
-                    disabled={!connected}
-                    style={{ fontFamily: 'Monaco, monospace', fontSize: 13, background: '#fafafa', borderRadius: 8 }}
-                  />
-                </Form.Item>
-
-                <Form.Item>
-                  <Button type="primary" icon={<SendOutlined />} onClick={handlePublish} disabled={!connected} block size="large">
-                    发布消息
-                  </Button>
-                </Form.Item>
-              </Form>
-            </div>
-          </Col>
-
-          {/* Right: Subscriber */}
-          <Col span={15} style={{ display: 'flex', flexDirection: 'column', background: '#fbfbfb' }}>
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #eee', background: '#fff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <Title level={4} style={{ margin: 0 }}><NotificationOutlined /> 订阅 (Subscriber)</Title>
-                <Button icon={<ClearOutlined />} onClick={clearLogs} size="small">清空</Button>
               </div>
-              <Input.Group compact style={{ display: 'flex' }}>
-                <Select value={subQos} onChange={setSubQos} style={{ width: 90 }} disabled={!connected || isSubscribing}>
-                  <Option value={0}>QoS 0</Option>
-                  <Option value={1}>QoS 1</Option>
-                  <Option value={2}>QoS 2</Option>
-                </Select>
-                <Input
-                  placeholder="Topic Filter (# for all)"
-                  value={subTopic}
-                  onChange={e => setSubTopic(e.target.value)}
-                  style={{ flex: 1 }}
-                  disabled={!connected || isSubscribing}
-                />
-                <Button
-                  type={isSubscribing ? 'default' : 'primary'}
-                  danger={isSubscribing}
-                  icon={isSubscribing ? <StopOutlined /> : <PlayCircleOutlined />}
-                  onClick={toggleSubscribe}
-                  disabled={!connected}
-                >
-                  {isSubscribing ? '停止' : '订阅'}
-                </Button>
-              </Input.Group>
-            </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-              {logs.length === 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ccc' }}>
-                  <DatabaseOutlined style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }} />
-                  <Text type="secondary">暂无消息，请确保已连接并订阅 Topic</Text>
-                </div>
-              ) : (
-                <List
-                  dataSource={logs}
-                  renderItem={item => (
-                    <List.Item style={{ padding: '12px', borderBottom: '1px solid #f0f0f0', background: '#fff', marginBottom: 8, borderRadius: 8, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-                      <div style={{ width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                          <Space>
-                            <Tag color="cyan" style={{ fontFamily: 'monospace' }}>{item.topic}</Tag>
-                            <Tag color="blue">QoS {item.qos}</Tag>
-                          </Space>
-                          <Space size="small">
-                            <Text type="secondary" style={{ fontSize: 12 }}>{item.size}</Text>
-                            <Text type="secondary" style={{ fontSize: 12 }}>{item.time}</Text>
-                          </Space>
-                        </div>
-                        <div style={{
-                          fontFamily: 'Monaco, monospace',
-                          fontSize: 13,
-                          background: '#fafafa',
-                          padding: '8px 12px',
-                          borderRadius: 6,
-                          color: '#333',
-                          border: '1px solid #f5f5f5',
-                          wordBreak: 'break-all'
-                        }}>
-                          {item.content}
-                        </div>
-                      </div>
-                    </List.Item>
-                  )}
-                />
+              {result.error_message && (
+                <Alert type="error" showIcon message="测试失败" description={result.error_message} />
               )}
-            </div>
-          </Col>
-        </Row>
 
+              <Card size="small" title="返回数据" style={{ borderRadius: 10 }}>
+                <pre style={codeBlockStyle}>
+                  {responseText || '无返回数据'}
+                </pre>
+              </Card>
+            </Space>
+          )}
+        </Card>
       </div>
+
+      {history.length > 0 && (
+        <Card title="最近请求记录" style={{ marginTop: 14, borderRadius: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {history.map((item, idx) => (
+              <div
+                key={`${item.host}-${item.port}-${item.createdAt}-${idx}`}
+                style={{ display: 'grid', gridTemplateColumns: '110px 1fr 90px 80px 90px', gap: 8, padding: 8, borderRadius: 8, background: '#f8fafc', border: '1px solid #f0f0f0' }}
+              >
+                <Tag style={{ margin: 0 }}>{item.mqType}</Tag>
+                <Text>{item.host}:{item.port} / {item.queueName}</Text>
+                <Text>{item.executionTime}ms</Text>
+                <Text>{item.success ? '成功' : '失败'}</Text>
+                <Text type="secondary">{item.createdAt}</Text>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 };
