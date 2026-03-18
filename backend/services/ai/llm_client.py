@@ -288,7 +288,18 @@ class LLMClient:
                 default_model=str(siliconflow_chat_model).strip() if siliconflow_chat_model else 'Qwen/Qwen2.5-7B-Instruct',
                 default_embedding_model='Qwen/Qwen3-Embedding-8B'
             )
-        
+
+        # New-API（OpenAI Compatible）
+        newapi_key = db_settings.get('NEWAPI_API_KEY') or getattr(settings, 'NEWAPI_API_KEY', None)
+        newapi_base_url = db_settings.get('NEWAPI_BASE_URL') or getattr(settings, 'NEWAPI_BASE_URL', '')
+        newapi_chat_model = db_settings.get('NEWAPI_CHAT_MODEL') or getattr(settings, 'NEWAPI_CHAT_MODEL', 'gpt-4o-mini')
+        if newapi_key and str(newapi_key).strip() and newapi_base_url and str(newapi_base_url).strip():
+            self.providers['newapi'] = OpenAIProvider(
+                api_key=str(newapi_key).strip(),
+                base_url=str(newapi_base_url).strip(),
+                default_model=str(newapi_chat_model).strip() if newapi_chat_model else 'gpt-4o-mini'
+            )
+
         logger.info(f"已初始化的大模型提供商: {list(self.providers.keys())}")
     
     async def chat_completion(

@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     
     # AI配置 - DeepSeek
     DEEPSEEK_API_KEY: Optional[str] = None
+
+    # AI配置 - New-API（OpenAI 兼容）
+    NEWAPI_API_KEY: Optional[str] = None
+    NEWAPI_BASE_URL: str = ""
+    NEWAPI_CHAT_MODEL: str = "gpt-4o-mini"
     
     # Embedding配置
     EMBEDDING_PROVIDER: str = "siliconflow"  # 默认的Embedding服务提供商，Deepseek等不支持时将回退到此提供商

@@ -182,6 +182,8 @@ class AITestCaseGenerator:
                 "deepseek": "deepseek",
                 "tongyi": "tongyi",
                 "siliconflow": "siliconflow",
+                "newapi": "newapi",
+                "new-api": "newapi",
             }
             provider = provider_map.get(model, model)  # 未知的直接透传，让 llm_client 报错
 

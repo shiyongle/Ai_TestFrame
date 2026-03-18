@@ -112,6 +112,9 @@ const SystemSettings: React.FC = () => {
             'SILICONFLOW_API_KEY': '硅基流动 (Siliconflow) API Key',
             'SILICONFLOW_BASE_URL': '硅基流动 接口地址',
             'SILICONFLOW_CHAT_MODEL': '硅基流动 对话模型名称',
+            'NEWAPI_API_KEY': 'New-API 平台 API Key (OpenAI Compatible)',
+            'NEWAPI_BASE_URL': 'New-API 接口地址 (通常以 /v1 结尾)',
+            'NEWAPI_CHAT_MODEL': 'New-API 默认对话模型名称',
         };
         return map[key] || '';
     };
@@ -233,7 +236,9 @@ const SystemSettings: React.FC = () => {
                                     DEEPSEEK_BASE_URL: 'https://api.deepseek.com/v1',
                                     TONGYI_BASE_URL: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
                                     SILICONFLOW_BASE_URL: 'https://api.siliconflow.cn/v1',
-                                    SILICONFLOW_CHAT_MODEL: 'Qwen/Qwen2.5-7B-Instruct'
+                                    SILICONFLOW_CHAT_MODEL: 'Qwen/Qwen2.5-7B-Instruct',
+                                    NEWAPI_BASE_URL: 'https://your-newapi-host/v1',
+                                    NEWAPI_CHAT_MODEL: 'gpt-4o-mini'
                                 }}
                             >
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '24px' }}>
@@ -287,6 +292,19 @@ const SystemSettings: React.FC = () => {
                                         </Form.Item>
                                         <Form.Item label="对话模型" name="SILICONFLOW_CHAT_MODEL" tooltip="用于对话和生成的模型名称，如 Qwen/Qwen2.5-7B-Instruct">
                                             <Input placeholder="Qwen/Qwen2.5-7B-Instruct" />
+                                        </Form.Item>
+                                    </Card>
+
+                                    {/* New-API Card */}
+                                    <Card size="small" title="New-API (OpenAI Compatible)" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="NEWAPI_API_KEY" tooltip="兼容 OpenAI Authorization: Bearer {key} 形式">
+                                            <Input.Password placeholder="new-api key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="NEWAPI_BASE_URL" tooltip="示例: https://your-newapi-host/v1">
+                                            <Input placeholder="https://your-newapi-host/v1" />
+                                        </Form.Item>
+                                        <Form.Item label="对话模型" name="NEWAPI_CHAT_MODEL" tooltip="默认 completion/chat-completions 使用的模型名称">
+                                            <Input placeholder="gpt-4o-mini" />
                                         </Form.Item>
                                     </Card>
                                 </div>
