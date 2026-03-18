@@ -41,7 +41,8 @@ import {
   DownOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { interfaceTestcaseApi, projectApi } from '../../services/api';
+import { interfaceTestcaseApi, projectApi, testApi } from '../../services/api';
+import { HttpTestResponse } from '../../types';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -49,6 +50,23 @@ const { TextArea } = Input;
 type StepMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
 type ScenarioStatus = 'active' | 'inactive';
+
+type AssertionOperator = 'equals' | 'contains' | 'regex' | 'gt' | 'gte' | 'lt' | 'lte';
+
+interface StepAssertionRule {
+  id: string;
+  path: string;
+  operator: AssertionOperator;
+  expected: string;
+  enabled: boolean;
+}
+
+interface StepExtractRule {
+  id: string;
+  name: string;
+  path: string;
+  enabled: boolean;
+}
 
 interface ApiStep {
   id: string;
@@ -58,6 +76,11 @@ interface ApiStep {
   delay: number;
   assertions: string;
   enabled: boolean;
+  headers?: Record<string, string>;
+  params?: Record<string, any>;
+  body?: string;
+  extractRules?: StepExtractRule[];
+  assertionRules?: StepAssertionRule[];
 }
 
 interface TestScenario {
@@ -75,6 +98,16 @@ interface TestScenario {
     passRate: number;
     durationMs: number;
     executedAt: string;
+    summary?: string;
+    contextSnapshot?: Record<string, any>;
+    stepResults?: Array<{
+      stepId: string;
+      stepName: string;
+      success: boolean;
+      statusCode: number;
+      durationMs: number;
+      message: string;
+    }>;
   };
 }
 
@@ -139,6 +172,161 @@ const mapRawToLibraryItem = (raw: any): CaseLibraryItem => {
     url: String(raw?.url || cfg?.url || ''),
     module: String(raw?.module || cfg?.module || '通用模块'),
   };
+};
+
+const assertionOperatorOptions: Array<{ label: string; value: AssertionOperator }> = [
+  { label: 'equals(=)', value: 'equals' },
+  { label: 'contains(包含)', value: 'contains' },
+  { label: 'regex(正则)', value: 'regex' },
+  { label: 'gt(>)', value: 'gt' },
+  { label: 'gte(>=)', value: 'gte' },
+  { label: 'lt(<)', value: 'lt' },
+  { label: 'lte(<=)', value: 'lte' },
+];
+
+const renderTemplateString = (input: string, context: Record<string, any>) =>
+  String(input || '')
+    .replace(/\$\{\s*([\w.]+)\s*\}/g, (_m, key) => {
+      const val = key.split('.').reduce((acc: any, k: string) => (acc == null ? undefined : acc[k]), context);
+      return val == null ? '' : String(val);
+    })
+    .replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => {
+      const val = key.split('.').reduce((acc: any, k: string) => (acc == null ? undefined : acc[k]), context);
+      return val == null ? '' : String(val);
+    });
+
+const renderTemplateValue = (value: any, context: Record<string, any>): any => {
+  if (typeof value === 'string') return renderTemplateString(value, context);
+  if (Array.isArray(value)) return value.map((item) => renderTemplateValue(item, context));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((acc: Record<string, any>, [k, v]) => {
+      acc[k] = renderTemplateValue(v, context);
+      return acc;
+    }, {});
+  }
+  return value;
+};
+
+const parseKVText = (input: string): Record<string, any> => {
+  const out: Record<string, any> = {};
+  (input || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const idx = line.indexOf(':');
+      if (idx <= 0) return;
+      const k = line.slice(0, idx).trim();
+      const v = line.slice(idx + 1).trim();
+      out[k] = v;
+    });
+  return out;
+};
+
+const toKVText = (obj?: Record<string, any>) =>
+  Object.entries(obj || {})
+    .map(([k, v]) => `${k}: ${String(v ?? '')}`)
+    .join('\n');
+
+const parseAssertionRulesText = (input: string): StepAssertionRule[] =>
+  (input || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, idx) => {
+      const [path = '', operator = 'equals', expected = ''] = line.split('|').map((s) => s.trim());
+      const op = assertionOperatorOptions.some((x) => x.value === (operator as AssertionOperator))
+        ? (operator as AssertionOperator)
+        : 'equals';
+      return {
+        id: `ar-${Date.now()}-${idx}`,
+        path,
+        operator: op,
+        expected,
+        enabled: true,
+      };
+    })
+    .filter((x) => x.path);
+
+const toAssertionRulesText = (rules?: StepAssertionRule[]) =>
+  (rules || []).map((r) => `${r.path}|${r.operator}|${r.expected}`).join('\n');
+
+const parseExtractRulesText = (input: string): StepExtractRule[] =>
+  (input || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, idx) => {
+      const [name = '', path = ''] = line.split('|').map((s) => s.trim());
+      return {
+        id: `er-${Date.now()}-${idx}`,
+        name,
+        path,
+        enabled: true,
+      };
+    })
+    .filter((x) => x.name && x.path);
+
+const toExtractRulesText = (rules?: StepExtractRule[]) =>
+  (rules || []).map((r) => `${r.name}|${r.path}`).join('\n');
+
+const resolvePathValue = (source: any, path: string): any => {
+  const p = (path || '').trim();
+  if (!p) return source;
+  return p.split('.').reduce((acc: any, key: string) => {
+    if (acc == null) return undefined;
+    return acc[key];
+  }, source);
+};
+
+const applyOperator = (actual: any, expectedRaw: string, operator: AssertionOperator): boolean => {
+  const expected = expectedRaw ?? '';
+  if (operator === 'equals') return String(actual ?? '') === String(expected);
+  if (operator === 'contains') return String(actual ?? '').includes(String(expected));
+  if (operator === 'regex') {
+    try {
+      return new RegExp(expected).test(String(actual ?? ''));
+    } catch {
+      return false;
+    }
+  }
+  const a = Number(actual);
+  const b = Number(expected);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  if (operator === 'gt') return a > b;
+  if (operator === 'gte') return a >= b;
+  if (operator === 'lt') return a < b;
+  if (operator === 'lte') return a <= b;
+  return false;
+};
+
+const setPathValue = (target: Record<string, any>, path: string, value: any) => {
+  const keys = String(path || '')
+    .split('.')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!keys.length) return;
+  let cursor: Record<string, any> = target;
+  keys.forEach((key, index) => {
+    if (index === keys.length - 1) {
+      cursor[key] = value;
+      return;
+    }
+    if (!cursor[key] || typeof cursor[key] !== 'object') {
+      cursor[key] = {};
+    }
+    cursor = cursor[key];
+  });
+};
+
+const parseBodyValue = (bodyText: string | undefined, context: Record<string, any>) => {
+  const rendered = renderTemplateString(String(bodyText || ''), context).trim();
+  if (!rendered) return undefined;
+  try {
+    return JSON.parse(rendered);
+  } catch {
+    return rendered;
+  }
 };
 
 const ApiAutomation: React.FC = () => {
@@ -341,42 +529,189 @@ const ApiAutomation: React.FC = () => {
     });
   };
 
-  const executeScenario = () => {
+  const executeScenario = async () => {
     if (!selectedScenario) return;
     if (!selectedScenario.steps.length) {
       message.warning('当前场景没有可执行步骤，请先编排');
       return;
     }
+
+    const scenario = selectedScenario;
+    const enabledSteps = scenario.steps.filter((s) => s.enabled !== false);
+    if (!enabledSteps.length) {
+      message.warning('当前场景步骤全部被禁用，请先启用后再执行');
+      return;
+    }
+
     setExecuting(true);
     setProgress(0);
-    const timer = window.setInterval(() => {
-      setProgress((p) => {
-        const next = p + 16;
-        if (next >= 100) {
-          window.clearInterval(timer);
-          setExecuting(false);
-          const passRate = Math.floor(Math.random() * 25) + 75;
-          setScenarios((prev) =>
-            prev.map((item) =>
-              item.id === selectedScenario.id
-                ? {
-                    ...item,
-                    lastExecution: {
-                      status: passRate >= 85 ? 'success' : 'failed',
-                      passRate,
-                      durationMs: Math.floor(Math.random() * 2500) + 800,
-                      executedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-                    },
-                  }
-                : item
-            )
-          );
-          message.success('场景执行完成');
-          return 100;
+    const startedAt = Date.now();
+    const context: Record<string, any> = {
+      scenarioId: scenario.id,
+      scenarioName: scenario.name,
+      projectId: scenario.projectId,
+      now: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+    };
+    const stepResults: NonNullable<TestScenario['lastExecution']>['stepResults'] = [];
+    let failed = false;
+
+    try {
+      for (let i = 0; i < scenario.steps.length; i += 1) {
+        const step = scenario.steps[i];
+        const progressBase = Math.round((i / scenario.steps.length) * 100);
+        setProgress(progressBase);
+
+        if (step.enabled === false) {
+          stepResults.push({
+            stepId: step.id,
+            stepName: step.name,
+            success: true,
+            statusCode: 0,
+            durationMs: 0,
+            message: '步骤已禁用，跳过执行',
+          });
+          continue;
         }
-        return next;
-      });
-    }, 350);
+
+        if (step.delay > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, step.delay));
+        }
+
+        const reqUrl = renderTemplateString(step.url, context);
+        const reqHeaders = renderTemplateValue(step.headers || {}, context) as Record<string, string>;
+        const reqParams = renderTemplateValue(step.params || {}, context) as Record<string, any>;
+        const reqBody = parseBodyValue(step.body, context);
+
+        try {
+          const response: HttpTestResponse = await testApi.testHttp({
+            url: reqUrl,
+            method: step.method as any,
+            headers: reqHeaders,
+            params: reqParams,
+            body: reqBody,
+            timeout: 30000,
+          });
+
+          const responseScope = {
+            status: response.status_code,
+            status_code: response.status_code,
+            headers: response.headers,
+            body: response.body,
+            execution_time: response.execution_time,
+            success: response.success,
+            error_message: response.error_message,
+            context,
+          };
+
+          let assertionPassed = true;
+          const assertionMessages: string[] = [];
+          const assertionRules = (step.assertionRules || []).filter((x) => x.enabled !== false);
+
+          if (assertionRules.length) {
+            assertionRules.forEach((rule) => {
+              const expected = renderTemplateString(rule.expected || '', context);
+              const actual = resolvePathValue(responseScope, rule.path);
+              const pass = applyOperator(actual, expected, rule.operator);
+              if (!pass) {
+                assertionPassed = false;
+                assertionMessages.push(
+                  `断言失败：${rule.path} ${rule.operator} ${expected}，实际=${String(actual ?? 'undefined')}`
+                );
+              }
+            });
+          }
+
+          if (step.assertions && step.assertions.trim()) {
+            const legacyRules = step.assertions
+              .split('&&')
+              .map((x) => x.trim())
+              .filter(Boolean);
+            legacyRules.forEach((rule) => {
+              const [left = '', right = ''] = rule.split('=').map((x) => x.trim());
+              if (!left) return;
+              const expected = renderTemplateString(right, context);
+              const path = left === 'status' ? 'status_code' : left;
+              const actual = resolvePathValue(responseScope, path);
+              if (String(actual ?? '') !== String(expected)) {
+                assertionPassed = false;
+                assertionMessages.push(`断言失败：${left}=${expected}，实际=${String(actual ?? 'undefined')}`);
+              }
+            });
+          }
+
+          const extractRules = (step.extractRules || []).filter((x) => x.enabled !== false);
+          extractRules.forEach((rule) => {
+            const val = resolvePathValue(responseScope, rule.path);
+            setPathValue(context, rule.name, val);
+          });
+
+          const stepSuccess = Boolean(response.success) && assertionPassed;
+          if (!stepSuccess) {
+            failed = true;
+          }
+
+          stepResults.push({
+            stepId: step.id,
+            stepName: step.name,
+            success: stepSuccess,
+            statusCode: response.status_code,
+            durationMs: response.execution_time,
+            message: stepSuccess ? '执行成功' : assertionMessages.join('；') || response.error_message || '步骤执行失败',
+          });
+
+          if (!stepSuccess) {
+            break;
+          }
+        } catch (error: any) {
+          failed = true;
+          stepResults.push({
+            stepId: step.id,
+            stepName: step.name,
+            success: false,
+            statusCode: 0,
+            durationMs: 0,
+            message: error?.response?.data?.detail || error?.message || '请求执行失败',
+          });
+          break;
+        } finally {
+          const nextProgress = Math.round(((i + 1) / scenario.steps.length) * 100);
+          setProgress(nextProgress);
+        }
+      }
+
+      const passedCount = stepResults.filter((x) => x.success).length;
+      const passRate = stepResults.length ? Math.round((passedCount / stepResults.length) * 100) : 0;
+      const durationMs = Date.now() - startedAt;
+      const summary = `通过 ${passedCount}/${stepResults.length} 步${failed ? '，执行中断' : ''}`;
+
+      setScenarios((prev) =>
+        prev.map((item) =>
+          item.id === scenario.id
+            ? {
+                ...item,
+                lastExecution: {
+                  status: failed ? 'failed' : 'success',
+                  passRate,
+                  durationMs,
+                  executedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                  summary,
+                  contextSnapshot: context,
+                  stepResults,
+                },
+              }
+            : item
+        )
+      );
+
+      if (failed) {
+        message.error('场景执行失败，已在失败步骤处中断');
+      } else {
+        message.success('场景执行完成');
+      }
+    } finally {
+      setExecuting(false);
+      setProgress(100);
+    }
   };
 
   const moveStep = (index: number, dir: 'up' | 'down') => {
@@ -401,7 +736,14 @@ const ApiAutomation: React.FC = () => {
 
   const openStepEditor = (step: ApiStep) => {
     setEditingStep(step);
-    stepForm.setFieldsValue(step);
+    stepForm.setFieldsValue({
+      ...step,
+      headersText: toKVText(step.headers),
+      paramsText: toKVText(step.params),
+      bodyText: step.body || '',
+      assertionRulesText: toAssertionRulesText(step.assertionRules),
+      extractRulesText: toExtractRulesText(step.extractRules),
+    });
     setStepDrawerVisible(true);
   };
 
@@ -409,12 +751,35 @@ const ApiAutomation: React.FC = () => {
     if (!selectedScenario || !editingStep) return;
     try {
       const values = await stepForm.validateFields();
+      const headers = parseKVText(values.headersText || '');
+      const params = parseKVText(values.paramsText || '');
+      const assertionRules = parseAssertionRulesText(values.assertionRulesText || '');
+      const extractRules = parseExtractRulesText(values.extractRulesText || '');
+      const bodyText = String(values.bodyText || '').trim();
+
       setScenarios((prev) =>
         prev.map((s) =>
           s.id === selectedScenario.id
             ? {
                 ...s,
-                steps: s.steps.map((step) => (step.id === editingStep.id ? { ...step, ...values } : step)),
+                steps: s.steps.map((step) =>
+                  step.id === editingStep.id
+                    ? {
+                        ...step,
+                        name: values.name,
+                        method: values.method,
+                        url: values.url,
+                        assertions: values.assertions || '',
+                        delay: Number(values.delay) || 0,
+                        enabled: values.enabled !== false,
+                        headers: Object.keys(headers).length ? headers : undefined,
+                        params: Object.keys(params).length ? params : undefined,
+                        body: bodyText || undefined,
+                        assertionRules: assertionRules.length ? assertionRules : undefined,
+                        extractRules: extractRules.length ? extractRules : undefined,
+                      }
+                    : step
+                ),
                 updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
               }
             : s
@@ -446,6 +811,11 @@ const ApiAutomation: React.FC = () => {
       delay: 0,
       assertions: 'status=200',
       enabled: true,
+      headers: {},
+      params: {},
+      body: '',
+      assertionRules: [],
+      extractRules: [],
     }));
 
     setScenarios((prev) =>
@@ -670,6 +1040,10 @@ const ApiAutomation: React.FC = () => {
                           <div style={{ marginTop: 4 }}>
                             <Text type="secondary">断言：{step.assertions || '无'}</Text>
                             <Divider type="vertical" />
+                            <Text type="secondary">结构化断言：{(step.assertionRules || []).length} 条</Text>
+                            <Divider type="vertical" />
+                            <Text type="secondary">提取变量：{(step.extractRules || []).length} 条</Text>
+                            <Divider type="vertical" />
                             <Text type="secondary">延迟：{step.delay} ms</Text>
                           </div>
                         </div>
@@ -708,12 +1082,44 @@ const ApiAutomation: React.FC = () => {
                   prefix={<RocketOutlined />}
                 />
                 {selectedScenario.lastExecution ? (
-                  <Alert
-                    type={selectedScenario.lastExecution.status === 'success' ? 'success' : 'error'}
-                    showIcon
-                    message={selectedScenario.lastExecution.status === 'success' ? '最近执行成功' : '最近执行失败'}
-                    description={`${selectedScenario.lastExecution.executedAt} · ${selectedScenario.lastExecution.durationMs}ms`}
-                  />
+                  <>
+                    <Alert
+                      type={selectedScenario.lastExecution.status === 'success' ? 'success' : 'error'}
+                      showIcon
+                      message={selectedScenario.lastExecution.status === 'success' ? '最近执行成功' : '最近执行失败'}
+                      description={`${selectedScenario.lastExecution.executedAt} · ${selectedScenario.lastExecution.durationMs}ms · ${selectedScenario.lastExecution.summary || ''}`}
+                    />
+                    {(selectedScenario.lastExecution.stepResults || []).length ? (
+                      <List
+                        size="small"
+                        bordered
+                        dataSource={selectedScenario.lastExecution.stepResults || []}
+                        renderItem={(item) => (
+                          <List.Item>
+                            <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                              <Space>
+                                <Tag color={item.success ? 'success' : 'error'}>{item.success ? 'PASS' : 'FAIL'}</Tag>
+                                <Text strong>{item.stepName}</Text>
+                              </Space>
+                              <Text type="secondary">HTTP {item.statusCode || '-'} · {item.durationMs}ms</Text>
+                              <Text type={item.success ? 'secondary' : 'danger'}>{item.message}</Text>
+                            </Space>
+                          </List.Item>
+                        )}
+                      />
+                    ) : null}
+                    {selectedScenario.lastExecution.contextSnapshot ? (
+                      <Form layout="vertical">
+                        <Form.Item label="上下文快照（执行后）" style={{ marginBottom: 0 }}>
+                          <TextArea
+                            rows={6}
+                            readOnly
+                            value={JSON.stringify(selectedScenario.lastExecution.contextSnapshot, null, 2)}
+                          />
+                        </Form.Item>
+                      </Form>
+                    ) : null}
+                  </>
                 ) : null}
                 <Button type="primary" block icon={<PlayCircleFilled />} onClick={executeScenario} disabled={executing || !selectedScenario.steps.length}>
                   执行该场景
@@ -802,7 +1208,7 @@ const ApiAutomation: React.FC = () => {
 
       <Drawer
         title="编辑步骤"
-        width={460}
+        width={560}
         open={stepDrawerVisible}
         onClose={() => setStepDrawerVisible(false)}
         extra={<Button type="primary" onClick={saveStep}>保存</Button>}
@@ -819,8 +1225,23 @@ const ApiAutomation: React.FC = () => {
           <Form.Item label="请求 URL" name="url" rules={[{ required: true, message: '请输入 URL' }]}>
             <Input placeholder="/api/path" />
           </Form.Item>
-          <Form.Item label="断言规则" name="assertions">
-            <TextArea rows={3} placeholder="例如：status=200 && code=0" />
+          <Form.Item label="兼容断言（旧）" name="assertions">
+            <TextArea rows={2} placeholder="例如：status=200 && body.code=0" />
+          </Form.Item>
+          <Form.Item label="请求头（每行 key: value）" name="headersText">
+            <TextArea rows={4} placeholder={"Authorization: Bearer {{token}}\nX-Trace-Id: {{traceId}}"} />
+          </Form.Item>
+          <Form.Item label="Query 参数（每行 key: value）" name="paramsText">
+            <TextArea rows={4} placeholder={"page: 1\nsize: 20\nuserId: {{user.id}}"} />
+          </Form.Item>
+          <Form.Item label="请求体 Body（支持 JSON + 模板变量）" name="bodyText">
+            <TextArea rows={6} placeholder={'{"orderId": "{{order.id}}", "token": "{{auth.token}}"}'} />
+          </Form.Item>
+          <Form.Item label="结构化断言（每行 path|operator|expected）" name="assertionRulesText">
+            <TextArea rows={6} placeholder={"status_code|equals|200\nbody.code|equals|0\nbody.message|contains|success"} />
+          </Form.Item>
+          <Form.Item label="结果提取（每行 name|path）" name="extractRulesText">
+            <TextArea rows={4} placeholder={"auth.token|body.data.token\norder.id|body.data.id"} />
           </Form.Item>
           <Form.Item label="步骤延迟（ms）" name="delay">
             <Input type="number" min={0} />
