@@ -1,544 +1,839 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Card,
-  Table,
-  Button,
-  Space,
-  Input,
-  Select,
-  Tag,
-  Modal,
-  Form,
-  message,
-  Typography,
-  Row,
-  Col,
-  Tooltip,
-  Tree,
-  Upload,
-  Drawer,
-  Divider,
   Alert,
-  Switch,
-  InputNumber,
-  Progress,
-  Transfer,
+  Badge,
+  Button,
+  Card,
+  Col,
+  Divider,
+  Drawer,
+  Empty,
+  Form,
+  Input,
   List,
-  Avatar,
-  Menu,
-  Timeline,
+  Modal,
+  Progress,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Spin,
   Statistic,
-  Badge
+  Tag,
+  Tooltip,
+  Typography,
+  message,
 } from 'antd';
 import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-  CopyOutlined,
-  PlayCircleOutlined,
   ApiOutlined,
-  LinkOutlined,
-  UploadOutlined,
-  SettingOutlined,
-  ThunderboltOutlined,
   BranchesOutlined,
-  ClockCircleOutlined,
   CheckCircleOutlined,
-  ExclamationCircleOutlined,
-  DragOutlined,
-  SyncOutlined,
-  AppstoreOutlined,
-  HistoryOutlined,
-  DashboardOutlined,
-  FileTextOutlined,
+  ClockCircleOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  PlayCircleFilled,
+  PlusOutlined,
   RocketOutlined,
-  CodeOutlined,
-  SafetyCertificateOutlined,
-  InboxOutlined
+  SearchOutlined,
+  SettingOutlined,
+  SwapOutlined,
+  UpOutlined,
+  DownOutlined,
 } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/es/table';
-import type { DataNode } from 'antd/es/tree';
 import dayjs from 'dayjs';
+import { interfaceTestcaseApi, projectApi } from '../../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { DirectoryTree } = Tree;
-const { Dragger } = Upload;
 
-// --- Interfaces ---
+type StepMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+
+type ScenarioStatus = 'active' | 'inactive';
 
 interface ApiStep {
   id: string;
   name: string;
-  method: string;
+  method: StepMethod;
   url: string;
-  headers: Record<string, string>;
-  params: Record<string, any>;
-  body: string;
-  assertions: string;
-  extractVariables: Record<string, string>;
   delay: number;
-  enabled: boolean;
-  testCaseId?: string;
-  testCaseName?: string;
-}
-
-interface InterfaceTestCase {
-  id: string;
-  name: string;
-  description: string;
-  protocol: 'HTTP' | 'TCP' | 'MQ';
-  method?: string;
-  url: string;
-  headers: Record<string, string>;
-  params: Record<string, any>;
-  body: string;
   assertions: string;
-  module: string;
-  priority: 'high' | 'medium' | 'low';
-  status: 'active' | 'inactive';
+  enabled: boolean;
 }
 
 interface TestScenario {
   id: string;
   name: string;
   description: string;
-  category: 'api' | 'performance' | 'security';
-  steps: ApiStep[];
-  globalVariables: Record<string, any>;
-  settings: {
-    timeout: number;
-    retries: number;
-    parallel: boolean;
-    thinkTime: number;
-  };
-  status: 'active' | 'inactive';
-  createdBy: string;
-  createdAt: string;
+  status: ScenarioStatus;
+  tags: string[];
+  owner: string;
+  projectId: number;
   updatedAt: string;
+  steps: ApiStep[];
   lastExecution?: {
-    status: 'success' | 'failed' | 'running';
-    duration: number;
-    executedAt: string;
+    status: 'success' | 'failed';
     passRate: number;
+    durationMs: number;
+    executedAt: string;
   };
 }
 
-interface ExecutionRecord {
+interface CaseLibraryItem {
   id: string;
-  scenarioName: string;
-  status: 'success' | 'failed';
-  startTime: string;
-  duration: string;
-  trigger: string;
+  name: string;
+  method: StepMethod;
+  url: string;
+  module: string;
 }
 
-// --- Main Component ---
+interface ProjectOption {
+  id: number;
+  name: string;
+}
+
+const methodColorMap: Record<StepMethod, string> = {
+  GET: 'blue',
+  POST: 'green',
+  PUT: 'gold',
+  DELETE: 'red',
+  PATCH: 'purple',
+};
+
+
+const buildScenarioStorageKey = (projectId: number) => `api-automation-scenarios:${projectId}`;
+
+const loadScenariosFromStorage = (projectId: number): TestScenario[] => {
+  try {
+    const raw = window.localStorage.getItem(buildScenarioStorageKey(projectId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveScenariosToStorage = (projectId: number, list: TestScenario[]) => {
+  try {
+    window.localStorage.setItem(buildScenarioStorageKey(projectId), JSON.stringify(list));
+  } catch {
+    // 忽略本地存储异常（例如容量不足或隐私模式）
+  }
+};
+
+const normalizeMethod = (value: any): StepMethod => {
+  const m = String(value || 'GET').toUpperCase();
+  if (m === 'POST') return 'POST';
+  if (m === 'PUT') return 'PUT';
+  if (m === 'DELETE') return 'DELETE';
+  if (m === 'PATCH') return 'PATCH';
+  return 'GET';
+};
+
+const mapRawToLibraryItem = (raw: any): CaseLibraryItem => {
+  const cfg = raw?.config || {};
+  return {
+    id: String(raw?.id ?? `tc-${Date.now()}`),
+    name: String(raw?.name || cfg?.title || '未命名接口用例'),
+    method: normalizeMethod(raw?.method || cfg?.method),
+    url: String(raw?.url || cfg?.url || ''),
+    module: String(raw?.module || cfg?.module || '通用模块'),
+  };
+};
 
 const ApiAutomation: React.FC = () => {
-  const [activeSection, setActiveSection] = useState('scenarios');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orchestration'>('overview');
   const [scenarios, setScenarios] = useState<TestScenario[]>([]);
-  const [history, setHistory] = useState<ExecutionRecord[]>([]);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
 
-  // Modals & Drawers
-  const [modalVisible, setModalVisible] = useState(false);
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const [importModalVisible, setImportModalVisible] = useState(false);
-  const [editingScenario, setEditingScenario] = useState<TestScenario | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<TestScenario | null>(null);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
+  const [library, setLibrary] = useState<CaseLibraryItem[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
 
-  // Forms & Filters
-  const [form] = Form.useForm();
   const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | ScenarioStatus>('all');
 
-  // Execution Simulation
-  const [executionProgress, setExecutionProgress] = useState(0);
-  const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'success' | 'failed'>('idle');
+  const [scenarioModalVisible, setScenarioModalVisible] = useState(false);
+  const [editingScenarioId, setEditingScenarioId] = useState<string>('');
+  const [stepDrawerVisible, setStepDrawerVisible] = useState(false);
+  const [editingStep, setEditingStep] = useState<ApiStep | null>(null);
+  const [libraryVisible, setLibraryVisible] = useState(false);
+  const [selectedLibraryKeys, setSelectedLibraryKeys] = useState<string[]>([]);
 
-  // Orchestration & Steps
-  const [testCaseModalVisible, setTestCaseModalVisible] = useState(false);
-  const [availableTestCases, setAvailableTestCases] = useState<InterfaceTestCase[]>([]);
-  const [selectedTestCases, setSelectedTestCases] = useState<InterfaceTestCase[]>([]);
-  const [targetKeys, setTargetKeys] = useState<string[]>([]);
-  const [stepConfigModalVisible, setStepConfigModalVisible] = useState(false);
-  const [configuringStep, setConfiguringStep] = useState<ApiStep | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const [scenarioStorageReady, setScenarioStorageReady] = useState(false);
+
+  const [scenarioForm] = Form.useForm();
   const [stepForm] = Form.useForm();
 
-  // Mock Data Initialization
-  useEffect(() => {
-    // Mock Scenarios
-    const mockScenarios: TestScenario[] = [
-      {
-        id: '1',
-        name: '用户注册登录全流程',
-        description: '覆盖用户注册、激活、登录及获取Token的完整业务闭环',
-        category: 'api',
-        steps: Array(5).fill(null).map((_, i) => ({
-          id: `step-${i}`, name: `Step ${i + 1}`, method: 'POST', url: '/api/test',
-          headers: {}, params: {}, body: '', assertions: '', extractVariables: {}, delay: 0, enabled: true
-        })),
-        globalVariables: { env: 'stage' },
-        settings: { timeout: 30000, retries: 3, parallel: false, thinkTime: 1000 },
-        status: 'active',
-        createdBy: 'Admin',
-        createdAt: '2024-02-10',
-        updatedAt: '2024-02-11',
-        lastExecution: { status: 'success', duration: 1240, executedAt: '10 mins ago', passRate: 100 }
-      },
-      {
-        id: '2',
-        name: '订单创建性能测试',
-        description: '高并发下的订单创建接口响应时间测试',
-        category: 'performance',
-        steps: [],
-        globalVariables: {},
-        settings: { timeout: 10000, retries: 0, parallel: true, thinkTime: 0 },
-        status: 'active',
-        createdBy: 'Li',
-        createdAt: '2024-02-09',
-        updatedAt: '2024-02-09',
-        lastExecution: { status: 'failed', duration: 5400, executedAt: '2 hours ago', passRate: 85 }
+  const loadProjects = useCallback(async () => {
+    try {
+      const data = await projectApi.getProjects();
+      const list = (data || []) as ProjectOption[];
+      setProjects(list);
+      if (list.length) {
+        setSelectedProjectId((prev) => prev ?? list[0].id);
       }
-    ];
-    setScenarios(mockScenarios);
-
-    // Mock History
-    setHistory([
-      { id: '1', scenarioName: '用户注册登录全流程', status: 'success', startTime: '2024-02-11 14:30:00', duration: '1.2s', trigger: 'Manual' },
-      { id: '2', scenarioName: '订单创建性能测试', status: 'failed', startTime: '2024-02-11 12:00:00', duration: '5.4s', trigger: 'CI/CD' },
-      { id: '3', scenarioName: '商品搜索接口回归', status: 'success', startTime: '2024-02-10 09:15:00', duration: '0.8s', trigger: 'Scheduled' },
-      { id: '4', scenarioName: '支付网关集成测试', status: 'success', startTime: '2024-02-09 18:20:00', duration: '2.1s', trigger: 'Manual' },
-    ]);
-
-    // Mock TestCases for Selection
-    setAvailableTestCases([
-      { id: 'tc1', name: 'Login', description: 'User Login', protocol: 'HTTP', method: 'POST', url: '/auth/login', headers: {}, params: {}, body: '{}', assertions: '', module: 'Auth', priority: 'high', status: 'active' },
-      { id: 'tc2', name: 'Get Profile', description: 'User Profile', protocol: 'HTTP', method: 'GET', url: '/user/me', headers: {}, params: {}, body: '', assertions: '', module: 'User', priority: 'medium', status: 'active' },
-      { id: 'tc3', name: 'Create Order', description: 'Order Creation', protocol: 'HTTP', method: 'POST', url: '/orders', headers: {}, params: {}, body: '{}', assertions: '', module: 'Order', priority: 'high', status: 'active' },
-    ]);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '加载项目失败');
+    }
   }, []);
 
-  // --- Handlers ---
-
-  const handleExecute = (record: TestScenario) => {
-    setExecutionStatus('running');
-    setExecutionProgress(0);
-    message.loading({ content: `正在执行场景: ${record.name}`, key: 'executing' });
-
-    let p = 0;
-    const interval = setInterval(() => {
-      p += 20;
-      setExecutionProgress(p);
-      if (p >= 100) {
-        clearInterval(interval);
-        setExecutionStatus('success');
-        message.success({ content: '执行完成', key: 'executing' });
-        setTimeout(() => setExecutionStatus('idle'), 2000);
-
-        // Update Mock History
-        const newRecord: ExecutionRecord = {
-          id: Date.now().toString(),
-          scenarioName: record.name,
-          status: 'success',
-          startTime: dayjs().format('YYYY-MM-DD HH:mm:ss'),
-          duration: `${(Math.random() * 2).toFixed(1)}s`,
-          trigger: 'Manual'
-        };
-        setHistory([newRecord, ...history]);
-      }
-    }, 400);
-  };
-
-  const handleSaveScenario = async () => {
+  const loadLibraryCases = useCallback(async (projectId?: number) => {
+    setLibraryLoading(true);
     try {
-      const values = await form.validateFields();
-      const newScenario = {
-        ...editingScenario,
-        ...values,
-        id: editingScenario ? editingScenario.id : Date.now().toString(),
-        steps: editingScenario?.steps || [],
-        settings: editingScenario?.settings || { timeout: 30000, retries: 3 },
-        createdAt: editingScenario?.createdAt || dayjs().format('YYYY-MM-DD'),
-        updatedAt: dayjs().format('YYYY-MM-DD')
-      };
+      const rawList = await interfaceTestcaseApi.getAll(projectId);
+      const mapped = (rawList || []).map(mapRawToLibraryItem);
+      setLibrary(mapped);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '加载接口测试用例失败');
+      setLibrary([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
 
-      if (editingScenario) {
-        setScenarios(scenarios.map(s => s.id === editingScenario.id ? newScenario : s));
-        message.success('更新成功');
-      } else {
-        setScenarios([newScenario, ...scenarios]);
-        message.success('创建成功');
-      }
-      setModalVisible(false);
-      form.resetFields();
-    } catch (e) { }
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  useEffect(() => {
+    loadLibraryCases(selectedProjectId);
+  }, [loadLibraryCases, selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setScenarios([]);
+      setSelectedScenarioId('');
+      setScenarioStorageReady(false);
+      return;
+    }
+
+    const stored = loadScenariosFromStorage(selectedProjectId);
+    setScenarios(stored);
+    setSelectedScenarioId(stored[0]?.id || '');
+    setScenarioStorageReady(true);
+  }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId || !scenarioStorageReady) return;
+    saveScenariosToStorage(selectedProjectId, scenarios);
+  }, [selectedProjectId, scenarios, scenarioStorageReady]);
+
+  useEffect(() => {
+    if (!scenarios.length) {
+      setSelectedScenarioId('');
+      return;
+    }
+    setSelectedScenarioId((prev) => (scenarios.some((s) => s.id === prev) ? prev : scenarios[0].id));
+  }, [scenarios]);
+
+  const filteredScenarios = useMemo(
+    () =>
+      scenarios.filter((s) => {
+        const hitSearch =
+          !searchText ||
+          s.name.toLowerCase().includes(searchText.toLowerCase()) ||
+          s.description.toLowerCase().includes(searchText.toLowerCase());
+        const hitStatus = statusFilter === 'all' || s.status === statusFilter;
+        return hitSearch && hitStatus;
+      }),
+    [scenarios, searchText, statusFilter]
+  );
+
+  const selectedScenario = useMemo(
+    () => scenarios.find((s) => s.id === selectedScenarioId) || null,
+    [scenarios, selectedScenarioId]
+  );
+
+  const totalSteps = useMemo(
+    () => scenarios.reduce((sum, s) => sum + s.steps.length, 0),
+    [scenarios]
+  );
+
+  const avgPassRate = useMemo(() => {
+    const items = scenarios.filter((s) => s.lastExecution);
+    if (!items.length) return 0;
+    return Math.round(items.reduce((sum, s) => sum + (s.lastExecution?.passRate || 0), 0) / items.length);
+  }, [scenarios]);
+
+  const openCreateScenario = () => {
+    setEditingScenarioId('');
+    scenarioForm.resetFields();
+    scenarioForm.setFieldsValue({ status: 'active', tags: [] });
+    setScenarioModalVisible(true);
   };
 
-  // --- Renderers ---
+  const openEditScenario = (scenario: TestScenario) => {
+    setEditingScenarioId(scenario.id);
+    scenarioForm.setFieldsValue({
+      name: scenario.name,
+      description: scenario.description,
+      status: scenario.status,
+      tags: scenario.tags,
+      owner: scenario.owner,
+    });
+    setScenarioModalVisible(true);
+  };
 
-  const renderScenarioList = () => (
-    <div className="fade-in">
-      {/* Toolbar */}
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Space size="middle">
-          <Input
-            placeholder="搜索场景..."
-            prefix={<SearchOutlined style={{ color: '#ccc' }} />}
-            style={{ width: 240, borderRadius: 8 }}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
+  const saveScenario = async () => {
+    try {
+      const values = await scenarioForm.validateFields();
+      if (editingScenarioId) {
+        setScenarios((prev) =>
+          prev.map((item) =>
+            item.id === editingScenarioId
+              ? {
+                  ...item,
+                  ...values,
+                  tags: Array.isArray(values.tags) ? values.tags : [],
+                  updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+                }
+              : item
+          )
+        );
+        message.success('场景已更新');
+      } else {
+        if (!selectedProjectId) {
+          message.warning('请先选择项目后再创建场景');
+          return;
+        }
+        const newScenario: TestScenario = {
+          id: `s-${Date.now()}`,
+          name: values.name,
+          description: values.description || '',
+          status: values.status || 'active',
+          tags: Array.isArray(values.tags) ? values.tags : [],
+          owner: values.owner || '管理员',
+          projectId: selectedProjectId,
+          updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+          steps: [],
+        };
+        setScenarios((prev) => [newScenario, ...prev]);
+        setSelectedScenarioId(newScenario.id);
+        setActiveTab('orchestration');
+        message.success('场景已创建，请在编排页配置步骤');
+      }
+      setScenarioModalVisible(false);
+    } catch {
+      // antd 表单校验
+    }
+  };
+
+  const deleteScenario = (scenario: TestScenario) => {
+    Modal.confirm({
+      title: '确认删除场景',
+      content: `删除后不可恢复：${scenario.name}`,
+      okButtonProps: { danger: true },
+      onOk: () => {
+        setScenarios((prev) => {
+          const remain = prev.filter((item) => item.id !== scenario.id);
+          if (selectedScenarioId === scenario.id) {
+            setSelectedScenarioId(remain[0]?.id || '');
+          }
+          return remain;
+        });
+        message.success('场景已删除');
+      },
+    });
+  };
+
+  const executeScenario = () => {
+    if (!selectedScenario) return;
+    if (!selectedScenario.steps.length) {
+      message.warning('当前场景没有可执行步骤，请先编排');
+      return;
+    }
+    setExecuting(true);
+    setProgress(0);
+    const timer = window.setInterval(() => {
+      setProgress((p) => {
+        const next = p + 16;
+        if (next >= 100) {
+          window.clearInterval(timer);
+          setExecuting(false);
+          const passRate = Math.floor(Math.random() * 25) + 75;
+          setScenarios((prev) =>
+            prev.map((item) =>
+              item.id === selectedScenario.id
+                ? {
+                    ...item,
+                    lastExecution: {
+                      status: passRate >= 85 ? 'success' : 'failed',
+                      passRate,
+                      durationMs: Math.floor(Math.random() * 2500) + 800,
+                      executedAt: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+                    },
+                  }
+                : item
+            )
+          );
+          message.success('场景执行完成');
+          return 100;
+        }
+        return next;
+      });
+    }, 350);
+  };
+
+  const moveStep = (index: number, dir: 'up' | 'down') => {
+    if (!selectedScenario) return;
+    const steps = [...selectedScenario.steps];
+    const target = dir === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= steps.length) return;
+    [steps[index], steps[target]] = [steps[target], steps[index]];
+    setScenarios((prev) => prev.map((s) => (s.id === selectedScenario.id ? { ...s, steps, updatedAt: dayjs().format('YYYY-MM-DD HH:mm') } : s)));
+  };
+
+  const removeStep = (stepId: string) => {
+    if (!selectedScenario) return;
+    setScenarios((prev) =>
+      prev.map((s) =>
+        s.id === selectedScenario.id
+          ? { ...s, steps: s.steps.filter((step) => step.id !== stepId), updatedAt: dayjs().format('YYYY-MM-DD HH:mm') }
+          : s
+      )
+    );
+  };
+
+  const openStepEditor = (step: ApiStep) => {
+    setEditingStep(step);
+    stepForm.setFieldsValue(step);
+    setStepDrawerVisible(true);
+  };
+
+  const saveStep = async () => {
+    if (!selectedScenario || !editingStep) return;
+    try {
+      const values = await stepForm.validateFields();
+      setScenarios((prev) =>
+        prev.map((s) =>
+          s.id === selectedScenario.id
+            ? {
+                ...s,
+                steps: s.steps.map((step) => (step.id === editingStep.id ? { ...step, ...values } : step)),
+                updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+              }
+            : s
+        )
+      );
+      setStepDrawerVisible(false);
+      message.success('步骤已更新');
+    } catch {
+      // 表单校验
+    }
+  };
+
+  const addStepsFromLibrary = () => {
+    if (!selectedScenario) return;
+    if (!library.length) {
+      message.warning('当前项目暂无可用接口测试用例');
+      return;
+    }
+    const selected = library.filter((item) => selectedLibraryKeys.includes(item.id));
+    if (!selected.length) {
+      message.warning('请先选择要加入的用例');
+      return;
+    }
+    const newSteps: ApiStep[] = selected.map((item) => ({
+      id: `st-${Date.now()}-${item.id}`,
+      name: item.name,
+      method: item.method,
+      url: item.url,
+      delay: 0,
+      assertions: 'status=200',
+      enabled: true,
+    }));
+
+    setScenarios((prev) =>
+      prev.map((s) =>
+        s.id === selectedScenario.id
+          ? { ...s, steps: [...s.steps, ...newSteps], updatedAt: dayjs().format('YYYY-MM-DD HH:mm') }
+          : s
+      )
+    );
+    setLibraryVisible(false);
+    setSelectedLibraryKeys([]);
+    message.success(`已添加 ${newSteps.length} 个步骤`);
+  };
+
+  return (
+    <div className="app-content fade-in" style={{ padding: 24, maxWidth: 1700, margin: '0 auto' }}>
+      <div className="page-toolbar" style={{ marginBottom: 18 }}>
+        <div className="page-title">
+          <Title level={2} style={{ margin: 0 }}>接口自动化</Title>
+          <span className="page-subtitle">从场景管理到步骤编排，一页完成创建、编排、执行与回看</span>
+        </div>
+        <Space wrap>
+          <Select
+            style={{ width: 240 }}
+            placeholder="选择项目（加载接口用例）"
+            value={selectedProjectId}
+            onChange={setSelectedProjectId}
+            options={projects.map((item) => ({ label: item.name, value: item.id }))}
           />
-          <Select placeholder="类型" style={{ width: 120 }} allowClear>
-            <Select.Option value="api">API</Select.Option>
-            <Select.Option value="performance">性能</Select.Option>
-          </Select>
-        </Space>
-        <Space>
-          <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>导入</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => { setEditingScenario(null); setModalVisible(true); }}>新建场景</Button>
+          <Button icon={<PlusOutlined />} onClick={openCreateScenario} disabled={!selectedProjectId}>新建场景</Button>
+          <Button type="primary" icon={<PlayCircleFilled />} onClick={executeScenario} disabled={!selectedScenario || executing}>
+            执行当前场景
+          </Button>
         </Space>
       </div>
 
-      {/* Progress Bar for Running Execution */}
-      {executionStatus === 'running' && (
-        <div style={{ marginBottom: 16, background: '#e6f7ff', padding: '12px 24px', borderRadius: 8, border: '1px solid #91d5ff' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-            <Text strong style={{ color: '#1890ff' }}><RocketOutlined spin /> 场景执行中...</Text>
-            <Text type="secondary">{executionProgress}%</Text>
-          </div>
-          <Progress percent={executionProgress} showInfo={false} strokeColor="#1890ff" size="small" />
+      {executing && (
+        <Alert
+          showIcon
+          type="info"
+          style={{ marginBottom: 16, borderRadius: 10 }}
+          message={`正在执行：${selectedScenario?.name || '-'}`}
+          description={<Progress percent={progress} status="active" />}
+        />
+      )}
+
+      <Segmented
+        style={{ marginBottom: 16 }}
+        value={activeTab}
+        onChange={(v) => setActiveTab(v as 'overview' | 'orchestration')}
+        options={[
+          { label: '主页面总览', value: 'overview', icon: <ApiOutlined /> },
+          { label: '场景编排', value: 'orchestration', icon: <BranchesOutlined /> },
+        ]}
+      />
+
+      {activeTab === 'overview' && (
+        <div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+            <Col xs={24} md={8}>
+              <Card bordered={false} className="glass-panel">
+                <Statistic title="自动化场景" value={filteredScenarios.length} prefix={<ApiOutlined />} />
+              </Card>
+            </Col>
+            <Col xs={24} md={8}>
+              <Card bordered={false} className="glass-panel">
+                <Statistic title="总步骤数" value={totalSteps} prefix={<BranchesOutlined />} />
+              </Card>
+            </Col>
+            <Col xs={24} md={8}>
+              <Card bordered={false} className="glass-panel">
+                <Statistic title="平均通过率" value={avgPassRate} suffix="%" prefix={<CheckCircleOutlined />} />
+              </Card>
+            </Col>
+          </Row>
+
+          <Card bordered={false} className="glass-panel">
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+              <Space>
+                <Input
+                  allowClear
+                  style={{ width: 260 }}
+                  prefix={<SearchOutlined />}
+                  placeholder="搜索场景名称/描述"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  style={{ width: 140 }}
+                  options={[
+                    { label: '全部状态', value: 'all' },
+                    { label: '启用', value: 'active' },
+                    { label: '停用', value: 'inactive' },
+                  ]}
+                />
+              </Space>
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreateScenario} disabled={!selectedProjectId}>新建场景</Button>
+            </div>
+
+            <List
+              dataSource={filteredScenarios}
+              locale={{ emptyText: <Empty description="暂无场景" /> }}
+              renderItem={(item) => (
+                <List.Item
+                  actions={[
+                    <Tooltip title="进入编排" key="orchestrate">
+                      <Button
+                        type="text"
+                        icon={<SwapOutlined />}
+                        onClick={() => {
+                          setSelectedScenarioId(item.id);
+                          setActiveTab('orchestration');
+                        }}
+                      />
+                    </Tooltip>,
+                    <Tooltip title="编辑场景" key="edit">
+                      <Button type="text" icon={<EditOutlined />} onClick={() => openEditScenario(item)} />
+                    </Tooltip>,
+                    <Tooltip title="删除场景" key="delete">
+                      <Button type="text" danger icon={<DeleteOutlined />} onClick={() => deleteScenario(item)} />
+                    </Tooltip>,
+                  ]}
+                >
+                  <List.Item.Meta
+                    title={
+                      <Space>
+                        <Text strong>{item.name}</Text>
+                        <Tag color={item.status === 'active' ? 'success' : 'default'}>{item.status === 'active' ? '启用' : '停用'}</Tag>
+                        <Tag icon={<BranchesOutlined />}>{item.steps.length} 步</Tag>
+                      </Space>
+                    }
+                    description={
+                      <Space direction="vertical" size={4}>
+                        <Text type="secondary">{item.description || '暂无描述'}</Text>
+                        <Space wrap>
+                          {item.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+                          <Tag icon={<ClockCircleOutlined />}>更新于 {item.updatedAt}</Tag>
+                          {item.lastExecution ? (
+                            <Tag color={item.lastExecution.status === 'success' ? 'success' : 'error'}>
+                              最近执行 {item.lastExecution.passRate}% · {item.lastExecution.durationMs}ms
+                            </Tag>
+                          ) : null}
+                        </Space>
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
         </div>
       )}
 
-      {/* Table */}
-      <Table
-        className="glass-table"
-        columns={[
-          {
-            title: '场景名称', dataIndex: 'name', key: 'name',
-            render: (text, record) => (
+      {activeTab === 'orchestration' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr 360px', gap: 16 }}>
+          <Card bordered={false} className="glass-panel" title="场景列表">
+            <Space direction="vertical" style={{ width: '100%' }} size={10}>
+              {filteredScenarios.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedScenarioId(item.id)}
+                  style={{
+                    border: item.id === selectedScenarioId ? '1px solid #1677ff' : '1px solid rgba(15,23,42,0.08)',
+                    borderRadius: 10,
+                    padding: 12,
+                    cursor: 'pointer',
+                    background: item.id === selectedScenarioId ? 'rgba(22,119,255,0.08)' : '#fff',
+                  }}
+                >
+                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Text strong>{item.name}</Text>
+                    <Text type="secondary" ellipsis>{item.description || '暂无描述'}</Text>
+                    <Space>
+                      <Badge status={item.status === 'active' ? 'success' : 'default'} text={item.status === 'active' ? '启用' : '停用'} />
+                      <Tag>{item.steps.length} 步</Tag>
+                    </Space>
+                  </Space>
+                </div>
+              ))}
+            </Space>
+          </Card>
+
+          <Card
+            bordered={false}
+            className="glass-panel"
+            title={
               <Space>
-                <Avatar shape="square" icon={<FileTextOutlined />} style={{ background: record.category === 'api' ? '#e6f7ff' : '#fff7e6', color: record.category === 'api' ? '#1890ff' : '#fa8c16' }} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>{text}</div>
-                  <div style={{ fontSize: 12, color: '#999' }}>{record.description}</div>
-                </div>
+                <BranchesOutlined />
+                <span>步骤编排</span>
+                <Tag color="blue">{selectedScenario?.name || '未选择场景'}</Tag>
               </Space>
-            )
-          },
-          {
-            title: '类型', dataIndex: 'category', key: 'category', width: 100,
-            render: (cat) => cat === 'api' ? <Tag color="blue">API Automation</Tag> : <Tag color="orange">Performance</Tag>
-          },
-          {
-            title: '步骤数', dataIndex: 'steps', key: 'steps', width: 100,
-            render: (steps) => <Badge count={steps.length} showZero color="#eb2f96" />
-          },
-          {
-            title: '上次执行', key: 'lastExecution', width: 250,
-            render: (_, record) => record.lastExecution ? (
-              <Space size="middle">
-                <Tag color={record.lastExecution.status === 'success' ? 'success' : 'error'} icon={record.lastExecution.status === 'success' ? <CheckCircleOutlined /> : <ExclamationCircleOutlined />}>
-                  {record.lastExecution.status.toUpperCase()}
-                </Tag>
-                <Text type="secondary" style={{ fontSize: 12 }}>{record.lastExecution.executedAt}</Text>
+            }
+            extra={
+              <Space>
+                <Tag color="processing">用例库 {libraryLoading ? '加载中' : `${library.length} 条`}</Tag>
+                <Button icon={<PlusOutlined />} onClick={() => setLibraryVisible(true)} disabled={!selectedScenario || libraryLoading}>从用例库添加</Button>
               </Space>
-            ) : <Text type="secondary">-</Text>
-          },
-          {
-            title: '操作', key: 'action', width: 200, align: 'right',
-            render: (_, record) => (
-              <Space className="table-actions">
-                <Tooltip title="执行"><Button type="text" icon={<PlayCircleOutlined />} onClick={() => handleExecute(record)} /></Tooltip>
-                <Tooltip title="编排"><Button type="text" icon={<BranchesOutlined />} onClick={() => { setEditingScenario(record); setTestCaseModalVisible(true); }} /></Tooltip>
-                <Tooltip title="详情"><Button type="text" icon={<SettingOutlined />} onClick={() => { setSelectedScenario(record); setDrawerVisible(true); }} /></Tooltip>
-                <Tooltip title="删除"><Button type="text" danger icon={<DeleteOutlined />} /></Tooltip>
-              </Space>
-            )
-          }
-        ]}
-        dataSource={scenarios.filter(s => s.name.includes(searchText))}
-        rowKey="id"
-        pagination={{ pageSize: 8 }}
-      />
-    </div>
-  );
-
-  const renderHistory = () => (
-    <div className="fade-in" style={{ padding: 24, maxWidth: 800 }}>
-      <Timeline mode="left">
-        {history.map(item => (
-          <Timeline.Item
-            key={item.id}
-            color={item.status === 'success' ? 'green' : 'red'}
-            label={<Text type="secondary">{item.startTime}</Text>}
+            }
           >
-            <Card size="small" bordered={false} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <Text strong style={{ fontSize: 16 }}>{item.scenarioName}</Text>
-                  <div style={{ marginTop: 4 }}>
-                    <Tag>{item.trigger}</Tag>
-                    <Text type="secondary">Duration: {item.duration}</Text>
-                  </div>
-                </div>
-                {item.status === 'success' ?
-                  <CheckCircleOutlined style={{ fontSize: 24, color: '#52c41a' }} /> :
-                  <ExclamationCircleOutlined style={{ fontSize: 24, color: '#ff4d4f' }} />
-                }
-              </div>
-            </Card>
-          </Timeline.Item>
-        ))}
-      </Timeline>
-    </div>
-  );
+            {!selectedScenario ? (
+              <Empty description="请选择左侧场景进行编排" />
+            ) : !selectedScenario.steps.length ? (
+              <Empty description="暂无步骤，点击“从用例库添加”开始编排" />
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                {selectedScenario.steps.map((step, index) => (
+                  <Card key={step.id} size="small" style={{ borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <Space align="start">
+                        <Badge count={index + 1} color="#1677ff" />
+                        <div>
+                          <Space>
+                            <Tag color={methodColorMap[step.method]}>{step.method}</Tag>
+                            <Text strong>{step.name}</Text>
+                            {!step.enabled && <Tag>已禁用</Tag>}
+                          </Space>
+                          <div style={{ marginTop: 4 }}>
+                            <Text code>{step.url}</Text>
+                          </div>
+                          <div style={{ marginTop: 4 }}>
+                            <Text type="secondary">断言：{step.assertions || '无'}</Text>
+                            <Divider type="vertical" />
+                            <Text type="secondary">延迟：{step.delay} ms</Text>
+                          </div>
+                        </div>
+                      </Space>
+                      <Space>
+                        <Tooltip title="上移"><Button icon={<UpOutlined />} onClick={() => moveStep(index, 'up')} disabled={index === 0} /></Tooltip>
+                        <Tooltip title="下移"><Button icon={<DownOutlined />} onClick={() => moveStep(index, 'down')} disabled={index === selectedScenario.steps.length - 1} /></Tooltip>
+                        <Tooltip title="编辑"><Button icon={<SettingOutlined />} onClick={() => openStepEditor(step)} /></Tooltip>
+                        <Tooltip title="删除"><Button danger icon={<DeleteOutlined />} onClick={() => removeStep(step.id)} /></Tooltip>
+                      </Space>
+                    </div>
+                  </Card>
+                ))}
+              </Space>
+            )}
+          </Card>
 
-  const renderMonitor = () => (
-    <div className="fade-in">
-      <Row gutter={[24, 24]}>
-        <Col span={6}>
-          <Card bordered={false} className="stat-card">
-            <Statistic title="Total Requests" value={18934} prefix={<ApiOutlined />} valueStyle={{ color: '#3f8600' }} />
+          <Card bordered={false} className="glass-panel" title="场景信息">
+            {!selectedScenario ? (
+              <Empty description="未选择场景" />
+            ) : (
+              <Space direction="vertical" style={{ width: '100%' }} size={10}>
+                <Title level={5} style={{ margin: 0 }}>{selectedScenario.name}</Title>
+                <Paragraph type="secondary" style={{ marginBottom: 4 }}>{selectedScenario.description || '暂无描述'}</Paragraph>
+                <Space wrap>
+                  <Tag>负责人：{selectedScenario.owner}</Tag>
+                  <Tag>更新时间：{selectedScenario.updatedAt}</Tag>
+                  <Tag color={selectedScenario.status === 'active' ? 'success' : 'default'}>{selectedScenario.status === 'active' ? '启用' : '停用'}</Tag>
+                </Space>
+                <Divider style={{ margin: '8px 0' }} />
+                <Statistic title="步骤数" value={selectedScenario.steps.length} prefix={<BranchesOutlined />} />
+                <Statistic
+                  title="最近执行"
+                  value={selectedScenario.lastExecution ? `${selectedScenario.lastExecution.passRate}%` : '未执行'}
+                  suffix={selectedScenario.lastExecution ? '通过率' : ''}
+                  prefix={<RocketOutlined />}
+                />
+                {selectedScenario.lastExecution ? (
+                  <Alert
+                    type={selectedScenario.lastExecution.status === 'success' ? 'success' : 'error'}
+                    showIcon
+                    message={selectedScenario.lastExecution.status === 'success' ? '最近执行成功' : '最近执行失败'}
+                    description={`${selectedScenario.lastExecution.executedAt} · ${selectedScenario.lastExecution.durationMs}ms`}
+                  />
+                ) : null}
+                <Button type="primary" block icon={<PlayCircleFilled />} onClick={executeScenario} disabled={executing || !selectedScenario.steps.length}>
+                  执行该场景
+                </Button>
+              </Space>
+            )}
           </Card>
-        </Col>
-        <Col span={6}>
-          <Card bordered={false} className="stat-card">
-            <Statistic title="Avg Response Time" value={234} suffix="ms" prefix={<ClockCircleOutlined />} valueStyle={{ color: '#cf1322' }} />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card bordered={false} className="stat-card">
-            <Statistic title="Error Rate" value={1.2} suffix="%" prefix={<ExclamationCircleOutlined />} />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card bordered={false} className="stat-card">
-            <Statistic title="Active Scenarios" value={12} prefix={<RunningOutlinedIcon />} />
-          </Card>
-        </Col>
-      </Row>
-      <Card title="Performance Trends (Mock)" style={{ marginTop: 24 }} bordered={false}>
-        <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa', borderRadius: 8 }}>
-          <Text type="secondary">Chart Visualization Placeholder (RPS / Latency)</Text>
         </div>
-      </Card>
-    </div>
-  );
+      )}
 
-  const RunningOutlinedIcon = () => <RocketOutlined />;
-
-  return (
-    <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1600, margin: '0 auto', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
-
-      {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <Title level={2} style={{ margin: 0, fontWeight: 700 }}>接口自动化</Title>
-        <Text type="secondary">测试场景编排、执行与监控一体化平台</Text>
-      </div>
-
-      <div className="glass-panel" style={{ flex: 1, display: 'flex', borderRadius: 16, overflow: 'hidden', background: '#fff' }}>
-
-        {/* Sidebar Menu */}
-        <div style={{ width: 240, borderRight: '1px solid #f0f0f0', background: '#fafafa', padding: '16px 0' }}>
-          <Menu
-            mode="inline"
-            selectedKeys={[activeSection]}
-            onClick={({ key }) => setActiveSection(key)}
-            style={{ background: 'transparent', border: 'none' }}
-          >
-            <Menu.Item key="scenarios" icon={<AppstoreOutlined />}>场景管理</Menu.Item>
-            <Menu.Item key="history" icon={<HistoryOutlined />}>执行历史</Menu.Item>
-            <Menu.Item key="monitor" icon={<DashboardOutlined />}>性能监控</Menu.Item>
-          </Menu>
-        </div>
-
-        {/* Main Content */}
-        <div style={{ flex: 1, padding: 24, overflowY: 'auto' }}>
-          {activeSection === 'scenarios' && renderScenarioList()}
-          {activeSection === 'history' && renderHistory()}
-          {activeSection === 'monitor' && renderMonitor()}
-        </div>
-
-      </div>
-
-      {/* Edit/Create Modal */}
       <Modal
-        title={editingScenario ? "编辑场景" : "新建场景"}
-        open={modalVisible}
-        onOk={handleSaveScenario}
-        onCancel={() => setModalVisible(false)}
+        title={editingScenarioId ? '编辑场景' : '新建场景'}
+        open={scenarioModalVisible}
+        onCancel={() => setScenarioModalVisible(false)}
+        onOk={saveScenario}
+        okText="保存"
       >
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="场景名称" rules={[{ required: true }]}>
-            <Input placeholder="输入名称" />
+        <Form form={scenarioForm} layout="vertical">
+          <Form.Item label="场景名称" name="name" rules={[{ required: true, message: '请输入场景名称' }]}>
+            <Input placeholder="例如：订单下单支付回归" />
           </Form.Item>
-          <Form.Item name="category" label="类型" initialValue="api">
-            <Select>
-              <Select.Option value="api">API Automation</Select.Option>
-              <Select.Option value="performance">Performance Test</Select.Option>
-            </Select>
+          <Form.Item label="场景描述" name="description">
+            <TextArea rows={3} placeholder="简要描述该场景覆盖范围" />
           </Form.Item>
-          <Form.Item name="description" label="描述">
-            <TextArea rows={3} />
+          <Form.Item label="负责人" name="owner">
+            <Input placeholder="例如：测试A" />
+          </Form.Item>
+          <Form.Item label="状态" name="status">
+            <Select
+              options={[
+                { label: '启用', value: 'active' },
+                { label: '停用', value: 'inactive' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="标签" name="tags">
+            <Select mode="tags" placeholder="输入后回车" />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* Import Modal */}
       <Modal
-        title="导入场景"
-        open={importModalVisible}
-        footer={null}
-        onCancel={() => setImportModalVisible(false)}
+        title="从接口用例库添加步骤"
+        open={libraryVisible}
+        onCancel={() => setLibraryVisible(false)}
+        onOk={addStepsFromLibrary}
+        okText="添加为步骤"
+        width={760}
       >
-        <Dragger style={{ padding: 32 }}>
-          <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-          <p className="ant-upload-text">点击或拖拽文件到此区域</p>
-          <p className="ant-upload-hint">支持 .json / .jmx 格式文件</p>
-        </Dragger>
+        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text type="secondary">
+            {selectedProjectId ? `当前项目 ID: ${selectedProjectId}` : '未选择项目'} · 数据来源：接口测试用例
+          </Text>
+          <Button size="small" onClick={() => loadLibraryCases(selectedProjectId)} loading={libraryLoading}>刷新</Button>
+        </div>
+        <Spin spinning={libraryLoading}>
+          <List
+            bordered
+            dataSource={library}
+            locale={{ emptyText: <Empty description="当前项目暂无接口测试用例" /> }}
+            rowKey="id"
+            renderItem={(item) => {
+              const checked = selectedLibraryKeys.includes(item.id);
+              return (
+                <List.Item
+                  onClick={() => {
+                    setSelectedLibraryKeys((prev) =>
+                      prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
+                    );
+                  }}
+                  style={{ cursor: 'pointer', background: checked ? 'rgba(22,119,255,0.08)' : '#fff' }}
+                >
+                  <Space>
+                    <Badge status={checked ? 'processing' : 'default'} />
+                    <Tag color={methodColorMap[item.method]}>{item.method}</Tag>
+                    <Text strong>{item.name}</Text>
+                    <Text type="secondary">{item.url || '未配置URL'}</Text>
+                    <Tag>{item.module}</Tag>
+                  </Space>
+                </List.Item>
+              );
+            }}
+          />
+        </Spin>
       </Modal>
 
-      {/* Orchestration Modal */}
-      <Modal
-        title="编排测试用例"
-        open={testCaseModalVisible}
-        width={900}
-        onCancel={() => setTestCaseModalVisible(false)}
-        onOk={() => { message.success('编排已保存'); setTestCaseModalVisible(false); }}
-      >
-        <Transfer
-          dataSource={availableTestCases.map(tc => ({ key: tc.id, title: tc.name, description: tc.url }))}
-          titles={['可用用例', '已选步骤']}
-          targetKeys={targetKeys}
-          onChange={keys => setTargetKeys(keys as string[])}
-          render={item => item.title}
-          listStyle={{ width: 400, height: 400 }}
-          showSearch
-        />
-      </Modal>
-
-      {/* Detail Drawer */}
       <Drawer
-        title={selectedScenario?.name}
-        open={drawerVisible}
-        onClose={() => setDrawerVisible(false)}
-        width={600}
+        title="编辑步骤"
+        width={460}
+        open={stepDrawerVisible}
+        onClose={() => setStepDrawerVisible(false)}
+        extra={<Button type="primary" onClick={saveStep}>保存</Button>}
       >
-        <Divider orientation="left">基本信息</Divider>
-        <p><Text type="secondary">ID: </Text> {selectedScenario?.id}</p>
-        <p><Text type="secondary">Description: </Text> {selectedScenario?.description}</p>
-
-        <Divider orientation="left">测试步骤</Divider>
-        <Timeline>
-          {selectedScenario?.steps?.length ? selectedScenario.steps.map(s => (
-            <Timeline.Item key={s.id} dot={<ApiOutlined />}>
-              <Text strong>{s.name}</Text>
-              <div style={{ fontSize: 12, color: '#999' }}>{s.method} {s.url}</div>
-            </Timeline.Item>
-          )) : <Text type="secondary">暂无步骤</Text>}
-        </Timeline>
+        <Form form={stepForm} layout="vertical">
+          <Form.Item label="步骤名称" name="name" rules={[{ required: true, message: '请输入步骤名称' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item label="请求方法" name="method" rules={[{ required: true }]}>
+            <Select
+              options={['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map((m) => ({ label: m, value: m }))}
+            />
+          </Form.Item>
+          <Form.Item label="请求 URL" name="url" rules={[{ required: true, message: '请输入 URL' }]}>
+            <Input placeholder="/api/path" />
+          </Form.Item>
+          <Form.Item label="断言规则" name="assertions">
+            <TextArea rows={3} placeholder="例如：status=200 && code=0" />
+          </Form.Item>
+          <Form.Item label="步骤延迟（ms）" name="delay">
+            <Input type="number" min={0} />
+          </Form.Item>
+          <Form.Item label="启用步骤" name="enabled">
+            <Select
+              options={[
+                { label: '启用', value: true },
+                { label: '禁用', value: false },
+              ]}
+            />
+          </Form.Item>
+        </Form>
       </Drawer>
     </div>
   );
