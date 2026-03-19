@@ -26,6 +26,8 @@ import RuleConfig from './pages/RuleConfig';
 import AiKnowledge from './pages/AiKnowledge';
 import SystemSettings from './pages/SystemSettings';
 import TaskCenter from './pages/TaskCenter';
+import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
+import BusinessData from './pages/DataWarehouse/BusinessData';
 import Login from './pages/Login';
 import { authStorage } from './services/api';
 
@@ -92,6 +94,8 @@ const AppLayout: React.FC = () => {
               <Route path="/tools/json-formatter" element={<JsonFormatter />} />
               <Route path="/tools/aes-crypto" element={<AesCrypto />} />
               <Route path="/test-menu" element={<TestMenu />} />
+              <Route path="/data-warehouse/functions" element={<CommonFunctions />} />
+              <Route path="/data-warehouse/business" element={<BusinessData />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />

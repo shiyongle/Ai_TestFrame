@@ -19,6 +19,8 @@ import {
   FileSearchOutlined,
   DatabaseOutlined,
   SafetyCertificateOutlined,
+  FunctionOutlined,
+  HddOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlayCircleOutlined,
@@ -218,6 +220,23 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             },
           ],
         },
+        {
+          key: 'data-warehouse',
+          icon: <DatabaseOutlined />,
+          label: '数据仓库',
+          children: [
+            {
+              key: '/data-warehouse/functions',
+              icon: <FunctionOutlined />,
+              label: '常用函数',
+            },
+            {
+              key: '/data-warehouse/business',
+              icon: <HddOutlined />,
+              label: '业务数据',
+            },
+          ],
+        },
       ],
     },
     {
@@ -283,6 +302,9 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     }
     if (currentPath.startsWith('/ai/knowledge')) {
       openKeys.push('settings');
+    }
+    if (currentPath.startsWith('/data-warehouse')) {
+      openKeys.push('data-warehouse');
     }
     // 默认展开工具箱菜单
     if (openKeys.length === 0) {
