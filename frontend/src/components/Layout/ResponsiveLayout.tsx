@@ -8,6 +8,7 @@ import {
   BugOutlined,
   ApiOutlined,
   BarChartOutlined,
+  ClockCircleOutlined,
   HistoryOutlined,
   SettingOutlined,
   ToolOutlined,
@@ -264,6 +265,17 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               label: '全局配置',
             },
           ],
+        },
+      ],
+    },
+    {
+      type: 'group' as const,
+      label: '日志',
+      children: [
+        {
+          key: '/operation-logs',
+          icon: <ClockCircleOutlined />,
+          label: '操作日志',
         },
       ],
     },

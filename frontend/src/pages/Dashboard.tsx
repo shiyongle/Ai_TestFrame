@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Avatar, Tag, Button, Typography, Space, Tooltip, Modal, List, Badge } from 'antd';
+import { Avatar, Tag, Button, Typography, Space, Tooltip } from 'antd';
 import {
   ProjectOutlined,
   BugOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
-  ClockCircleOutlined,
   ThunderboltFilled,
-  ArrowRightOutlined,
   PlusOutlined,
   MoreOutlined,
   RobotOutlined,
   SendOutlined,
   UserOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  PlayCircleOutlined,
-  FormOutlined,
+  FileSearchOutlined,
+  DatabaseOutlined,
+  HistoryOutlined,
+  SettingOutlined,
+  ApiOutlined,
+  RocketOutlined,
+  ScheduleOutlined,
+  ArrowRightOutlined,
 } from '@ant-design/icons';
 import { dashboardApi } from '../services/api';
 import dayjs from 'dayjs';
@@ -37,15 +39,72 @@ const getCurrentUser = (): string => {
   return localStorage.getItem('username') || '管理员';
 };
 
-// Map action to icon & color
-const ACTION_MAP: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  create:   { icon: <PlusOutlined />,       color: 'rgba(52,199,89,0.15)',  label: '新建' },
-  update:   { icon: <EditOutlined />,       color: 'rgba(0,122,255,0.12)', label: '修改' },
-  delete:   { icon: <DeleteOutlined />,     color: 'rgba(255,59,48,0.12)', label: '删除' },
-  execute:  { icon: <PlayCircleOutlined />, color: 'rgba(255,149,0,0.12)', label: '执行' },
-  generate: { icon: <RobotOutlined />,      color: 'rgba(88,86,214,0.12)', label: 'AI生成' },
-  default:  { icon: <FormOutlined />,       color: 'rgba(0,0,0,0.05)',     label: '操作' },
-};
+const quickEntries = [
+  {
+    title: '需求管理',
+    desc: '管理需求池与评审状态',
+    path: '/requirements',
+    icon: <FileSearchOutlined />,
+    tag: '高频',
+    color: 'linear-gradient(135deg, rgba(0,122,255,0.14) 0%, rgba(88,86,214,0.12) 100%)',
+  },
+  {
+    title: '数据仓库',
+    desc: '常用函数与业务样本管理',
+    path: '/data-warehouse/functions',
+    icon: <DatabaseOutlined />,
+    tag: '推荐',
+    color: 'linear-gradient(135deg, rgba(52,199,89,0.16) 0%, rgba(50,173,230,0.10) 100%)',
+  },
+  {
+    title: '版本管理',
+    desc: '追踪版本周期与发布节点',
+    path: '/versions',
+    icon: <HistoryOutlined />,
+    tag: '核心',
+    color: 'linear-gradient(135deg, rgba(255,149,0,0.18) 0%, rgba(255,94,58,0.12) 100%)',
+  },
+  {
+    title: '系统设置',
+    desc: '全局配置与模型参数',
+    path: '/settings',
+    icon: <SettingOutlined />,
+    tag: '配置',
+    color: 'linear-gradient(135deg, rgba(88,86,214,0.16) 0%, rgba(175,82,222,0.12) 100%)',
+  },
+  {
+    title: '接口自动化',
+    desc: '场景编排与定时执行',
+    path: '/api-automation',
+    icon: <RocketOutlined />,
+    tag: '执行',
+    color: 'linear-gradient(135deg, rgba(255,59,48,0.16) 0%, rgba(255,149,0,0.12) 100%)',
+  },
+  {
+    title: '测试计划',
+    desc: '计划编排与执行追踪',
+    path: '/testcases/plans',
+    icon: <ScheduleOutlined />,
+    tag: '计划',
+    color: 'linear-gradient(135deg, rgba(0,199,190,0.16) 0%, rgba(0,122,255,0.12) 100%)',
+  },
+  {
+    title: '接口测试用例',
+    desc: '接口用例维护与调试',
+    path: '/testcases/interface',
+    icon: <ApiOutlined />,
+    tag: '用例',
+    color: 'linear-gradient(135deg, rgba(90,200,250,0.16) 0%, rgba(0,122,255,0.10) 100%)',
+  },
+  {
+    title: '操作日志',
+    desc: '查看全局操作流水',
+    path: '/operation-logs',
+    icon: <HistoryOutlined />,
+    tag: '追踪',
+    color: 'linear-gradient(135deg, rgba(142,142,147,0.16) 0%, rgba(72,72,74,0.10) 100%)',
+  },
+];
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -58,10 +117,6 @@ const Dashboard: React.FC = () => {
     totalRunsThisWeek: 0,
   });
 
-  const [activities, setActivities] = useState<any[]>([]);
-  const [allActivities, setAllActivities] = useState<any[]>([]);
-  const [viewAllVisible, setViewAllVisible] = useState(false);
-  const [allLoading, setAllLoading] = useState(false);
 
   // AI Chat State
   const [chatInput, setChatInput] = useState('');
@@ -90,10 +145,7 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [statsData, activitiesData] = await Promise.all([
-        dashboardApi.getStats(),
-        dashboardApi.getActivities({ limit: 8 }),
-      ]);
+      const statsData = await dashboardApi.getStats();
       setStats({
         totalProjects: statsData.total_projects || 0,
         totalTestCases: statsData.total_testcases || 0,
@@ -102,22 +154,8 @@ const Dashboard: React.FC = () => {
         passRate: statsData.pass_rate || 0,
         totalRunsThisWeek: statsData.total_runs_this_week || 0,
       });
-      setActivities(activitiesData.items || []);
     } catch (error) {
       console.error('Failed to load dashboard data', error);
-    }
-  };
-
-  const handleViewAll = async () => {
-    setViewAllVisible(true);
-    setAllLoading(true);
-    try {
-      const data = await dashboardApi.getActivities({ limit: 100 });
-      setAllActivities(data.items || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setAllLoading(false);
     }
   };
 
@@ -172,17 +210,19 @@ const Dashboard: React.FC = () => {
       <div style={{
         display: 'flex',
         gap: '24px',
-        height: 'calc(100vh - 160px)', // Fill viewport minus header and padding
+        height: 'calc(100vh - 170px)',
+        minHeight: 680,
         alignItems: 'stretch'
       }}>
         
-        {/* Left Area: Stats & Recent Activity */}
+        {/* Left Area: Stats */}
         <div style={{
           flex: 1,
           display: 'flex',
           flexDirection: 'column',
           gap: '24px',
-          minWidth: 0
+          minWidth: 0,
+          height: '100%'
         }}>
           
           {/* Top Stats Row */}
@@ -190,7 +230,7 @@ const Dashboard: React.FC = () => {
             display: 'grid',
             gridTemplateColumns: '1.2fr 1.5fr 1fr',
             gap: '24px',
-            height: '160px' // Fixed height for top stats
+            minHeight: '160px'
           }}>
             
             {/* 1. Projects Stats */}
@@ -253,68 +293,98 @@ const Dashboard: React.FC = () => {
             </BentoCard>
           </div>
 
-          {/* Activity Log List */}
-          <div className="panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div className="panel-header" style={{ padding: '16px 24px', flexShrink: 0 }}>
-              <Text strong style={{ fontSize: 16 }}>最近动态</Text>
-              <Button type="link" size="small" icon={<ArrowRightOutlined />} onClick={handleViewAll}>全部</Button>
+          <div className="panel" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="panel-header" style={{ padding: '16px 24px' }}>
+              <Text strong style={{ fontSize: 16 }}>工作台快捷入口</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>高频功能推荐，点击即达</Text>
             </div>
-            <div className="panel-body" style={{ padding: 0, overflowY: 'auto', flex: 1 }}>
-              {activities.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>暂无操作记录</div>
-              ) : activities.map((item: any, index: number) => {
-                const actionInfo = ACTION_MAP[item.action] || ACTION_MAP.default;
-                return (
-                  <div key={item.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '14px 24px',
-                    borderBottom: index < activities.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
-                    transition: 'background 0.2s'
-                  }} className="hover-bg">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div style={{
-                        width: 38, height: 38, borderRadius: 10,
-                        background: actionInfo.color,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 16, color: '#555'
-                      }}>
-                        {actionInfo.icon}
+            <div className="panel-body" style={{ padding: '10px 16px 16px', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 12 }}>
+                {quickEntries.slice(0, 4).map((item) => (
+                  <div
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
+                    style={{
+                      borderRadius: 16,
+                      border: '1px solid rgba(255,255,255,0.7)',
+                      background: item.color,
+                      padding: 16,
+                      cursor: 'pointer',
+                      boxShadow: '0 8px 24px rgba(15,23,42,.06)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      minHeight: 126,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.9)', color: '#1f2d3d', fontSize: 17 }}>
+                        {item.icon}
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#1d1d1f', fontSize: 14 }}>
-                          {item.user} <Text type="secondary" style={{ fontWeight: 400 }}>{actionInfo.label}了</Text> {item.target_name}
-                        </div>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {item.module} · {item.created_at ? dayjs(item.created_at).format('MM-DD HH:mm') : ''}
-                        </Text>
+                      <Tag style={{ margin: 0, border: 'none', borderRadius: 10, background: 'rgba(255,255,255,.78)', fontWeight: 600 }}>
+                        {item.tag}
+                      </Tag>
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>{item.title}</div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{item.desc}</Text>
+                    </div>
+                    <div style={{ marginTop: 'auto', color: '#334155', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      立即进入
+                      <ArrowRightOutlined />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                {quickEntries.slice(4).map((item) => (
+                  <div
+                    key={item.path}
+                    onClick={() => navigate(item.path)}
+                    style={{
+                      borderRadius: 12,
+                      border: '1px solid rgba(15,23,42,0.06)',
+                      background: 'rgba(255,255,255,0.72)',
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.06)', color: '#334155' }}>
+                        {item.icon}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.desc}</div>
                       </div>
                     </div>
-                    <Tag style={{
-                      border: 'none',
-                      background: item.status === 'success' ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)',
-                      color: item.status === 'success' ? '#34C759' : '#FF3B30',
-                      borderRadius: 6
-                    }}>
-                      {item.status === 'success' ? '成功' : '失败'}
-                    </Tag>
+                    <ArrowRightOutlined style={{ color: '#64748b', fontSize: 12 }} />
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           </div>
+
         </div>
 
         {/* Right Area: AI Chat Widget */}
-        <BentoCard 
-          style={{ 
-            width: '400px', // Fixed width for sidebar
+        <BentoCard
+          style={{
+            width: '400px',
             flexShrink: 0,
-            background: 'rgba(255,255,255,0.7)', 
+            alignSelf: 'stretch',
+            background: 'rgba(255,255,255,0.7)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255,255,255,0.8)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.04)',
             overflow: 'hidden',
-            padding: 0
+            padding: 0,
+            height: '100%'
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -450,42 +520,6 @@ const Dashboard: React.FC = () => {
         </BentoCard>
       </div>
 
-      {/* View All Activities Modal */}
-      <Modal
-        title="全部操作动态"
-        open={viewAllVisible}
-        onCancel={() => setViewAllVisible(false)}
-        footer={null}
-        width={700}
-      >
-        <List
-          loading={allLoading}
-          dataSource={allActivities}
-          renderItem={(item: any, index: number) => {
-            const actionInfo = ACTION_MAP[item.action] || ACTION_MAP.default;
-            return (
-              <List.Item key={item.id} style={{ padding: '12px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 8, background: actionInfo.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, color: '#555' }}>
-                      {actionInfo.icon}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>
-                        {item.user} <Text type="secondary" style={{ fontWeight: 400 }}>{actionInfo.label}了</Text> {item.target_name}
-                      </div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>{item.module} · {item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : ''}</Text>
-                    </div>
-                  </div>
-                  <Tag style={{ border: 'none', background: item.status === 'success' ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)', color: item.status === 'success' ? '#34C759' : '#FF3B30', borderRadius: 6 }}>
-                    {item.status === 'success' ? '成功' : '失败'}
-                  </Tag>
-                </div>
-              </List.Item>
-            );
-          }}
-        />
-      </Modal>
     </div>
   );
 };

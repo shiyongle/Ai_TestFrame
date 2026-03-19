@@ -28,6 +28,7 @@ import SystemSettings from './pages/SystemSettings';
 import TaskCenter from './pages/TaskCenter';
 import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
 import BusinessData from './pages/DataWarehouse/BusinessData';
+import OperationLogs from './pages/OperationLogs';
 import Login from './pages/Login';
 import { authStorage } from './services/api';
 
@@ -100,6 +101,7 @@ const AppLayout: React.FC = () => {
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
               <Route path="/tasks" element={<TaskCenter />} />
+              <Route path="/operation-logs" element={<OperationLogs />} />
             </Routes>
           </div>
         </Content>
