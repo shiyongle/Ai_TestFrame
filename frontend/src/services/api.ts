@@ -210,6 +210,18 @@ export const reportApi = {
     api.get('/api/v1/reports/overview/stats', { params }),
 };
 
+export const agentApi = {
+  chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
+};
+
+export const uiAutomationApi = {
+  createTask: (data: any): Promise<any> => api.post('/api/v1/ui-automation/tasks', data),
+  listTasks: (limit = 20): Promise<any[]> => api.get('/api/v1/ui-automation/tasks', { params: { limit } }),
+  getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
+  startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
+  solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
+};
+
 export const authApi = {
   login: (data: { username: string; password: string }): Promise<any> => api.post('/api/v1/auth/login', data),
   me: (): Promise<any> => api.get('/api/v1/auth/me'),

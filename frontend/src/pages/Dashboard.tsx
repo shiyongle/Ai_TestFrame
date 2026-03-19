@@ -20,7 +20,7 @@ import {
   ScheduleOutlined,
   ArrowRightOutlined,
 } from '@ant-design/icons';
-import { dashboardApi } from '../services/api';
+import { agentApi, dashboardApi } from '../services/api';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 
@@ -120,19 +120,33 @@ const Dashboard: React.FC = () => {
 
   // AI Chat State
   const [chatInput, setChatInput] = useState('');
+  const [agentLoading, setAgentLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { role: 'assistant', content: '你好，我是你的 AI 测试助手 (OpenClaw)。你可以让我帮忙查询测试数据、编排回归策略，或是分析报错日志。今天需要我做些什么？', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    { role: 'assistant', content: '你好，我是你的 AI 测试助手 (OpenClaw)。我可以帮你查询系统统计、执行指定项目测试计划。', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
-    if (!chatInput.trim()) return;
-    const newMessages = [...chatMessages, { role: 'user', content: chatInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
-    setChatMessages(newMessages);
+  const handleSendMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || agentLoading) return;
+
+    setChatMessages(prev => [...prev, { role: 'user', content: text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
     setChatInput('');
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: '这个功能正在接入 OpenClaw 智能体中。敬请期待！', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-    }, 1000);
+    setAgentLoading(true);
+
+    try {
+      const res = await agentApi.chat({ message: text });
+      const reply = res?.reply || '已接收请求，但暂未返回内容。';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: reply, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+      if (res?.data?.refresh_dashboard) {
+        await loadDashboardData();
+      }
+    } catch (error) {
+      console.error('Agent chat failed', error);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '执行失败，请稍后重试或换一种表达方式。', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+    } finally {
+      setAgentLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -258,7 +272,7 @@ const Dashboard: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <Text type="secondary">本周通过率</Text>
                   <div style={{ fontSize: 36, fontWeight: 700, color: '#34C759', margin: '4px 0' }}>
-                    91.4%
+                    {stats.passRate}%
                   </div>
                   <Space>
                     <Tag color="success" style={{ border: 'none', background: 'rgba(52, 199, 89, 0.15)', color: '#34C759' }}>
@@ -489,15 +503,16 @@ const Dashboard: React.FC = () => {
                   icon={<SendOutlined />} 
                   size="large"
                   onClick={handleSendMessage}
-                  style={{ 
-                    background: chatInput.trim() ? '#007AFF' : '#d1d1d6', 
+                  disabled={!chatInput.trim() || agentLoading}
+                  style={{
+                    background: chatInput.trim() && !agentLoading ? '#007AFF' : '#d1d1d6',
                     borderColor: 'transparent',
-                    boxShadow: chatInput.trim() ? '0 4px 12px rgba(0,122,255,0.3)' : 'none',
+                    boxShadow: chatInput.trim() && !agentLoading ? '0 4px 12px rgba(0,122,255,0.3)' : 'none',
                   }}
                 />
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                {['分析昨天的失败用例', '统计各项目的测试通过率', '帮我写一段登录接口的自动化'].map(suggestion => (
+                {['系统内当前有多少测试用例？', '接口自动化场景有多少，通过率是多少？', '帮我执行支付项目的2个测试计划'].map(suggestion => (
                   <Tag 
                     key={suggestion} 
                     style={{ 

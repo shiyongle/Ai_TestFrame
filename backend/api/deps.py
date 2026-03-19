@@ -13,6 +13,7 @@ from services.test_suite_service import TestSuiteService
 from services.interface_testcase_service import InterfaceTestCaseService
 from services.test_plan_service import TestPlanService
 from services.webhook_service import WebhookService, webhook_service
+from services.ui_automation_service import UIAutomationService
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -45,3 +46,8 @@ def get_test_plan_service() -> TestPlanService:
 def get_webhook_service() -> WebhookService:
     """获取 Webhook 通知服务实例"""
     return webhook_service
+
+
+def get_ui_automation_service() -> UIAutomationService:
+    """获取 UI 自动化服务实例"""
+    return UIAutomationService()
