@@ -29,6 +29,7 @@ import TaskCenter from './pages/TaskCenter';
 import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
 import BusinessData from './pages/DataWarehouse/BusinessData';
 import OperationLogs from './pages/OperationLogs';
+import UiAutomation from './pages/ApiAutomation/UIAutomation';
 import Login from './pages/Login';
 import { authStorage } from './services/api';
 
@@ -84,6 +85,7 @@ const AppLayout: React.FC = () => {
               <Route path="/testcases/functional" element={<FunctionalTestCases />} />
               <Route path="/testcases/interface" element={<InterfaceTestCases />} />
               <Route path="/api-automation" element={<ApiAutomation />} />
+              <Route path="/ui-automation" element={<UiAutomation />} />
               {/* 测试执行 (Test Execution) */}
               <Route path="/test/http" element={<HttpTest />} />
               <Route path="/test/tcp" element={<TcpTest />} />

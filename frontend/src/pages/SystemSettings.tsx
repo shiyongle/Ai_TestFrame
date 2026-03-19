@@ -115,6 +115,9 @@ const SystemSettings: React.FC = () => {
             'NEWAPI_API_KEY': 'New-API 平台 API Key (OpenAI Compatible)',
             'NEWAPI_BASE_URL': 'New-API 接口地址 (通常以 /v1 结尾)',
             'NEWAPI_CHAT_MODEL': 'New-API 默认对话模型名称',
+            'MINIMAX_API_KEY': 'MiniMax 平台 API Key',
+            'MINIMAX_BASE_URL': 'MiniMax 接口地址 (支持覆盖代理)',
+            'MINIMAX_CHAT_MODEL': 'MiniMax 默认对话模型名称',
         };
         return map[key] || '';
     };
@@ -238,7 +241,9 @@ const SystemSettings: React.FC = () => {
                                     SILICONFLOW_BASE_URL: 'https://api.siliconflow.cn/v1',
                                     SILICONFLOW_CHAT_MODEL: 'Qwen/Qwen2.5-7B-Instruct',
                                     NEWAPI_BASE_URL: 'https://your-newapi-host/v1',
-                                    NEWAPI_CHAT_MODEL: 'gpt-4o-mini'
+                                    NEWAPI_CHAT_MODEL: 'gpt-4o-mini',
+                                    MINIMAX_BASE_URL: 'https://api.minimaxi.com/v1',
+                                    MINIMAX_CHAT_MODEL: 'abab6.5s-chat'
                                 }}
                             >
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '24px' }}>
@@ -292,6 +297,19 @@ const SystemSettings: React.FC = () => {
                                         </Form.Item>
                                         <Form.Item label="对话模型" name="SILICONFLOW_CHAT_MODEL" tooltip="用于对话和生成的模型名称，如 Qwen/Qwen2.5-7B-Instruct">
                                             <Input placeholder="Qwen/Qwen2.5-7B-Instruct" />
+                                        </Form.Item>
+                                    </Card>
+
+                                    {/* MiniMax Card */}
+                                    <Card size="small" title="MiniMax" className="glass-panel" style={{ borderRadius: 12 }}>
+                                        <Form.Item label="API Key" name="MINIMAX_API_KEY" tooltip="MiniMax 平台 API 凭证">
+                                            <Input.Password placeholder="MiniMax API Key" />
+                                        </Form.Item>
+                                        <Form.Item label="Base URL" name="MINIMAX_BASE_URL" tooltip="支持替换为代理地址">
+                                            <Input placeholder="https://api.minimaxi.com/v1" />
+                                        </Form.Item>
+                                        <Form.Item label="对话模型" name="MINIMAX_CHAT_MODEL" tooltip="默认聊天模型名称，例如 abab6.5s-chat">
+                                            <Input placeholder="abab6.5s-chat" />
                                         </Form.Item>
                                     </Card>
 

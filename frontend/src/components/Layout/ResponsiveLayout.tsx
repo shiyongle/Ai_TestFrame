@@ -181,6 +181,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               icon: <ApiOutlined />,
               label: '接口自动化',
             },
+            {
+              key: '/ui-automation',
+              icon: <PlayCircleOutlined />,
+              label: 'UI自动化',
+            },
           ],
         },
         {
