@@ -14,6 +14,7 @@ import {
   Spin,
   Statistic,
   Tag,
+  TimePicker,
   Typography,
   message,
 } from 'antd';
@@ -71,6 +72,15 @@ interface PlanExecution {
   };
 }
 
+type ScheduleType = 'daily' | 'weekly' | 'monthly';
+
+interface ScheduleRule {
+  type: ScheduleType;
+  time: string;
+  weekday?: number;
+  dayOfMonth?: number;
+}
+
 interface TestPlan {
   id: number;
   name: string;
@@ -112,6 +122,53 @@ const statusMap: Record<string, { text: string; color: string }> = {
   skipped: { text: '跳过', color: 'default' },
 };
 
+const SCHEDULE_MARK = 'AUTO_SCHEDULE::';
+
+const weekdayOptions = [
+  { label: '周一', value: 1 },
+  { label: '周二', value: 2 },
+  { label: '周三', value: 3 },
+  { label: '周四', value: 4 },
+  { label: '周五', value: 5 },
+  { label: '周六', value: 6 },
+  { label: '周日', value: 7 },
+];
+
+const dayOfMonthOptions = Array.from({ length: 31 }).map((_, i) => ({
+  label: `${i + 1} 日`,
+  value: i + 1,
+}));
+
+const parseScheduleRule = (schedule?: string): ScheduleRule | null => {
+  const raw = String(schedule || '').trim();
+  if (!raw.startsWith(SCHEDULE_MARK)) return null;
+  try {
+    const obj = JSON.parse(raw.slice(SCHEDULE_MARK.length));
+    if (!obj?.type || !obj?.time) return null;
+    return {
+      type: obj.type,
+      time: obj.time,
+      weekday: obj.weekday,
+      dayOfMonth: obj.dayOfMonth,
+    } as ScheduleRule;
+  } catch {
+    return null;
+  }
+};
+
+const stringifyScheduleRule = (rule: ScheduleRule) => `${SCHEDULE_MARK}${JSON.stringify(rule)}`;
+
+const formatScheduleText = (schedule?: string) => {
+  const parsed = parseScheduleRule(schedule);
+  if (!parsed) return schedule || '未设置';
+  if (parsed.type === 'daily') return `每日 ${parsed.time}`;
+  if (parsed.type === 'weekly') {
+    const weekLabel = weekdayOptions.find((x) => x.value === parsed.weekday)?.label || `周${parsed.weekday}`;
+    return `每周 ${weekLabel} ${parsed.time}`;
+  }
+  return `每月 ${parsed.dayOfMonth || 1} 日 ${parsed.time}`;
+};
+
 const TestPlans: React.FC = () => {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [functionalCases, setFunctionalCases] = useState<any[]>([]);
@@ -126,7 +183,11 @@ const TestPlans: React.FC = () => {
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TestPlan | null>(null);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduleEditingPlan, setScheduleEditingPlan] = useState<TestPlan | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
   const [form] = Form.useForm();
+  const [scheduleForm] = Form.useForm();
 
   const selectedPlan = useMemo(
     () => plans.find((item) => item.id === selectedPlanId) || null,
@@ -312,6 +373,58 @@ const TestPlans: React.FC = () => {
     }
   };
 
+  const openScheduleModal = (plan: TestPlan) => {
+    setScheduleEditingPlan(plan);
+    const parsed = parseScheduleRule(plan.schedule);
+    scheduleForm.setFieldsValue({
+      type: parsed?.type || 'daily',
+      weekday: parsed?.weekday || 1,
+      dayOfMonth: parsed?.dayOfMonth || 1,
+      time: dayjs(`2000-01-01 ${parsed?.time || '09:00:00'}`),
+    });
+    setScheduleModalVisible(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!scheduleEditingPlan) return;
+    try {
+      const values = await scheduleForm.validateFields();
+      const rule: ScheduleRule = {
+        type: values.type,
+        time: values.time.format('HH:mm:ss'),
+        weekday: values.type === 'weekly' ? values.weekday : undefined,
+        dayOfMonth: values.type === 'monthly' ? values.dayOfMonth : undefined,
+      };
+      setScheduleSaving(true);
+      await testPlanApi.updateTestPlan(scheduleEditingPlan.id, {
+        schedule: stringifyScheduleRule(rule),
+      });
+      message.success('定时执行已保存');
+      setScheduleModalVisible(false);
+      if (selectedProjectId) await loadPlans(selectedProjectId);
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error(e?.response?.data?.detail || '保存定时执行失败');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    if (!scheduleEditingPlan) return;
+    try {
+      setScheduleSaving(true);
+      await testPlanApi.updateTestPlan(scheduleEditingPlan.id, { schedule: null });
+      message.success('已清除定时执行');
+      setScheduleModalVisible(false);
+      if (selectedProjectId) await loadPlans(selectedProjectId);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '清除定时执行失败');
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
   const renderPriorityTag = (priority?: string) => {
     const meta = priorityMap[String(priority || 'medium').toLowerCase()] || priorityMap.medium;
     return <Tag color={meta.color}>{meta.text}</Tag>;
@@ -390,7 +503,7 @@ const TestPlans: React.FC = () => {
                         {renderPriorityTag(plan.priority)}
                         <Tag icon={<ProjectOutlined />}>{plan.total_case_count} 项</Tag>
                         <Tag icon={<CalendarOutlined />}>
-                          {plan.schedule || dayjs(plan.updated_at).format('MM-DD HH:mm')}
+                          {formatScheduleText(plan.schedule) || dayjs(plan.updated_at).format('MM-DD HH:mm')}
                         </Tag>
                       </Space>
                     </Space>
@@ -432,6 +545,7 @@ const TestPlans: React.FC = () => {
                   </div>
                   <Space>
                     <Button icon={<EditOutlined />} onClick={() => openEditModal(selectedPlan)}>编辑</Button>
+                    <Button icon={<CalendarOutlined />} onClick={() => openScheduleModal(selectedPlan)}>定时执行</Button>
                     <Button
                       type="primary"
                       icon={<PlayCircleFilled />}
@@ -458,7 +572,7 @@ const TestPlans: React.FC = () => {
 
                 <Card title="计划信息">
                   <Descriptions column={2} size="small">
-                    <Descriptions.Item label="排期">{selectedPlan.schedule || '未设置'}</Descriptions.Item>
+                    <Descriptions.Item label="排期">{formatScheduleText(selectedPlan.schedule)}</Descriptions.Item>
                     <Descriptions.Item label="标签">
                       {selectedPlan.tags?.length ? (
                         <Space wrap>{selectedPlan.tags.map((tag) => <Tag key={tag} icon={<TagsOutlined />}>{tag}</Tag>)}</Space>
@@ -637,6 +751,62 @@ const TestPlans: React.FC = () => {
               maxTagCount="responsive"
             />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`定时执行配置${scheduleEditingPlan ? ` · ${scheduleEditingPlan.name}` : ''}`}
+        open={scheduleModalVisible}
+        onCancel={() => setScheduleModalVisible(false)}
+        onOk={handleSaveSchedule}
+        okText="保存"
+        confirmLoading={scheduleSaving}
+        destroyOnClose
+        footer={(
+          <Space>
+            <Button onClick={() => setScheduleModalVisible(false)}>取消</Button>
+            <Button danger onClick={handleClearSchedule} loading={scheduleSaving} disabled={!scheduleEditingPlan?.schedule}>清除</Button>
+            <Button type="primary" onClick={handleSaveSchedule} loading={scheduleSaving}>保存</Button>
+          </Space>
+        )}
+      >
+        <Form form={scheduleForm} layout="vertical" initialValues={{ type: 'daily', weekday: 1, dayOfMonth: 1 }}>
+          <Form.Item name="type" label="执行频率" rules={[{ required: true, message: '请选择执行频率' }]}>
+            <Select
+              options={[
+                { label: '每日', value: 'daily' },
+                { label: '每周', value: 'weekly' },
+                { label: '每月', value: 'monthly' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const type = getFieldValue('type') as ScheduleType;
+              if (type === 'weekly') {
+                return (
+                  <Form.Item name="weekday" label="每周执行日" rules={[{ required: true, message: '请选择每周执行日' }]}>
+                    <Select options={weekdayOptions} />
+                  </Form.Item>
+                );
+              }
+              if (type === 'monthly') {
+                return (
+                  <Form.Item name="dayOfMonth" label="每月执行日" rules={[{ required: true, message: '请选择每月执行日' }]}>
+                    <Select options={dayOfMonthOptions} />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+
+          <Form.Item name="time" label="执行时间（时:分:秒）" rules={[{ required: true, message: '请选择执行时间' }]}>
+            <TimePicker format="HH:mm:ss" style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Text type="secondary">说明：当前仅提供定时规则配置入口，后续可由调度器读取该规则自动触发执行。</Text>
         </Form>
       </Modal>
     </div>

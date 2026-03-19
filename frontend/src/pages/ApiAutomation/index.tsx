@@ -20,6 +20,7 @@ import {
   Spin,
   Statistic,
   Tag,
+  TimePicker,
   Tooltip,
   Typography,
   message,
@@ -27,6 +28,7 @@ import {
 import {
   ApiOutlined,
   BranchesOutlined,
+  CalendarOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   DeleteOutlined,
@@ -52,6 +54,7 @@ type StepMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 type ScenarioStatus = 'active' | 'inactive';
 
 type AssertionOperator = 'equals' | 'contains' | 'regex' | 'gt' | 'gte' | 'lt' | 'lte';
+type ScheduleType = 'daily' | 'weekly' | 'monthly';
 
 interface StepAssertionRule {
   id: string;
@@ -66,6 +69,13 @@ interface StepExtractRule {
   name: string;
   path: string;
   enabled: boolean;
+}
+
+interface ScheduleRule {
+  type: ScheduleType;
+  time: string;
+  weekday?: number;
+  dayOfMonth?: number;
 }
 
 interface ApiStep {
@@ -93,6 +103,7 @@ interface TestScenario {
   projectId: number;
   updatedAt: string;
   steps: ApiStep[];
+  schedule?: string;
   lastExecution?: {
     status: 'success' | 'failed';
     passRate: number;
@@ -132,6 +143,53 @@ const methodColorMap: Record<StepMethod, string> = {
   PATCH: 'purple',
 };
 
+
+const SCHEDULE_MARK = 'AUTO_SCHEDULE::';
+
+const weekdayOptions = [
+  { label: '周一', value: 1 },
+  { label: '周二', value: 2 },
+  { label: '周三', value: 3 },
+  { label: '周四', value: 4 },
+  { label: '周五', value: 5 },
+  { label: '周六', value: 6 },
+  { label: '周日', value: 7 },
+];
+
+const dayOfMonthOptions = Array.from({ length: 31 }).map((_, i) => ({
+  label: `${i + 1} 日`,
+  value: i + 1,
+}));
+
+const parseScheduleRule = (schedule?: string): ScheduleRule | null => {
+  const raw = String(schedule || '').trim();
+  if (!raw.startsWith(SCHEDULE_MARK)) return null;
+  try {
+    const obj = JSON.parse(raw.slice(SCHEDULE_MARK.length));
+    if (!obj?.type || !obj?.time) return null;
+    return {
+      type: obj.type,
+      time: obj.time,
+      weekday: obj.weekday,
+      dayOfMonth: obj.dayOfMonth,
+    } as ScheduleRule;
+  } catch {
+    return null;
+  }
+};
+
+const stringifyScheduleRule = (rule: ScheduleRule) => `${SCHEDULE_MARK}${JSON.stringify(rule)}`;
+
+const formatScheduleText = (schedule?: string) => {
+  const parsed = parseScheduleRule(schedule);
+  if (!parsed) return schedule || '未设置';
+  if (parsed.type === 'daily') return `每日 ${parsed.time}`;
+  if (parsed.type === 'weekly') {
+    const weekLabel = weekdayOptions.find((x) => x.value === parsed.weekday)?.label || `周${parsed.weekday}`;
+    return `每周 ${weekLabel} ${parsed.time}`;
+  }
+  return `每月 ${parsed.dayOfMonth || 1} 日 ${parsed.time}`;
+};
 
 const buildScenarioStorageKey = (projectId: number) => `api-automation-scenarios:${projectId}`;
 
@@ -344,6 +402,9 @@ const ApiAutomation: React.FC = () => {
 
   const [scenarioModalVisible, setScenarioModalVisible] = useState(false);
   const [editingScenarioId, setEditingScenarioId] = useState<string>('');
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [scheduleEditingScenario, setScheduleEditingScenario] = useState<TestScenario | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
   const [stepDrawerVisible, setStepDrawerVisible] = useState(false);
   const [editingStep, setEditingStep] = useState<ApiStep | null>(null);
   const [libraryVisible, setLibraryVisible] = useState(false);
@@ -355,6 +416,7 @@ const ApiAutomation: React.FC = () => {
   const [scenarioStorageReady, setScenarioStorageReady] = useState(false);
 
   const [scenarioForm] = Form.useForm();
+  const [scheduleForm] = Form.useForm();
   const [stepForm] = Form.useForm();
 
   const loadProjects = useCallback(async () => {
@@ -734,6 +796,68 @@ const ApiAutomation: React.FC = () => {
     );
   };
 
+  const openScheduleModal = (scenario: TestScenario) => {
+    setScheduleEditingScenario(scenario);
+    const parsed = parseScheduleRule(scenario.schedule);
+    scheduleForm.setFieldsValue({
+      type: parsed?.type || 'daily',
+      weekday: parsed?.weekday || 1,
+      dayOfMonth: parsed?.dayOfMonth || 1,
+      time: dayjs(`2000-01-01 ${parsed?.time || '09:00:00'}`),
+    });
+    setScheduleModalVisible(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    if (!scheduleEditingScenario) return;
+    try {
+      const values = await scheduleForm.validateFields();
+      const rule: ScheduleRule = {
+        type: values.type,
+        time: values.time.format('HH:mm:ss'),
+        weekday: values.type === 'weekly' ? values.weekday : undefined,
+        dayOfMonth: values.type === 'monthly' ? values.dayOfMonth : undefined,
+      };
+      setScheduleSaving(true);
+      setScenarios((prev) =>
+        prev.map((item) =>
+          item.id === scheduleEditingScenario.id
+            ? {
+                ...item,
+                schedule: stringifyScheduleRule(rule),
+                updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+              }
+            : item
+        )
+      );
+      setScheduleModalVisible(false);
+      message.success('定时执行已保存');
+    } catch {
+      // antd 表单校验
+    } finally {
+      setScheduleSaving(false);
+    }
+  };
+
+  const handleClearSchedule = async () => {
+    if (!scheduleEditingScenario) return;
+    setScheduleSaving(true);
+    setScenarios((prev) =>
+      prev.map((item) =>
+        item.id === scheduleEditingScenario.id
+          ? {
+              ...item,
+              schedule: undefined,
+              updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+            }
+          : item
+      )
+    );
+    setScheduleSaving(false);
+    setScheduleModalVisible(false);
+    message.success('已清除定时执行');
+  };
+
   const openStepEditor = (step: ApiStep) => {
     setEditingStep(step);
     stepForm.setFieldsValue({
@@ -933,6 +1057,9 @@ const ApiAutomation: React.FC = () => {
                         }}
                       />
                     </Tooltip>,
+                    <Tooltip title="定时执行" key="schedule">
+                      <Button type="text" icon={<CalendarOutlined />} onClick={() => openScheduleModal(item)} />
+                    </Tooltip>,
                     <Tooltip title="编辑场景" key="edit">
                       <Button type="text" icon={<EditOutlined />} onClick={() => openEditScenario(item)} />
                     </Tooltip>,
@@ -955,6 +1082,7 @@ const ApiAutomation: React.FC = () => {
                         <Space wrap>
                           {item.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
                           <Tag icon={<ClockCircleOutlined />}>更新于 {item.updatedAt}</Tag>
+                          {item.schedule ? <Tag icon={<CalendarOutlined />}>{formatScheduleText(item.schedule)}</Tag> : null}
                           {item.lastExecution ? (
                             <Tag color={item.lastExecution.status === 'success' ? 'success' : 'error'}>
                               最近执行 {item.lastExecution.passRate}% · {item.lastExecution.durationMs}ms
@@ -990,9 +1118,21 @@ const ApiAutomation: React.FC = () => {
                   <Space direction="vertical" size={4} style={{ width: '100%' }}>
                     <Text strong>{item.name}</Text>
                     <Text type="secondary" ellipsis>{item.description || '暂无描述'}</Text>
-                    <Space>
+                    <Space wrap>
                       <Badge status={item.status === 'active' ? 'success' : 'default'} text={item.status === 'active' ? '启用' : '停用'} />
                       <Tag>{item.steps.length} 步</Tag>
+                      {item.schedule ? <Tag icon={<CalendarOutlined />}>{formatScheduleText(item.schedule)}</Tag> : null}
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<CalendarOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openScheduleModal(item);
+                        }}
+                      >
+                        定时执行
+                      </Button>
                     </Space>
                   </Space>
                 </div>
@@ -1072,6 +1212,7 @@ const ApiAutomation: React.FC = () => {
                   <Tag>负责人：{selectedScenario.owner}</Tag>
                   <Tag>更新时间：{selectedScenario.updatedAt}</Tag>
                   <Tag color={selectedScenario.status === 'active' ? 'success' : 'default'}>{selectedScenario.status === 'active' ? '启用' : '停用'}</Tag>
+                  <Tag icon={<CalendarOutlined />}>排期：{formatScheduleText(selectedScenario.schedule)}</Tag>
                 </Space>
                 <Divider style={{ margin: '8px 0' }} />
                 <Statistic title="步骤数" value={selectedScenario.steps.length} prefix={<BranchesOutlined />} />
@@ -1121,9 +1262,14 @@ const ApiAutomation: React.FC = () => {
                     ) : null}
                   </>
                 ) : null}
-                <Button type="primary" block icon={<PlayCircleFilled />} onClick={executeScenario} disabled={executing || !selectedScenario.steps.length}>
-                  执行该场景
-                </Button>
+                <Space.Compact block>
+                  <Button icon={<CalendarOutlined />} onClick={() => openScheduleModal(selectedScenario)}>
+                    定时执行
+                  </Button>
+                  <Button type="primary" icon={<PlayCircleFilled />} onClick={executeScenario} disabled={executing || !selectedScenario.steps.length}>
+                    执行该场景
+                  </Button>
+                </Space.Compact>
               </Space>
             )}
           </Card>
@@ -1204,6 +1350,62 @@ const ApiAutomation: React.FC = () => {
             }}
           />
         </Spin>
+      </Modal>
+
+      <Modal
+        title={`定时执行配置${scheduleEditingScenario ? ` · ${scheduleEditingScenario.name}` : ''}`}
+        open={scheduleModalVisible}
+        onCancel={() => setScheduleModalVisible(false)}
+        onOk={handleSaveSchedule}
+        okText="保存"
+        confirmLoading={scheduleSaving}
+        destroyOnClose
+        footer={(
+          <Space>
+            <Button onClick={() => setScheduleModalVisible(false)}>取消</Button>
+            <Button danger onClick={handleClearSchedule} loading={scheduleSaving} disabled={!scheduleEditingScenario?.schedule}>清除</Button>
+            <Button type="primary" onClick={handleSaveSchedule} loading={scheduleSaving}>保存</Button>
+          </Space>
+        )}
+      >
+        <Form form={scheduleForm} layout="vertical" initialValues={{ type: 'daily', weekday: 1, dayOfMonth: 1 }}>
+          <Form.Item name="type" label="执行频率" rules={[{ required: true, message: '请选择执行频率' }]}>
+            <Select
+              options={[
+                { label: '每日', value: 'daily' },
+                { label: '每周', value: 'weekly' },
+                { label: '每月', value: 'monthly' },
+              ]}
+            />
+          </Form.Item>
+
+          <Form.Item noStyle shouldUpdate>
+            {({ getFieldValue }) => {
+              const type = getFieldValue('type') as ScheduleType;
+              if (type === 'weekly') {
+                return (
+                  <Form.Item name="weekday" label="每周执行日" rules={[{ required: true, message: '请选择每周执行日' }]}>
+                    <Select options={weekdayOptions} />
+                  </Form.Item>
+                );
+              }
+              if (type === 'monthly') {
+                return (
+                  <Form.Item name="dayOfMonth" label="每月执行日" rules={[{ required: true, message: '请选择每月执行日' }]}>
+                    <Select options={dayOfMonthOptions} />
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+
+          <Form.Item name="time" label="执行时间（时:分:秒）" rules={[{ required: true, message: '请选择执行时间' }]}>
+            <TimePicker format="HH:mm:ss" style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Text type="secondary">说明：当前仅提供定时规则配置入口，后续可由调度器读取该规则自动触发执行。</Text>
+        </Form>
       </Modal>
 
       <Drawer
