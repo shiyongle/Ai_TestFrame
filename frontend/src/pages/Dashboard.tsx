@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Avatar, Tag, Button, Typography, Space, Tooltip } from 'antd';
+import { Avatar, Tag, Button, Typography, Space, Tooltip, Input } from 'antd';
 import {
   ProjectOutlined,
   BugOutlined,
@@ -106,6 +106,37 @@ const quickEntries = [
   },
 ];
 
+const BentoCard = ({ children, style, bodyStyle, className, title, extra }: any) => (
+  <div
+    className={`panel ${className}`}
+    style={{
+      height: '100%',
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      ...style
+    }}
+  >
+    {(title || extra) && (
+      <div className="panel-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+        <Text strong style={{ fontSize: 16 }}>{title}</Text>
+        {extra}
+      </div>
+    )}
+    <div
+      className="panel-body"
+      style={{
+        flex: 1,
+        minHeight: 0,
+        padding: '20px',
+        ...bodyStyle,
+      }}
+    >
+      {children}
+    </div>
+  </div>
+);
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
@@ -121,6 +152,7 @@ const Dashboard: React.FC = () => {
   // AI Chat State
   const [chatInput, setChatInput] = useState('');
   const [agentLoading, setAgentLoading] = useState(false);
+  const [isComposing, setIsComposing] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', content: '你好，我是你的 AI 测试助手 (OpenClaw)。我可以帮你查询系统统计、执行指定项目测试计划。', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
   ]);
@@ -180,38 +212,6 @@ const Dashboard: React.FC = () => {
   const handleQuickTest = () => {
     navigate('/testcases/plans');
   };
-
-
-  const BentoCard = ({ children, style, bodyStyle, className, title, extra }: any) => (
-    <div
-      className={`panel ${className}`}
-      style={{
-        height: '100%',
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        ...style
-      }}
-    >
-      {(title || extra) && (
-        <div className="panel-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-          <Text strong style={{ fontSize: 16 }}>{title}</Text>
-          {extra}
-        </div>
-      )}
-      <div
-        className="panel-body"
-        style={{
-          flex: 1,
-          minHeight: 0,
-          padding: '20px',
-          ...bodyStyle,
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  );
 
   return (
     <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1400, margin: '0 auto' }}>
@@ -511,19 +511,26 @@ const Dashboard: React.FC = () => {
                 alignItems: 'center',
                 boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
               }}>
-                <input 
-                  type="text" 
+                <Input.TextArea
                   value={chatInput}
+                  autoSize={{ minRows: 1, maxRows: 4 }}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="让 AI 帮你写测试脚本、分析日志..." 
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => setIsComposing(false)}
+                  onPressEnter={(e) => {
+                    if (e.shiftKey || isComposing) return;
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  placeholder="让 AI 帮你写测试脚本、分析日志..."
+                  variant="borderless"
                   style={{
                     flex: 1,
-                    border: 'none',
                     background: 'transparent',
-                    outline: 'none',
                     fontSize: 15,
-                    color: '#1d1d1f'
+                    color: '#1d1d1f',
+                    resize: 'none',
+                    padding: '8px 0'
                   }}
                 />
                 <Button 
