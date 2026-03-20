@@ -182,11 +182,12 @@ const Dashboard: React.FC = () => {
   };
 
 
-  const BentoCard = ({ children, style, className, title, extra }: any) => (
+  const BentoCard = ({ children, style, bodyStyle, className, title, extra }: any) => (
     <div
       className={`panel ${className}`}
       style={{
         height: '100%',
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         ...style
@@ -198,7 +199,15 @@ const Dashboard: React.FC = () => {
           {extra}
         </div>
       )}
-      <div className="panel-body" style={{ flex: 1, padding: '20px' }}>
+      <div
+        className="panel-body"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          padding: '20px',
+          ...bodyStyle,
+        }}
+      >
         {children}
       </div>
     </div>
@@ -392,16 +401,23 @@ const Dashboard: React.FC = () => {
             width: '400px',
             flexShrink: 0,
             alignSelf: 'stretch',
+            minHeight: 0,
             background: 'rgba(255,255,255,0.7)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255,255,255,0.8)',
             boxShadow: '0 8px 32px rgba(0,0,0,0.04)',
             overflow: 'hidden',
-            padding: 0,
             height: '100%'
           }}
+          bodyStyle={{
+            padding: 0,
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
             {/* Chat Header */}
             <div style={{ 
               padding: '20px 24px', 
@@ -429,7 +445,20 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* Chat Messages Area */}
-            <div style={{ flex: 1, padding: 24, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                padding: 24,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 24,
+              }}
+            >
               {chatMessages.map((msg, index) => (
                 <div key={index} style={{
                   display: 'flex',
