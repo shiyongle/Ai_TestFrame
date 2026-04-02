@@ -1,7 +1,7 @@
 import asyncio
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from api.deps import get_database, get_ui_automation_service
@@ -48,6 +48,7 @@ def _build_task_detail(task, steps, artifacts) -> UIAutomationTaskDetail:
 @router.post("/ui-automation/tasks", response_model=UIAutomationTaskCreateResponse)
 async def create_ui_task(
     payload: UIAutomationTaskCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_database),
     service=Depends(get_ui_automation_service),
 ):
@@ -56,7 +57,7 @@ async def create_ui_task(
 
     if payload.auto_start:
         service.mark_task_running(db, task)
-        asyncio.create_task(service.run_task_async(task.id))
+        background_tasks.add_task(service.run_task_async, task.id)
 
     refreshed = service.get_task(db, task.id)
     return UIAutomationTaskCreateResponse(task=_build_task_summary(refreshed))
@@ -89,6 +90,7 @@ async def get_ui_task_detail(
 @router.post("/ui-automation/tasks/{task_id}/start", response_model=UIAutomationStartResponse)
 async def start_ui_task(
     task_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_database),
     service=Depends(get_ui_automation_service),
 ):
@@ -100,7 +102,7 @@ async def start_ui_task(
         return UIAutomationStartResponse(task_id=task.id, status=task.status, message="任务已在执行中")
 
     service.mark_task_running(db, task)
-    asyncio.create_task(service.run_task_async(task.id))
+    background_tasks.add_task(service.run_task_async, task.id)
     log_activity(db, action="execute", module="UI自动化", target_name=task.name, detail=f"任务ID={task.id}")
     latest = service.get_task(db, task.id)
     return UIAutomationStartResponse(task_id=latest.id, status=latest.status, message="任务已启动")

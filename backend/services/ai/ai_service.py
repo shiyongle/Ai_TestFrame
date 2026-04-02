@@ -65,7 +65,7 @@ class AIService:
             final_explicit_context = "\n\n".join(context_parts)
             
             # 2. 调用5步生成器，其内部自动调用Step2进行RAG隐性检索补全
-            test_cases = await self.test_case_generator.generate_test_case_from_requirement(
+            generation_result = await self.test_case_generator.generate_test_case_from_requirement(
                 requirement=requirement,
                 model=provider,
                 explicit_context=final_explicit_context,
@@ -74,10 +74,13 @@ class AIService:
             
             return {
                 'success': True,
-                'test_case': test_cases,
+                'test_case': generation_result.get('cases', []),
                 'provider': provider,
                 'used_rag': use_rag,
-                'explicit_knowledge': bool(final_explicit_context)
+                'explicit_knowledge': bool(final_explicit_context),
+                'evidence': generation_result.get('evidence', []),
+                'blueprint': generation_result.get('blueprint', {}),
+                'rag': generation_result.get('rag', {})
             }
                 
         except Exception as e:

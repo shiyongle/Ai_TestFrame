@@ -11,35 +11,31 @@ import {
   Space,
   Avatar,
   Divider,
-  Badge,
-  Tabs,
   List,
   Timeline,
-  Card,
-  Row,
-  Col,
   Statistic,
   DatePicker,
-  Tooltip
+  Drawer,
+  Spin,
+  Empty,
+  Progress,
+  Descriptions,
+  Collapse
 } from 'antd';
 import {
   PlusOutlined,
-  SearchOutlined,
   FileTextOutlined,
   UserOutlined,
-  CalendarOutlined,
-  ClockCircleOutlined,
   CheckCircleFilled,
-  SyncOutlined,
   EditOutlined,
   DeleteOutlined,
-  EllipsisOutlined,
   RobotFilled,
-  RocketOutlined,
   BranchesOutlined,
   HistoryOutlined,
   BugOutlined,
-  ProjectOutlined
+  ProjectOutlined,
+  DatabaseOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { versionApi, requirementApi, aiApi, projectApi } from '../services/api';
 import { taskCenter } from '../services/taskCenter';
@@ -50,7 +46,6 @@ dayjs.extend(relativeTime);
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
-const { TabPane } = Tabs;
 
 interface Version {
   id: number;
@@ -66,9 +61,53 @@ interface Version {
   requirements?: any[];
 }
 
+interface AIGenerationSessionItem {
+  session_id: string;
+  model: string;
+  status: string;
+  total_requirements: number;
+  total_generated_cases: number;
+  total_hit_cases: number;
+  total_citations: number;
+  explicit_doc_count: number;
+  knowledge_hit_rate: number;
+  summary?: any;
+  error_message?: string;
+  created_at?: string;
+  completed_at?: string;
+}
+
+interface AIGenerationEvidenceItem {
+  id: number;
+  testcase_id?: number;
+  requirement_id: number;
+  case_index: number;
+  case_title: string;
+  used_explicit_context: boolean;
+  used_rag: boolean;
+  knowledge_hit_count: number;
+  citation_count: number;
+  hit_score: number;
+  evidence_summary?: string;
+  raw_case?: any;
+  citations: Array<{
+    id?: number;
+    knowledge_doc_id?: number;
+    requirement_id?: number;
+    source_type: string;
+    evidence_type: string;
+    chunk_id?: string;
+    chunk_index?: number;
+    doc_title?: string;
+    matched_text?: string;
+    quote_text?: string;
+    similarity_score?: number;
+  }>;
+}
+
 const Versions: React.FC = () => {
   const [versions, setVersions] = useState<Version[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
 
   // Selection
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
@@ -82,9 +121,13 @@ const Versions: React.FC = () => {
 
   // Data State
   const [allRequirements, setAllRequirements] = useState<any[]>([]);
-  const [generatedTestCases, setGeneratedTestCases] = useState<any[]>([]);
   const [generating, setGenerating] = useState(false);
   const [selectedReqIds, setSelectedReqIds] = useState<number[]>([]);
+  const [aiSessions, setAiSessions] = useState<AIGenerationSessionItem[]>([]);
+  const [aiSessionsLoading, setAiSessionsLoading] = useState(false);
+  const [aiEvidenceVisible, setAiEvidenceVisible] = useState(false);
+  const [aiEvidenceLoading, setAiEvidenceLoading] = useState(false);
+  const [selectedAiSession, setSelectedAiSession] = useState<any>(null);
 
   const [linkKnowledgeVisible, setLinkKnowledgeVisible] = useState(false);
   const [allKnowledge, setAllKnowledge] = useState<any[]>([]);
@@ -102,6 +145,14 @@ const Versions: React.FC = () => {
   useEffect(() => {
     loadVersions(selectedProjectId);
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedVersion?.id) {
+      loadAiSessions(selectedVersion.id);
+    } else {
+      setAiSessions([]);
+    }
+  }, [selectedVersion?.id]);
 
   const loadProjects = async () => {
     try {
@@ -145,6 +196,34 @@ const Versions: React.FC = () => {
       const res = await aiApi.getKnowledgeList();
       setAllKnowledge(res?.data?.documents || res?.data || []);
     } catch (e) { console.error(e); }
+  };
+
+  const loadAiSessions = async (versionId: number) => {
+    setAiSessionsLoading(true);
+    try {
+      const data = await versionApi.getAiGenerationSessions(versionId);
+      setAiSessions(data || []);
+    } catch (e) {
+      console.error(e);
+      setAiSessions([]);
+    } finally {
+      setAiSessionsLoading(false);
+    }
+  };
+
+  const openAiEvidence = async (sessionId: string) => {
+    if (!selectedVersion) return;
+    setAiEvidenceVisible(true);
+    setAiEvidenceLoading(true);
+    try {
+      const detail = await versionApi.getAiGenerationSessionDetail(selectedVersion.id, sessionId);
+      setSelectedAiSession(detail || null);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '加载 AI 证据详情失败');
+      setSelectedAiSession(null);
+    } finally {
+      setAiEvidenceLoading(false);
+    }
   };
 
   // --- Actions ---
@@ -248,7 +327,6 @@ const Versions: React.FC = () => {
 
   const handleGenerateTestCases = () => {
     setGenerateModalVisible(true);
-    setGeneratedTestCases([]);
   };
 
   const handleGenerate = async (model: string) => {
@@ -264,9 +342,12 @@ const Versions: React.FC = () => {
     taskCenter.startAutoProgress(taskId, { max: 88, step: 9, intervalMs: 1200 });
     try {
       const res = await versionApi.generateTestCases(selectedVersion.id, model);
-      taskCenter.markSuccess(taskId, '任务已提交至后台执行，可在测试用例库查看生成结果');
+      taskCenter.markSuccess(taskId, `任务已提交至后台执行，证据会话：${res.session_id || '未返回'}`);
       message.success(res.message || '✅ 生成请求已提交至后台处理中，稍后请在测试用例库查看');
       setGenerateModalVisible(false);
+      if (selectedVersion?.id) {
+        loadAiSessions(selectedVersion.id);
+      }
     } catch (e: any) {
       taskCenter.markFailed(taskId, e?.response?.data?.detail || '提交生成任务失败');
       message.error(e?.response?.data?.detail || '提交生成任务失败');
@@ -287,6 +368,26 @@ const Versions: React.FC = () => {
 
   const getStatusLabel = (status: string) => {
     const map: any = { released: '已发布', draft: '草稿', archived: '已归档' };
+    return map[status] || status;
+  };
+
+  const getSessionStatusColor = (status: string) => {
+    const map: Record<string, string> = {
+      pending: 'gold',
+      running: 'processing',
+      completed: 'success',
+      failed: 'error'
+    };
+    return map[status] || 'default';
+  };
+
+  const getSessionStatusLabel = (status: string) => {
+    const map: Record<string, string> = {
+      pending: '排队中',
+      running: '生成中',
+      completed: '已完成',
+      failed: '失败'
+    };
     return map[status] || status;
   };
 
@@ -428,6 +529,61 @@ const Versions: React.FC = () => {
                     <li>新增了 3 个 API 端点，已自动生成对应的接口测试用例。</li>
                   </ul>
                 </div>
+              </div>
+
+              {/* AI 知识命中分析 */}
+              <div style={{ marginBottom: 40 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> AI 知识命中分析</Title>
+                  <Button onClick={() => selectedVersion && loadAiSessions(selectedVersion.id)}>刷新会话</Button>
+                </div>
+                {aiSessionsLoading ? (
+                  <div style={{ padding: '32px 0', textAlign: 'center' }}><Spin /></div>
+                ) : aiSessions.length === 0 ? (
+                  <Empty description="暂无 AI 生成证据会话" />
+                ) : (
+                  <List
+                    dataSource={aiSessions}
+                    renderItem={(item) => (
+                      <List.Item
+                        actions={[
+                          <Button key="view" type="link" icon={<EyeOutlined />} onClick={() => openAiEvidence(item.session_id)}>
+                            查看证据
+                          </Button>
+                        ]}
+                      >
+                        <List.Item.Meta
+                          avatar={<Avatar style={{ backgroundColor: '#1677ff' }} icon={<RobotFilled />} />}
+                          title={
+                            <Space>
+                              <Text strong>{item.model}</Text>
+                              <Tag color={getSessionStatusColor(item.status)}>{getSessionStatusLabel(item.status)}</Tag>
+                              <Text type="secondary">{item.session_id.slice(0, 8)}</Text>
+                            </Space>
+                          }
+                          description={
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <Space wrap>
+                                <Text>生成用例：{item.total_generated_cases || 0}</Text>
+                                <Text>命中用例：{item.total_hit_cases || 0}</Text>
+                                <Text>引用条数：{item.total_citations || 0}</Text>
+                                <Text>显式知识：{item.explicit_doc_count || 0}</Text>
+                              </Space>
+                              <Progress
+                                percent={Math.round((item.knowledge_hit_rate || 0) * 100)}
+                                size="small"
+                                status={item.status === 'failed' ? 'exception' : undefined}
+                              />
+                              <Text type="secondary">
+                                创建时间：{item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : '--'}
+                              </Text>
+                            </div>
+                          }
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
               </div>
 
               {/* Associated Requirements */}
@@ -585,6 +741,83 @@ const Versions: React.FC = () => {
           </Select>
         </div>
       </Modal>
+
+      <Drawer
+        title="AI 生成证据详情"
+        open={aiEvidenceVisible}
+        onClose={() => setAiEvidenceVisible(false)}
+        width={720}
+      >
+        {aiEvidenceLoading ? (
+          <div style={{ textAlign: 'center', padding: '48px 0' }}><Spin /></div>
+        ) : !selectedAiSession ? (
+          <Empty description="暂无会话详情" />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <Descriptions bordered column={2} size="small">
+              <Descriptions.Item label="会话ID">{selectedAiSession.session_id}</Descriptions.Item>
+              <Descriptions.Item label="模型">{selectedAiSession.model}</Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Tag color={getSessionStatusColor(selectedAiSession.status)}>{getSessionStatusLabel(selectedAiSession.status)}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="命中率">{Math.round((selectedAiSession.knowledge_hit_rate || 0) * 100)}%</Descriptions.Item>
+              <Descriptions.Item label="生成用例数">{selectedAiSession.total_generated_cases || 0}</Descriptions.Item>
+              <Descriptions.Item label="命中用例数">{selectedAiSession.total_hit_cases || 0}</Descriptions.Item>
+            </Descriptions>
+
+            <List
+              dataSource={selectedAiSession.evidence || []}
+              locale={{ emptyText: '暂无证据明细' }}
+              renderItem={(item: AIGenerationEvidenceItem) => (
+                <List.Item>
+                  <div style={{ width: '100%' }}>
+                    <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                      <Space wrap>
+                        <Text strong>{item.case_title}</Text>
+                        <Tag color={item.knowledge_hit_count > 0 ? 'success' : 'default'}>
+                          命中 {item.knowledge_hit_count || 0}
+                        </Tag>
+                        {item.used_explicit_context && <Tag color="blue">显式知识</Tag>}
+                        {item.used_rag && <Tag color="purple">RAG</Tag>}
+                      </Space>
+                      <Text type="secondary">{item.evidence_summary || '暂无摘要'}</Text>
+                      <Collapse
+                        size="small"
+                        items={[
+                          {
+                            key: `citations-${item.id}`,
+                            label: `查看引用明细（${item.citations?.length || 0}）`,
+                            children: (
+                              <List
+                                size="small"
+                                dataSource={item.citations || []}
+                                locale={{ emptyText: '暂无引用明细' }}
+                                renderItem={(citation: any) => (
+                                  <List.Item>
+                                    <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                                      <Space wrap>
+                                        <Tag color="cyan">{citation.source_type}</Tag>
+                                        <Tag>{citation.evidence_type}</Tag>
+                                        <Text strong>{citation.doc_title || '未命名知识文档'}</Text>
+                                        <Text type="secondary">相似度 {Number(citation.similarity_score || 0).toFixed(2)}</Text>
+                                      </Space>
+                                      <Text type="secondary">{citation.quote_text || citation.matched_text || '无片段预览'}</Text>
+                                    </Space>
+                                  </List.Item>
+                                )}
+                              />
+                            )
+                          }
+                        ]}
+                      />
+                    </Space>
+                  </div>
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
+      </Drawer>
 
     </div>
   );

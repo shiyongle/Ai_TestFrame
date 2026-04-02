@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON, Float
 from sqlalchemy.orm import relationship
 from core.database import Base
 from datetime import datetime
@@ -229,6 +229,84 @@ class KnowledgeDocument(Base):
     doc_metadata = Column(Text)  # JSON格式，避免与SQLAlchemy保留字冲突
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# AI 生成会话表
+class AIGenerationSession(Base):
+    __tablename__ = "ai_generation_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(64), unique=True, index=True, nullable=False)
+    version_id = Column(Integer, ForeignKey("versions.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    model = Column(String(50), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
+    total_requirements = Column(Integer, default=0)
+    total_generated_cases = Column(Integer, default=0)
+    total_hit_cases = Column(Integer, default=0)
+    total_citations = Column(Integer, default=0)
+    explicit_doc_count = Column(Integer, default=0)
+    knowledge_hit_rate = Column(Float, default=0)
+    summary = Column(JSON)
+    error_message = Column(Text)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    version = relationship("Version")
+    project = relationship("Project")
+    generated_cases = relationship("AIGeneratedCaseEvidence", back_populates="session", cascade="all, delete-orphan")
+    citations = relationship("AIGeneratedCaseCitation", back_populates="session", cascade="all, delete-orphan")
+
+# AI 生成用例证据表
+class AIGeneratedCaseEvidence(Base):
+    __tablename__ = "ai_generated_case_evidence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("ai_generation_sessions.id"), nullable=False)
+    testcase_id = Column(Integer, ForeignKey("testcases.id"))
+    requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=False)
+    case_index = Column(Integer, default=0)
+    case_title = Column(String(255), nullable=False)
+    used_explicit_context = Column(Boolean, default=False)
+    used_rag = Column(Boolean, default=False)
+    knowledge_hit_count = Column(Integer, default=0)
+    citation_count = Column(Integer, default=0)
+    hit_score = Column(Float, default=0)
+    evidence_summary = Column(Text)
+    raw_case = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = relationship("AIGenerationSession", back_populates="generated_cases")
+    testcase = relationship("TestCase")
+    requirement = relationship("Requirement")
+    citations = relationship("AIGeneratedCaseCitation", back_populates="generated_case", cascade="all, delete-orphan")
+
+# AI 生成用例引用明细表
+class AIGeneratedCaseCitation(Base):
+    __tablename__ = "ai_generated_case_citations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("ai_generation_sessions.id"), nullable=False)
+    generated_case_id = Column(Integer, ForeignKey("ai_generated_case_evidence.id"), nullable=False)
+    knowledge_doc_id = Column(Integer, ForeignKey("knowledge_documents.id"))
+    requirement_id = Column(Integer, ForeignKey("requirements.id"), nullable=False)
+    source_type = Column(String(30), nullable=False, default="explicit")  # explicit, rag, inferred
+    evidence_type = Column(String(30), nullable=False, default="document")  # document, chunk, semantic_match
+    chunk_id = Column(String(100))
+    chunk_index = Column(Integer)
+    doc_title = Column(String(500))
+    matched_text = Column(Text)
+    quote_text = Column(Text)
+    similarity_score = Column(Float, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    session = relationship("AIGenerationSession", back_populates="citations")
+    generated_case = relationship("AIGeneratedCaseEvidence", back_populates="citations")
+    knowledge_document = relationship("KnowledgeDocument")
+    requirement = relationship("Requirement")
 
 # 已废弃：自2.3.x版本引入ChromaDB后不再使用表存向量
 # class DocumentEmbedding(Base):

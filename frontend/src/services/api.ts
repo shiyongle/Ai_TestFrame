@@ -161,6 +161,10 @@ export const versionApi = {
     api.get(`/api/v1/versions/${versionId}/requirements`),
   generateTestCases: (versionId: number, model: string): Promise<any> =>
     api.post(`/api/v1/versions/${versionId}/generate-testcases`, { model }),
+  getAiGenerationSessions: (versionId: number): Promise<any[]> =>
+    api.get(`/api/v1/versions/${versionId}/ai-generation-sessions`),
+  getAiGenerationSessionDetail: (versionId: number, sessionId: string): Promise<any> =>
+    api.get(`/api/v1/versions/${versionId}/ai-generation-sessions/${sessionId}`),
   linkKnowledgeToVersion: (versionId: number, knowledgeIds: number[]): Promise<any> =>
     api.post(`/api/v1/versions/${versionId}/knowledge`, knowledgeIds),
   getLinkedKnowledge: (versionId: number): Promise<any[]> =>

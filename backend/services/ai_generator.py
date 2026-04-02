@@ -6,6 +6,7 @@ AI测试用例生成服务
 
 import json
 import asyncio
+import re
 from typing import List, Dict, Any
 from models.database_models import Requirement, TestCase, Project
 from config.settings import settings
@@ -100,28 +101,66 @@ class AITestCaseGenerator:
 
         return polished_cases
 
-    async def _extract_json_from_text(self, text: str) -> Any:
+    def _prepare_llm_text(self, text: Any) -> str:
+        """规整不同模型返回的 content 结构，统一转为可解析文本"""
+        if text is None:
+            return ""
+        if isinstance(text, str):
+            return text.strip()
+        if isinstance(text, (dict, list)):
+            try:
+                return json.dumps(text, ensure_ascii=False)
+            except Exception:
+                return str(text).strip()
+        return str(text).strip()
+
+    def _log_llm_preview(self, step_name: str, content: Any) -> None:
+        """记录模型返回预览，便于定位结构化失败原因"""
+        text = self._prepare_llm_text(content)
+        preview = re.sub(r"\s+", " ", text)[:800]
+        logger.info(f"{step_name} LLM原始输出预览: {preview}")
+
+    async def _extract_json_from_text(self, text: Any) -> Any:
         """从不可靠的LLM文本输出中安全提取JSON"""
-        text = text.strip()
-        if text.startswith("```json"): 
+        text = self._prepare_llm_text(text)
+
+        fenced_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, flags=re.IGNORECASE)
+        if fenced_match:
+            text = fenced_match.group(1).strip()
+        elif text.startswith("```json"):
             text = text[7:]
-        elif text.startswith("```"): 
+        elif text.startswith("```"):
             text = text[3:]
-            
-        if text.endswith("```"): 
+
+        if text.endswith("```"):
             text = text[:-3]
-            
+
         text = text.strip()
 
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             logger.warning("基础JSON解析失败，尝试高级栈式匹配恢复...")
+
+            candidate_segments = []
+            array_match = re.search(r"\[[\s\S]*\]", text)
+            if array_match:
+                candidate_segments.append(array_match.group(0))
+            object_match = re.search(r"\{[\s\S]*\}", text)
+            if object_match:
+                candidate_segments.append(object_match.group(0))
+
+            for candidate in candidate_segments:
+                try:
+                    return json.loads(candidate, strict=False)
+                except Exception:
+                    pass
+
             # 尝试使用栈式括号匹配逐个提取对象（针对超大数组被截断的终极防御）
             extracted_cases = []
             stack = []
             start_idx = -1
-            
+
             for i, char in enumerate(text):
                 if char == '{':
                     if not stack:
@@ -131,45 +170,44 @@ class AITestCaseGenerator:
                     if stack:
                         stack.pop()
                         if not stack and start_idx != -1:
-                            # 找到了完整的对象大括号
                             obj_str = text[start_idx:i+1]
                             try:
                                 obj = json.loads(obj_str, strict=False)
                                 extracted_cases.append(obj)
                             except json.JSONDecodeError:
                                 pass
-                                
+
             if extracted_cases:
                 logger.info(f"高级栈式匹配恢复成功，提取了 {len(extracted_cases)} 个对象")
                 return extracted_cases
 
-            # 尝试基础的整体匹配：找数组
             if '[' in text and ']' in text:
                 try:
                     start = text.find('[')
                     end = text.rfind(']') + 1
-                    return json.loads(text[start:end])
+                    return json.loads(text[start:end], strict=False)
                 except Exception:
                     pass
-            # 尝试基础的整体匹配：找对象
+
             if '{' in text and '}' in text:
                 try:
                     start = text.find('{')
                     end = text.rfind('}') + 1
-                    return json.loads(text[start:end])
+                    return json.loads(text[start:end], strict=False)
                 except Exception:
                     pass
+
             raise json.JSONDecodeError("无法提取有效的JSON结构", text, 0)
 
     async def generate_test_case_from_requirement(
-        self, 
-        requirement: Requirement, 
+        self,
+        requirement: Requirement,
         model: str = "glm-4.6",
         explicit_context: str = "",
         use_rag: bool = True,
         custom_prompt: str = None
-    ) -> List[Dict[str, Any]]:
-        """基于5步 Agentic 工作流生成测试用例"""
+    ) -> Dict[str, Any]:
+        """基于5步 Agentic 工作流生成测试用例，并返回结构化证据"""
         try:
             from services.ai.llm_client import llm_client
             from services.ai.rag_engine import rag_engine
@@ -196,14 +234,20 @@ class AITestCaseGenerator:
 
             # Step 2: 基于补充与主链路进行混合 RAG 检索知识
             logger.info("➡️ Step 2: 准备混合知识 (Hybrid Knowledge Preparation)")
-            rag_context = ""
+            rag_payload = {
+                "query": "",
+                "context": "",
+                "hits": [],
+                "status": "disabled"
+            }
             if use_rag:
-                rag_context = await self._step2_retrieve_knowledge(blueprint, rag_engine)
+                rag_payload = await self._step2_retrieve_knowledge(blueprint, rag_engine)
             
+            rag_context = rag_payload.get("context", "")
             combined_context = ""
             if explicit_context:
                 combined_context += f"【人工强关联的历史业务规则】：\n{explicit_context}\n\n"
-            if rag_context and rag_context != "（无额外检索条件）":
+            if rag_context and rag_context not in ["（无额外检索条件）", "（检索知识库后未发现相关历史测试规范或关联参考知识片段）", "（知识库检索不可用）"]:
                 combined_context += f"【系统隐性匹配的参考常识与规范记录】：\n{rag_context}\n"
                 
             if not combined_context:
@@ -216,20 +260,42 @@ class AITestCaseGenerator:
 
             # Step 4: 基于大纲扩散生成具体用例
             logger.info(f"➡️ Step 4: 扩散生成具体用例 (针对 {len(test_points)} 个测试点)")
-            generated_cases = await self._step4_expand_test_cases(test_points, combined_context, provider, llm_client)
+            generated_cases = await self._step4_expand_test_cases(requirement, test_points, combined_context, provider, llm_client)
 
             # Step 5: 自我反思/漏测检查
             logger.info("➡️ Step 5: 自我审计与漏测补全 (Review & Self-Correction)")
             final_cases = await self._step5_review_and_correct(requirement, blueprint, generated_cases, provider, llm_client)
             final_cases = self._post_process_cases(final_cases)
+            evidence = self._build_case_evidence(final_cases, explicit_context, rag_payload)
 
             logger.info(f"=== 测试用例 Agentic 生成完成，共产出 {len(final_cases)} 条用例 ===")
-            return final_cases
+            return {
+                "cases": final_cases,
+                "evidence": evidence,
+                "blueprint": blueprint,
+                "rag": rag_payload
+            }
 
         except Exception as e:
             logger.error(f"Agentic 生成测试用例流程中发生崩溃: {e}", exc_info=True)
             logger.warning("Agentic 失败，回退至模拟兜底数据...")
-            return await self._generate_mock(requirement)
+            mock_cases = await self._generate_mock(requirement)
+            return {
+                "cases": mock_cases,
+                "evidence": self._build_case_evidence(mock_cases, explicit_context, {"query": "", "context": "", "hits": [], "status": "error"}),
+                "blueprint": {
+                    "core_objective": requirement.title,
+                    "happy_path_steps": [],
+                    "modules": []
+                },
+                "rag": {
+                    "query": "",
+                    "context": "",
+                    "hits": [],
+                    "status": "error",
+                    "error": str(e)
+                }
+            }
 
     async def _step1_extract_blueprint(self, req: Requirement, provider: str, llm_client) -> Dict[str, Any]:
         """第一步：提取需求主链路与大纲"""
@@ -266,37 +332,86 @@ class AITestCaseGenerator:
                 "modules": []
             }
 
-    async def _step2_retrieve_knowledge(self, blueprint: Dict[str, Any], rag_engine) -> str:
+    async def _step2_retrieve_knowledge(self, blueprint: Dict[str, Any], rag_engine) -> Dict[str, Any]:
         """第二步：利用提取的主链路和目标去RAG检索相关历史知识/规范"""
         # 构建精简而关键的检索词
         happy_path = " ".join(blueprint.get('happy_path_steps', []))
-        query = f"{blueprint.get('core_objective', '')} {happy_path}"
+        query = f"{blueprint.get('core_objective', '')} {happy_path}".strip()
         
-        if not query.strip(): 
-            return "（无额外检索条件）"
+        if not query:
+            return {
+                "query": "",
+                "context": "（无额外检索条件）",
+                "hits": [],
+                "status": "empty_query"
+            }
             
         # 调用 RAG 获取上下文
         try:
-            context = await rag_engine.get_context_for_query(query, max_context_length=2000)
-            if context and context.strip():
-                return context
-            return "（检索知识库后未发现相关历史测试规范或关联参考知识片段）"
+            search_results = await rag_engine.search(query, top_k=3)
+            if not search_results:
+                return {
+                    "query": query,
+                    "context": "（检索知识库后未发现相关历史测试规范或关联参考知识片段）",
+                    "hits": [],
+                    "status": "no_hits"
+                }
+
+            context_parts = []
+            current_length = 0
+            normalized_hits = []
+            for result in search_results:
+                content = result.get('content', '') or ''
+                title = result.get('title', '未命名知识')
+                if current_length < 2000 and content:
+                    remaining_length = 2000 - current_length
+                    if remaining_length > 0:
+                        snippet = content[:remaining_length]
+                        context_parts.append(f"【{title}】\n{snippet}{'...' if len(content) > remaining_length else ''}")
+                        current_length += len(snippet)
+                normalized_hits.append({
+                    "doc_id": result.get("doc_id"),
+                    "title": title,
+                    "content": content,
+                    "source": result.get("source", ""),
+                    "category": result.get("category", ""),
+                    "metadata": result.get("metadata", {}),
+                    "similarity": float(result.get("similarity", 0) or 0),
+                    "chunk_index": result.get("chunk_index", 0),
+                    "chunk_id": f"{result.get('doc_id')}_chunk_{result.get('chunk_index', 0)}" if result.get("doc_id") else None,
+                })
+
+            return {
+                "query": query,
+                "context": "\n\n".join(context_parts),
+                "hits": normalized_hits,
+                "status": "ok"
+            }
         except Exception as e:
             logger.error(f"Step 2 RAG 检索异常: {e}")
-            return "（知识库检索不可用）"
+            return {
+                "query": query,
+                "context": "（知识库检索不可用）",
+                "hits": [],
+                "status": "error",
+                "error": str(e)
+            }
 
     async def _step3_generate_test_points(self, req: Requirement, blueprint: Dict[str, Any], context: str, provider: str, llm_client) -> List[str]:
         """第三步：大纲脑图扩散，结合知识生成独立测试点"""
         prompt = f"""
-作为资深测试专家，分析以下产品需求的主链路，并结合给定的历史知识/业务规则规范。
+作为资深测试专家，请以【需求本身】为唯一主线生成测试点，知识库内容只能作为补充参考，不能替代、改写或压过需求主体。
 不要直接详细写测试用例！不要写步骤！
 请基于 等价类划分、边界值分析、正向业务流程、异常流程容忍度、安全与并发 等多维度，
 列举出此需求所有必须测试的关键点(Test Points 大纲)。
 
 输出风格要求（严格）：
-1. 每条测试点是“业务动作 + 触发条件 + 可观察结果”的短句，不写空话。
-2. 禁止出现“确保/全面覆盖/建议补充/最佳实践/进一步优化”等泛化表达。
-3. 每条长度控制在 18~60 字，优先使用项目术语与字段名。
+1. 必须优先围绕需求标题、需求描述、验收标准、业务价值来拆解测试点。
+2. 知识库内容仅用于补充业务规则、历史约束、术语口径，不能偏离需求目标单独展开。
+3. 每条测试点是“业务动作 + 触发条件 + 可观察结果”的短句，不写空话。
+4. 禁止出现“确保/全面覆盖/建议补充/最佳实践/进一步优化”等泛化表达。
+5. 每条长度控制在 18~60 字，优先使用需求原文中的术语、字段名、业务动作。
+6. 如果知识库与需求存在冲突，以需求与验收标准为准。
 
 必须返回一个纯 JSON 的字符串数组格式：
 [
@@ -306,19 +421,23 @@ class AITestCaseGenerator:
     "验证关联历史规则XX是否生效"
 ]
 
-【产品需求】：
+【产品需求（主体，优先级最高）】：
 标题：{req.title}
+描述：{req.description}
 分析提炼后的核心目标：{blueprint.get('core_objective')}
 提炼后的主链路步骤：{blueprint.get('happy_path_steps')}
 验收标准要求：{req.acceptance_criteria}
+业务价值：{req.business_value}
 
-【相关业务知识规则（来自知识库）】：
+【相关业务知识规则（辅助参考，仅补充，不可喧宾夺主）】：
 {context}
 """
         resp = await llm_client.text_completion(prompt, provider=provider)
-        if not resp.get('success'): 
-            raise Exception("Step 3 接口调用失败")
-            
+        if not resp.get('success'):
+            raise Exception(f"Step 3 接口调用失败: {resp.get('error')}")
+
+        self._log_llm_preview("Step 3", resp.get('content', ''))
+
         try:
             points = await self._extract_json_from_text(resp.get('content', ''))
             if isinstance(points, list) and len(points) > 0:
@@ -328,12 +447,13 @@ class AITestCaseGenerator:
             logger.warning(f"Step 3 解析测试维度失败，应用默认: {e}")
             return [f"验证 {req.title} 的验收标准"]
 
-    async def _step4_expand_test_cases(self, test_points: List[str], context: str, provider: str, llm_client) -> List[Dict[str, Any]]:
+    async def _step4_expand_test_cases(self, req: Requirement, test_points: List[str], context: str, provider: str, llm_client) -> List[Dict[str, Any]]:
         """第四步：基于测试大纲定向扩散为结构化的具体测试用例"""
         points_str = "\n".join([f"{i+1}. {p}" for i, p in enumerate(test_points)])
         prompt = f"""
-作为高级自动化测试实施工程师，请严格针对以下我列出的【测试大纲点（Test Points）】，逐一展开，将其编写成为详细的软件测试用例。
+作为高级自动化测试实施工程师，请以【需求内容】为主体，严格针对以下我列出的【测试大纲点（Test Points）】，逐一展开，将其编写成为详细的软件测试用例。
 每一个测试大纲点至少对应一条测试用例，必须覆盖异常与边界情况（如果有提及）。
+知识库内容仅用于补充历史规则、术语和约束，不能喧宾夺主，更不能脱离需求独立产出用例。
 
 你必须用标准的 JSON 数组格式返回：
 [
@@ -341,8 +461,8 @@ class AITestCaseGenerator:
     "title": "测试场景用例标题",
     "description": "用例描述说明",
     "preconditions": "所需前置条件（如无则填 '无'）",
-    "test_steps": [ 
-        {{"step": 1, "action": "具体操作步骤1", "expected": "预期系统响应结果1"}} 
+    "test_steps": [
+        {{"step": 1, "action": "具体操作步骤1", "expected": "预期系统响应结果1"}}
     ],
     "test_data": "测试输入数据说明",
     "priority": "高（核心流）/中/低",
@@ -360,24 +480,55 @@ class AITestCaseGenerator:
 6. test_steps.action 只写具体操作；test_steps.expected 只写可观察结果（状态码、字段值、提示文案、数据落库等）。
 7. 禁止出现“可能/通常/尽量/建议”等不确定措辞。
 8. 如果上下文中有历史用例风格，请模仿其表达习惯（短句、术语一致），但不要复制内容。
+9. 如果知识库与需求冲突，以需求描述与验收标准为准。
+10. 每条用例都要能明确映射回某个需求测试点，不允许脱离需求主体自由发挥。
+11. 优先使用需求原文里的业务对象、字段、状态、限制条件来组织步骤与断言。
+
+【需求主体信息（优先级最高）】：
+需求标题：{req.title}
+需求描述：{req.description}
+验收标准：{req.acceptance_criteria}
+业务价值：{req.business_value}
 
 【要展开转换的测试大纲点】：
 {points_str}
 
-【相关常识与背景知识说明（RAG注入）】：
+【相关常识与背景知识说明（辅助参考）】：
 {context}
 """
         resp = await llm_client.text_completion(prompt, provider=provider, max_tokens=8192)
-        if not resp.get('success'): 
-            raise Exception("Step 4 接口调用失败")
-            
+        if not resp.get('success'):
+            raise Exception(f"Step 4 接口调用失败: {resp.get('error')}")
+
+        raw_content = resp.get('content', '')
+        self._log_llm_preview("Step 4", raw_content)
+
         try:
-            cases = await self._extract_json_from_text(resp.get('content', ''))
+            cases = await self._extract_json_from_text(raw_content)
             if not isinstance(cases, list):
                 cases = [cases]
             return cases
         except Exception as e:
-            raise Exception(f"Step 4 JSON 解析失败，这可能是一个灾难性错误: {e}")
+            logger.warning(f"Step 4 首次JSON解析失败，尝试二次修复: {e}")
+
+            repair_prompt = f"""
+请将下面这段模型输出修复为【纯 JSON 数组】。
+不要解释，不要补充任何前后缀，只输出合法 JSON。
+每个元素必须包含以下字段：title、description、preconditions、test_steps、test_data、priority、expected_result、notes。
+其中 test_steps 必须是数组，每个元素格式为：{{"step": 1, "action": "...", "expected": "..."}}。
+
+待修复内容如下：
+{self._prepare_llm_text(raw_content)}
+"""
+            repair_resp = await llm_client.text_completion(repair_prompt, provider=provider, max_tokens=4096)
+            if repair_resp.get('success'):
+                self._log_llm_preview("Step 4 Repair", repair_resp.get('content', ''))
+                repaired_cases = await self._extract_json_from_text(repair_resp.get('content', ''))
+                if not isinstance(repaired_cases, list):
+                    repaired_cases = [repaired_cases]
+                return repaired_cases
+
+            raise Exception(f"Step 4 JSON 解析失败，且二次修复失败: {e}")
 
     async def _step5_review_and_correct(self, req: Requirement, blueprint: Dict[str, Any], generated_cases: List[Dict[str, Any]], provider: str, llm_client) -> List[Dict[str, Any]]:
         """第五步：测试审计及关键漏测纠正验证"""
@@ -389,13 +540,14 @@ class AITestCaseGenerator:
             cases_summary = "提取摘要异常"
 
         prompt = f"""
-你是测试总监兼 QA 评审员。我们要确保提交给研发团队的测试用例是无懈可击的。
+你是测试总监兼 QA 评审员。请以【原始需求】为最高优先级审阅当前测试用例，知识库只允许作为辅助参考，不能改变需求主体。
 请审阅刚才团队编写的初版测试用例列表，核对它们是否真正完整覆盖了原始需求的【所有验收标准】以及【主逻辑链路】。
 你的任务：
 1. 分析是否遗漏了致命的安全漏洞测试、异常断网、或者显而易见的极端边界。
 2. 分析是否遗漏了【验收标准】中明确指出的某一条细节。
 3. 如果发现漏测，请补充最多 1 到 3 条全新的测试用例。如果没有明显的遗漏，或者已完全覆盖，则必须返回空数组 []。
 4. 补充用例文风要求与主用例一致：简短、可执行、可断言；禁止空泛AI表达。
+5. 如果发现已有用例偏离需求、过度受知识库影响，不要保留这种偏离思路，补充的用例必须重新拉回需求主体。
 
 请务必直接返回补充用例构成的纯 JSON 数组（格式与正常用例保持绝对一致）。例如：
 [
@@ -408,7 +560,10 @@ class AITestCaseGenerator:
   }}
 ]
 
+【原始需求标题】：{req.title}
+【原始需求描述】：{req.description}
 【原始需求验收标准】：{req.acceptance_criteria}
+【原始需求业务价值】：{req.business_value}
 【需求主链路蓝图】：{blueprint.get('happy_path_steps')}
 【待查漏补缺的初版用例简要摘要】：
 {cases_summary}
@@ -416,6 +571,7 @@ class AITestCaseGenerator:
         try:
             resp = await llm_client.text_completion(prompt, provider=provider, max_tokens=3000)
             if resp.get('success'):
+                self._log_llm_preview("Step 5", resp.get('content', '[]'))
                 missing_cases = await self._extract_json_from_text(resp.get('content', '[]'))
                 if isinstance(missing_cases, list) and len(missing_cases) > 0 and isinstance(missing_cases[0], dict):
                     # 安全性检查：确认这不是之前已有的标题
@@ -429,6 +585,65 @@ class AITestCaseGenerator:
             
         return generated_cases
         
+    def _build_case_evidence(self, cases: List[Dict[str, Any]], explicit_context: str, rag_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """为每条生成用例构造轻量知识命中证据"""
+        rag_hits = rag_payload.get("hits", []) if isinstance(rag_payload, dict) else []
+        evidence_items: List[Dict[str, Any]] = []
+
+        for idx, case in enumerate(cases):
+            case_text_parts = [
+                str(case.get("title") or case.get("name") or ""),
+                str(case.get("description") or ""),
+                str(case.get("expected_result") or ""),
+                str(case.get("notes") or ""),
+                json.dumps(case.get("test_steps", []), ensure_ascii=False),
+            ]
+            case_text = "\n".join([part for part in case_text_parts if part]).lower()
+            citations = []
+
+            for hit in rag_hits:
+                content = str(hit.get("content") or "")
+                snippet = content[:80].strip()
+                score = float(hit.get("similarity", 0) or 0)
+                if not content or score < 0.35:
+                    continue
+
+                matched = False
+                keywords = [token.strip().lower() for token in re.split(r"[\s,，。；;:：()（）]+", snippet) if len(token.strip()) >= 2]
+                for keyword in keywords[:8]:
+                    if keyword and keyword in case_text:
+                        matched = True
+                        break
+
+                if matched or score >= 0.72:
+                    citations.append({
+                        "knowledge_doc_id": hit.get("metadata", {}).get("knowledge_document_id"),
+                        "doc_id": hit.get("doc_id"),
+                        "doc_title": hit.get("title"),
+                        "source_type": "rag",
+                        "evidence_type": "chunk",
+                        "chunk_id": hit.get("chunk_id"),
+                        "chunk_index": hit.get("chunk_index", 0),
+                        "matched_text": snippet,
+                        "quote_text": snippet,
+                        "similarity_score": round(score, 4)
+                    })
+
+            evidence_items.append({
+                "case_index": idx,
+                "case_title": case.get("title") or case.get("name") or f"自动生成用例-{idx+1}",
+                "used_explicit_context": bool(explicit_context),
+                "used_rag": bool(rag_hits),
+                "knowledge_hit_count": len(citations),
+                "citation_count": len(citations),
+                "hit_score": max([c["similarity_score"] for c in citations], default=0),
+                "evidence_summary": f"命中 {len(citations)} 条知识片段" if citations else "未发现明显知识命中",
+                "citations": citations,
+                "raw_case": case
+            })
+
+        return evidence_items
+
     async def _generate_mock(self, requirement: Requirement) -> List[Dict[str, Any]]:
         """应急模式：当AI能力失效时的退避兜底"""
         return [

@@ -541,6 +541,7 @@ const Dashboard: React.FC = () => {
                   onClick={handleSendMessage}
                   disabled={!chatInput.trim() || agentLoading}
                   style={{
+                    color: '#ffffff',
                     background: chatInput.trim() && !agentLoading ? '#007AFF' : '#d1d1d6',
                     borderColor: 'transparent',
                     boxShadow: chatInput.trim() && !agentLoading ? '0 4px 12px rgba(0,122,255,0.3)' : 'none',

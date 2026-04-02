@@ -1,12 +1,24 @@
 import asyncio
+import asyncio
 from datetime import datetime
 from typing import Dict, List, Optional
+import logging
 
 from sqlalchemy.orm import Session
 
 from core.database import SessionLocal
-from models.database_models import UIAutomationArtifact, UIAutomationStepLog, UIAutomationTask
+from models.database_models import UIAutomationArtifact, UIAutomationStepLog, UIAutomationTask, SystemSetting
 from schemas.ui_automation_schemas import UIAutomationTaskCreate
+from config.settings import settings
+
+try:
+    from browser_use import Agent
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    Agent = None
+    ChatOpenAI = None
+
+logger = logging.getLogger(__name__)
 
 
 class UIAutomationService:
@@ -88,7 +100,7 @@ class UIAutomationService:
         return task
 
     async def run_task_async(self, task_id: int) -> None:
-        """后台执行骨架：模拟 browser-use 步骤执行并写入产物。"""
+        """后台执行引擎：使用 Browser-Use 和 Langchain 真机拉起并执行页面动作"""
         db = SessionLocal()
         try:
             task = self.get_task(db, task_id)
@@ -107,44 +119,110 @@ class UIAutomationService:
             for idx, step in enumerate(steps, start=1):
                 step.status = "running"
                 step.started_at = datetime.utcnow()
-                db.commit()
+            db.commit()
+            
+            # 主动让渡控制权给事件循环，保证主请求可以快速打回 response
+            await asyncio.sleep(0.1)
 
-                await asyncio.sleep(0.35)
+            if Agent is None or ChatOpenAI is None:
+                raise ValueError("未完整安装 browser-use 或 langchain-openai，执行终止")
 
-                # 这里预留 browser-use 执行动作
-                step.status = "success"
-                step.detail = f"browser-use 执行步骤成功：{step.step_title}"
-                step.finished_at = datetime.utcnow()
+            # 读取数据库配置
+            db_settings = {}
+            try:
+                records = db.query(SystemSetting).filter(SystemSetting.category == 'llm').all()
+                for rec in records:
+                    db_settings[rec.setting_key] = rec.setting_value
+            except Exception:
+                pass
+            
+            api_key = db_settings.get('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
+            base_url = db_settings.get('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', "https://api.openai.com/v1")
+            model_name = "gpt-4o"
+            
+            if not api_key:
+                api_key = db_settings.get('SILICONFLOW_API_KEY') or getattr(settings, 'SILICONFLOW_API_KEY', None)
+                base_url = db_settings.get('SILICONFLOW_BASE_URL') or getattr(settings, 'SILICONFLOW_BASE_URL', "https://api.siliconflow.cn/v1")
+                model_name = db_settings.get('SILICONFLOW_CHAT_MODEL') or getattr(settings, 'SILICONFLOW_CHAT_MODEL', 'Qwen/Qwen2.5-7B-Instruct')
 
-                db.add(
-                    UIAutomationArtifact(
-                        task_id=task.id,
-                        artifact_type="screenshot",
-                        artifact_name=f"step-{idx:02d}.png",
-                        artifact_path=f"/artifacts/ui-task-{task.id}/step-{idx:02d}.png",
-                    )
-                )
-                db.add(
-                    UIAutomationArtifact(
-                        task_id=task.id,
-                        artifact_type="dom_snapshot",
-                        artifact_name=f"step-{idx:02d}.html",
-                        artifact_content=f"<!-- DOM snapshot placeholder for step {idx} -->",
-                    )
-                )
+            if not api_key:
+                raise ValueError("LLM API Key missing! Needs OpenAI or compatible key for Browser-use.")
 
-                task.progress = int(idx * 100 / total)
-                db.commit()
+            llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
+
+            # 拼接任务指令对象
+            instruction_lines = [f"请打开目标网站: {task.target_url}"]
+            
+            if task.auth_scheme == "account_password" and task.auth_payload:
+                instruction_lines.append(f"需要执行登录，用户名: {task.auth_payload.get('username')}, 密码: {task.auth_payload.get('password')}")
+
+            instruction_lines.append("请执行以下操作：")
+            for idx, s in enumerate(task.natural_language_steps or [], 1):
+                instruction_lines.append(f"{idx}. {s}")
+
+            if task.assertions:
+                instruction_lines.append("并且验证以下断言:")
+                for index, a in enumerate(task.assertions, 1):
+                    instruction_lines.append(f"- {a}")
+
+            full_task_prompt = "\n".join(instruction_lines)
+            
+            # 使用 Browser User
+            agent = Agent(task=full_task_prompt, llm=llm)
+            
+            # 由于大模型Agent可能处理数分钟，先将整体任务进度往前拨
+            task.progress = 20
+            db.commit()
+            
+            result = await agent.run(max_steps=20)
+            
+            for s in steps:
+                s.status = "success"
+                s.finished_at = datetime.utcnow()
+                s.detail = "已交由 Browser-Use Agent 委托执行"
+
+            has_history = hasattr(result, "history")
+            
+            if has_history:
+                for idx, history_item in enumerate(result.history):
+                    b64_img = ""
+                    # 尝试捕获每一步的 state.screenshot base64 对象
+                    if hasattr(history_item, "state") and hasattr(history_item.state, "screenshot") and history_item.state.screenshot:
+                        b64_img = history_item.state.screenshot
+                        if b64_img.startswith("data:image/png;base64,"):
+                            b64_img = b64_img.replace("data:image/png;base64,", "")
+                            
+                    if b64_img:
+                        db.add(
+                            UIAutomationArtifact(
+                                task_id=task.id,
+                                artifact_type="screenshot",
+                                artifact_name=f"browser_step_{idx+1}.png",
+                                artifact_content=b64_img,
+                            )
+                        )
+                    
+                    if hasattr(history_item, "state") and hasattr(history_item.state, "interacted_element"):
+                        interacted = getattr(history_item.state.interacted_element, "xpath", "Unknown")
+                        db.add(
+                            UIAutomationArtifact(
+                                task_id=task.id,
+                                artifact_type="dom_snapshot",
+                                artifact_name=f"interacted_{idx+1}.txt",
+                                artifact_content=f"History interacted element: {interacted}",
+                            )
+                        )
 
             task.status = "success"
             task.progress = 100
             task.finished_at = datetime.utcnow()
             db.commit()
+
         except Exception as exc:
             task = self.get_task(db, task_id)
             if task:
                 task.status = "failed"
-                task.error_message = str(exc)
+                task.error_message = f"执行报错: {str(exc)}"
                 task.finished_at = datetime.utcnow()
                 db.add(
                     UIAutomationArtifact(
@@ -154,6 +232,14 @@ class UIAutomationService:
                         artifact_content=str(exc),
                     )
                 )
+                
+                # 级联更新步骤表
+                steps = self.get_task_steps(db, task_id)
+                if steps:
+                    for s in steps:
+                        s.status = "failed"
+                        s.finished_at = datetime.utcnow()
+                        s.detail = "执行被意外中断"
                 db.commit()
         finally:
             db.close()

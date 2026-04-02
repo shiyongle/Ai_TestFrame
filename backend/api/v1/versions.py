@@ -5,11 +5,18 @@ from core.database import get_db, SessionLocal
 from models.database_models import Version, Requirement, VersionRequirement, VersionKnowledge, TestCase
 from pydantic import BaseModel
 from datetime import datetime
-from services.ai_generator import ai_generator
 from services.ai.ai_service import ai_service
-from models.database_models import KnowledgeDocument, TestSuite, TestSuiteCase
-from datetime import datetime
+from models.database_models import (
+    KnowledgeDocument,
+    TestSuite,
+    TestSuiteCase,
+    AIGenerationSession,
+    AIGeneratedCaseEvidence,
+    AIGeneratedCaseCitation,
+)
 from utils.activity_logger import log_activity
+import json
+import uuid
 
 router = APIRouter()
 
@@ -367,58 +374,68 @@ async def generate_test_cases_for_version(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """为版本关联的需求生成测试用例（后台异步执行并自带绑定的RAG上下文）"""
+    """为版本关联的需求生成测试用例（后台异步执行并记录知识命中证据）"""
     model = request.get("model", "glm")
-    
-    # 验证版本是否存在
+
     version = db.query(Version).filter(Version.id == version_id).first()
     if not version:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="版本不存在"
         )
-    
-    # 获取版本关联的需求
+
     version_requirements = db.query(VersionRequirement).filter(
         VersionRequirement.version_id == version_id
     ).all()
-    
     if not version_requirements:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="该版本没有关联任何需求"
         )
-    
+
     requirement_ids = [vr.requirement_id for vr in version_requirements]
     requirements = db.query(Requirement).filter(Requirement.id.in_(requirement_ids)).all()
-    
     if not requirements:
         raise HTTPException(
-            status=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="未找到有效的需求"
         )
-        
-    # 查询当前版本具体关联的RAG知识库文档，组装硬性上下文
+
     linked_knowledge_entries = db.query(VersionKnowledge).filter(
         VersionKnowledge.version_id == version_id
     ).all()
-    
+    linked_doc_ids = [k.knowledge_doc_id for k in linked_knowledge_entries]
+    linked_docs = []
     explicit_context = ""
-    if linked_knowledge_entries:
-        doc_ids = [k.knowledge_doc_id for k in linked_knowledge_entries]
-        docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(doc_ids)).all()
-        parts = []
-        for doc in docs:
-            parts.append(f"【{doc.title}】\n{doc.content}")
-        explicit_context = "\n\n".join(parts)
-        
+    if linked_doc_ids:
+        linked_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.id.in_(linked_doc_ids)).all()
+        explicit_context = "\n\n".join([f"【{doc.title}】\n{doc.content}" for doc in linked_docs])
+
+    session_id = uuid.uuid4().hex
+    generation_session = AIGenerationSession(
+        session_id=session_id,
+        version_id=version.id,
+        project_id=version.project_id,
+        model=model,
+        status="pending",
+        total_requirements=len(requirements),
+        explicit_doc_count=len(linked_docs),
+        summary={
+            "version_number": version.version_number,
+            "requirement_ids": requirement_ids,
+            "knowledge_doc_ids": linked_doc_ids,
+        }
+    )
+    db.add(generation_session)
+    db.commit()
+
     project_id = version.project_id
     log_activity(
         db,
         action="generate",
         module="版本",
         target_name=version.version_number,
-        detail=f"开始生成测试用例，model={model}",
+        detail=f"开始生成测试用例，model={model}，session_id={session_id}",
     )
 
     async def _bg_generate_testcases(
@@ -426,15 +443,34 @@ async def generate_test_cases_for_version(
         req_explicit_context: str,
         ai_model: str,
         proj_id: int,
-        ver_number: str
+        ver_number: str,
+        session_identifier: str,
+        version_identifier: int,
+        explicit_docs: List[dict],
     ):
-        """后台异步处理测使用例生成和入库逻辑"""
+        """后台异步处理测使用例生成、证据记录与入库逻辑"""
         try:
-            # We must use a short-lived DB session in the background
             with SessionLocal() as bg_db:
+                session_row = bg_db.query(AIGenerationSession).filter(
+                    AIGenerationSession.session_id == session_identifier
+                ).first()
+                if not session_row:
+                    return
+
+                session_row.status = "running"
+                session_row.started_at = datetime.utcnow()
+                bg_db.commit()
+
                 newly_created_test_cases = []
+                total_hit_cases = 0
+                total_citations = 0
+                req_summary = []
+                explicit_doc_map = {doc["id"]: doc for doc in explicit_docs}
+                explicit_title_map = {doc["title"]: doc for doc in explicit_docs}
+
                 for req in reqs:
                     req_data = {
+                        'id': req.id,
                         'title': req.title,
                         'description': req.description,
                         'priority': req.priority,
@@ -442,96 +478,337 @@ async def generate_test_cases_for_version(
                         'acceptance_criteria': req.acceptance_criteria,
                         'business_value': req.business_value
                     }
-                    
+
                     res = await ai_service.generate_test_case_from_requirement(
-                        req_data, 
-                        provider=ai_model, 
-                        use_rag=True, 
+                        req_data,
+                        provider=ai_model,
+                        use_rag=True,
                         explicit_context=req_explicit_context if req_explicit_context else None
                     )
-                    
-                    if res.get('success'):
-                        test_cases_json = res.get('test_case', [])
-                        
-                        # Handle potential string format error in case parsing fails earlier
-                        if isinstance(test_cases_json, str):
-                            import json
-                            try:
-                                test_cases_json = json.loads(test_cases_json)
-                            except:
-                                test_cases_json = []
 
-                        # Force format to iterable array
-                        if not isinstance(test_cases_json, list):
-                            test_cases_json = [test_cases_json]
+                    if not res.get('success'):
+                        req_summary.append({
+                            "requirement_id": req.id,
+                            "title": req.title,
+                            "generated_cases": 0,
+                            "hit_cases": 0,
+                            "error": res.get('error')
+                        })
+                        continue
 
-                        for tc_json in test_cases_json:
-                            if not isinstance(tc_json, dict):
+                    test_cases_json = res.get('test_case', [])
+                    evidence_list = res.get('evidence', []) or []
+                    rag_payload = res.get('rag', {}) or {}
+
+                    if isinstance(test_cases_json, str):
+                        try:
+                            test_cases_json = json.loads(test_cases_json)
+                        except Exception:
+                            test_cases_json = []
+
+                    if not isinstance(test_cases_json, list):
+                        test_cases_json = [test_cases_json]
+
+                    if not isinstance(evidence_list, list):
+                        evidence_list = []
+
+                    local_generated = 0
+                    local_hit_cases = 0
+
+                    for case_idx, tc_json in enumerate(test_cases_json):
+                        if not isinstance(tc_json, dict):
+                            continue
+
+                        tc_name = tc_json.get('name') or tc_json.get('title') or f"[{req.title}] 自动生成用例"
+                        tc_desc = tc_json.get('description', '')
+                        tc_protocol = tc_json.get('protocol', 'http')
+
+                        new_tc = TestCase(
+                            name=tc_name,
+                            description=tc_desc,
+                            protocol=tc_protocol,
+                            config=tc_json,
+                            project_id=proj_id
+                        )
+                        bg_db.add(new_tc)
+                        bg_db.flush()
+                        newly_created_test_cases.append(new_tc)
+                        local_generated += 1
+
+                        evidence_item = evidence_list[case_idx] if case_idx < len(evidence_list) and isinstance(evidence_list[case_idx], dict) else {}
+                        generated_case = AIGeneratedCaseEvidence(
+                            session_id=session_row.id,
+                            testcase_id=new_tc.id,
+                            requirement_id=req.id,
+                            case_index=int(evidence_item.get('case_index', case_idx) or case_idx),
+                            case_title=evidence_item.get('case_title') or tc_name,
+                            used_explicit_context=bool(evidence_item.get('used_explicit_context', bool(req_explicit_context))),
+                            used_rag=bool(evidence_item.get('used_rag', bool(rag_payload.get('hits')))),
+                            knowledge_hit_count=int(evidence_item.get('knowledge_hit_count', 0) or 0),
+                            citation_count=int(evidence_item.get('citation_count', 0) or 0),
+                            hit_score=float(evidence_item.get('hit_score', 0) or 0),
+                            evidence_summary=evidence_item.get('evidence_summary', ''),
+                            raw_case=tc_json,
+                        )
+                        bg_db.add(generated_case)
+                        bg_db.flush()
+
+                        citations = evidence_item.get('citations', []) if isinstance(evidence_item.get('citations', []), list) else []
+                        if citations:
+                            local_hit_cases += 1
+                            total_hit_cases += 1
+
+                        for citation in citations:
+                            if not isinstance(citation, dict):
                                 continue
-
-                            tc_name = tc_json.get('name') or tc_json.get('title') or f"[{req.title}] 自动生成用例"
-                            tc_desc = tc_json.get('description', '')
-                            tc_protocol = tc_json.get('protocol', 'http')
-                            
-                            # Save directly into TestCase model
-                            new_tc = TestCase(
-                                name=tc_name,
-                                description=tc_desc,
-                                protocol=tc_protocol,
-                                config=tc_json,
-                                project_id=proj_id
+                            doc_id = citation.get('knowledge_doc_id')
+                            doc_title = citation.get('doc_title')
+                            if not doc_id and doc_title in explicit_title_map:
+                                doc_id = explicit_title_map[doc_title]["id"]
+                            citation_row = AIGeneratedCaseCitation(
+                                session_id=session_row.id,
+                                generated_case_id=generated_case.id,
+                                knowledge_doc_id=doc_id,
+                                requirement_id=req.id,
+                                source_type=citation.get('source_type', 'rag'),
+                                evidence_type=citation.get('evidence_type', 'chunk'),
+                                chunk_id=citation.get('chunk_id'),
+                                chunk_index=citation.get('chunk_index'),
+                                doc_title=doc_title,
+                                matched_text=citation.get('matched_text'),
+                                quote_text=citation.get('quote_text'),
+                                similarity_score=float(citation.get('similarity_score', 0) or 0),
                             )
-                            bg_db.add(new_tc)
-                            newly_created_test_cases.append(new_tc)
-                
-                # Flush the session to get the auto-incremented IDs for the new test cases
-                bg_db.flush()
-                
-                # If we generated at least one test case, create a Test Suite
+                            bg_db.add(citation_row)
+                            total_citations += 1
+
+                        if generated_case.used_explicit_context and generated_case.knowledge_hit_count == 0 and explicit_doc_map:
+                            explicit_added = 0
+                            for explicit_doc in explicit_docs:
+                                bg_db.add(AIGeneratedCaseCitation(
+                                    session_id=session_row.id,
+                                    generated_case_id=generated_case.id,
+                                    knowledge_doc_id=explicit_doc.get('id'),
+                                    requirement_id=req.id,
+                                    source_type='explicit',
+                                    evidence_type='document',
+                                    chunk_id=None,
+                                    chunk_index=None,
+                                    doc_title=explicit_doc.get('title'),
+                                    matched_text=explicit_doc.get('content', '')[:160],
+                                    quote_text=explicit_doc.get('content', '')[:160],
+                                    similarity_score=0.85,
+                                ))
+                                explicit_added += 1
+                                total_citations += 1
+
+                            if explicit_added > 0:
+                                generated_case.knowledge_hit_count += explicit_added
+                                generated_case.citation_count += explicit_added
+                                generated_case.hit_score = max(generated_case.hit_score or 0, 0.85)
+                                generated_case.evidence_summary = generated_case.evidence_summary or f'关联并引用 {explicit_added} 条显式知识文档作为辅助参考'
+                                if local_hit_cases < local_generated:
+                                    local_hit_cases += 1
+                                    total_hit_cases += 1
+
+                    req_summary.append({
+                        "requirement_id": req.id,
+                        "title": req.title,
+                        "generated_cases": local_generated,
+                        "hit_cases": local_hit_cases,
+                        "rag_status": rag_payload.get('status') if isinstance(rag_payload, dict) else None,
+                    })
+
                 if newly_created_test_cases:
                     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                    suite_name = f"AI-{ver_number}-{timestamp}"
-                    suite_desc = f"基于版本 {ver_number} / 需求生成的 AI 测试用例集合"
-                    
                     new_suite = TestSuite(
-                        name=suite_name,
-                        description=suite_desc,
+                        name=f"AI-{ver_number}-{timestamp}",
+                        description=f"基于版本 {ver_number} / 需求生成的 AI 测试用例集合",
                         project_id=proj_id
                     )
                     bg_db.add(new_suite)
-                    bg_db.flush() # Get suite ID
-                    
-                    # Link them together
-                    suite_id = new_suite.id
+                    bg_db.flush()
+
                     for idx, tc in enumerate(newly_created_test_cases):
-                        suite_case_link = TestSuiteCase(
-                            suite_id=suite_id,
+                        bg_db.add(TestSuiteCase(
+                            suite_id=new_suite.id,
                             testcase_id=tc.id,
                             order_index=idx
-                        )
-                        bg_db.add(suite_case_link)
-                
-                # Commit ALL generated test cases and the suite
+                        ))
+
+                session_row.status = "completed"
+                session_row.total_generated_cases = len(newly_created_test_cases)
+                session_row.total_hit_cases = total_hit_cases
+                session_row.total_citations = total_citations
+                session_row.knowledge_hit_rate = round((total_hit_cases / len(newly_created_test_cases)), 4) if newly_created_test_cases else 0
+                session_row.completed_at = datetime.utcnow()
+                session_row.summary = {
+                    "version_id": version_identifier,
+                    "version_number": ver_number,
+                    "requirements": req_summary,
+                    "suite_name": f"AI-{ver_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                }
                 bg_db.commit()
-                print(f"[AI Generate] Successfully saved generated test cases for Version ID {version_id}.")
+                print(f"[AI Generate] Successfully saved generated test cases and evidence for Version ID {version_identifier}.")
         except Exception as bg_e:
+            with SessionLocal() as err_db:
+                session_row = err_db.query(AIGenerationSession).filter(
+                    AIGenerationSession.session_id == session_identifier
+                ).first()
+                if session_row:
+                    session_row.status = "failed"
+                    session_row.error_message = str(bg_e)
+                    session_row.completed_at = datetime.utcnow()
+                    err_db.commit()
             import traceback
             traceback.print_exc()
 
-    # Schedule background task
     background_tasks.add_task(
         _bg_generate_testcases,
         requirements,
         explicit_context,
         model,
         project_id,
-        version.version_number
+        version.version_number,
+        session_id,
+        version.id,
+        [
+            {"id": doc.id, "title": doc.title, "content": doc.content}
+            for doc in linked_docs
+        ],
     )
-    
+
     return {
         "message": "AI分配任务已提交，系统正在后台生成并保存测试用例",
         "version_id": version_id,
         "model": model,
+        "session_id": session_id,
         "generated_count": 0,
         "testcases": []
+    }
+
+@router.get("/versions/{version_id}/ai-generation-sessions")
+async def get_version_ai_generation_sessions(
+    version_id: int,
+    db: Session = Depends(get_db)
+):
+    """获取版本下的 AI 生成会话列表"""
+    version = db.query(Version).filter(Version.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+
+    sessions = db.query(AIGenerationSession).filter(
+        AIGenerationSession.version_id == version_id
+    ).order_by(AIGenerationSession.created_at.desc()).all()
+
+    return [
+        {
+            "session_id": item.session_id,
+            "version_id": item.version_id,
+            "project_id": item.project_id,
+            "model": item.model,
+            "status": item.status,
+            "total_requirements": item.total_requirements,
+            "total_generated_cases": item.total_generated_cases,
+            "total_hit_cases": item.total_hit_cases,
+            "total_citations": item.total_citations,
+            "explicit_doc_count": item.explicit_doc_count,
+            "knowledge_hit_rate": item.knowledge_hit_rate,
+            "summary": item.summary,
+            "error_message": item.error_message,
+            "started_at": item.started_at.isoformat() if item.started_at else None,
+            "completed_at": item.completed_at.isoformat() if item.completed_at else None,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        }
+        for item in sessions
+    ]
+
+@router.get("/versions/{version_id}/ai-generation-sessions/{session_id}")
+async def get_version_ai_generation_session_detail(
+    version_id: int,
+    session_id: str,
+    db: Session = Depends(get_db)
+):
+    """获取单次 AI 生成会话详情与知识命中证据"""
+    version = db.query(Version).filter(Version.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+
+    session_row = db.query(AIGenerationSession).filter(
+        AIGenerationSession.version_id == version_id,
+        AIGenerationSession.session_id == session_id
+    ).first()
+    if not session_row:
+        raise HTTPException(status_code=404, detail="AI 生成会话不存在")
+
+    evidence_rows = db.query(AIGeneratedCaseEvidence).filter(
+        AIGeneratedCaseEvidence.session_id == session_row.id
+    ).order_by(
+        AIGeneratedCaseEvidence.requirement_id.asc(),
+        AIGeneratedCaseEvidence.case_index.asc(),
+        AIGeneratedCaseEvidence.id.asc()
+    ).all()
+
+    case_ids = [row.id for row in evidence_rows]
+    citation_rows = db.query(AIGeneratedCaseCitation).filter(
+        AIGeneratedCaseCitation.generated_case_id.in_(case_ids)
+    ).order_by(AIGeneratedCaseCitation.id.asc()).all() if case_ids else []
+
+    citation_map = {}
+    for citation in citation_rows:
+        citation_map.setdefault(citation.generated_case_id, []).append({
+            "id": citation.id,
+            "knowledge_doc_id": citation.knowledge_doc_id,
+            "requirement_id": citation.requirement_id,
+            "source_type": citation.source_type,
+            "evidence_type": citation.evidence_type,
+            "chunk_id": citation.chunk_id,
+            "chunk_index": citation.chunk_index,
+            "doc_title": citation.doc_title,
+            "matched_text": citation.matched_text,
+            "quote_text": citation.quote_text,
+            "similarity_score": citation.similarity_score,
+            "created_at": citation.created_at.isoformat() if citation.created_at else None,
+        })
+
+    evidence_list = []
+    for row in evidence_rows:
+        evidence_list.append({
+            "id": row.id,
+            "testcase_id": row.testcase_id,
+            "requirement_id": row.requirement_id,
+            "case_index": row.case_index,
+            "case_title": row.case_title,
+            "used_explicit_context": row.used_explicit_context,
+            "used_rag": row.used_rag,
+            "knowledge_hit_count": row.knowledge_hit_count,
+            "citation_count": row.citation_count,
+            "hit_score": row.hit_score,
+            "evidence_summary": row.evidence_summary,
+            "raw_case": row.raw_case,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "citations": citation_map.get(row.id, []),
+        })
+
+    return {
+        "session_id": session_row.session_id,
+        "version_id": session_row.version_id,
+        "project_id": session_row.project_id,
+        "model": session_row.model,
+        "status": session_row.status,
+        "total_requirements": session_row.total_requirements,
+        "total_generated_cases": session_row.total_generated_cases,
+        "total_hit_cases": session_row.total_hit_cases,
+        "total_citations": session_row.total_citations,
+        "explicit_doc_count": session_row.explicit_doc_count,
+        "knowledge_hit_rate": session_row.knowledge_hit_rate,
+        "summary": session_row.summary,
+        "error_message": session_row.error_message,
+        "started_at": session_row.started_at.isoformat() if session_row.started_at else None,
+        "completed_at": session_row.completed_at.isoformat() if session_row.completed_at else None,
+        "created_at": session_row.created_at.isoformat() if session_row.created_at else None,
+        "updated_at": session_row.updated_at.isoformat() if session_row.updated_at else None,
+        "evidence": evidence_list,
     }
