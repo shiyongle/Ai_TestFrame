@@ -229,7 +229,7 @@ const InterfaceTestCases: React.FC = () => {
     setLoading(true);
     try {
       const rawList = await interfaceTestcaseApi.getAll(projectFilter !== 'all' ? Number(projectFilter) : undefined);
-      const mapped = (rawList || []).map(mapRawCase);
+      const mapped = (rawList || []).map(mapRawCase).sort((a, b) => Number(b.id) - Number(a.id));
       setTestCases(mapped);
       if (mapped.length && !selectedCaseId) setSelectedCaseId(mapped[0].id);
     } catch (e: any) {

@@ -7,7 +7,7 @@ AI测试用例生成服务
 import json
 import asyncio
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from models.database_models import Requirement, TestCase, Project
 from config.settings import settings
 import logging
@@ -47,6 +47,169 @@ class AITestCaseGenerator:
             cleaned = cleaned.replace("  ", " ")
         cleaned = cleaned.replace("，，", "，").replace("。。", "。").strip("，。； ")
         return cleaned
+
+    def _tokenize_anchor_terms(self, text: Any) -> List[str]:
+        """提取需求/知识中的锚点词，用于判断生成内容是否偏题"""
+        if text is None:
+            return []
+        normalized = self._prepare_llm_text(text).lower()
+        raw_tokens = re.findall(r"[a-z0-9_./:-]{2,}|[\u4e00-\u9fff]{2,12}", normalized)
+        stopwords = {
+            "需求", "功能", "系统", "用户", "页面", "接口", "字段", "数据", "信息", "记录", "内容",
+            "支持", "进行", "相关", "规则", "场景", "生成", "用例", "测试", "业务", "模块", "操作",
+            "以及", "或者", "其中", "如果", "可以", "一个", "多个", "需要", "应该", "必须", "用于",
+            "the", "and", "for", "with", "from", "this", "that", "into", "true", "false", "null"
+        }
+        tokens: List[str] = []
+        for token in raw_tokens:
+            token = token.strip("-_:./，。；：、（）()[]{} ")
+            if len(token) < 2 or token in stopwords:
+                continue
+            if token not in tokens:
+                tokens.append(token)
+        return tokens[:160]
+
+    def _split_requirement_segments(self, req: Requirement, blueprint: Dict[str, Any]) -> List[str]:
+        """将需求拆成多个语义片段，避免只覆盖第一句时误判为完整覆盖"""
+        raw_parts = [
+            req.title,
+            req.description,
+            req.acceptance_criteria,
+            req.business_value,
+            blueprint.get("core_objective", ""),
+            "\n".join(blueprint.get("happy_path_steps", []) or []),
+            "\n".join(blueprint.get("modules", []) or []),
+        ]
+        segments: List[str] = []
+        for part in raw_parts:
+            text = self._prepare_llm_text(part)
+            if not text:
+                continue
+            pieces = re.split(r"[\n；;。！？!\?]+", text)
+            for piece in pieces:
+                piece = piece.strip()
+                if len(piece) >= 4:
+                    segments.append(piece)
+        return segments[:24]
+
+    def _collect_requirement_anchor_terms(self, req: Requirement, blueprint: Dict[str, Any]) -> List[str]:
+        """收集需求主体锚点词，要求最终用例至少命中其中一部分"""
+        segments = self._split_requirement_segments(req, blueprint)
+        return self._tokenize_anchor_terms("\n".join(segments))
+
+    def _collect_knowledge_anchor_terms(self, rag_payload: Dict[str, Any]) -> Set[str]:
+        """收集知识库高频术语，用于识别知识反客为主的情况"""
+        knowledge_terms: List[str] = []
+        hits = rag_payload.get("hits", []) if isinstance(rag_payload, dict) else []
+        for hit in hits[:5]:
+            title = hit.get("title", "")
+            content = str(hit.get("content", "") or "")[:300]
+            for token in self._tokenize_anchor_terms(f"{title}\n{content}"):
+                if token not in knowledge_terms:
+                    knowledge_terms.append(token)
+        return set(knowledge_terms[:60])
+
+    def _analyze_anchor_balance(self, text: Any, requirement_terms: List[str], knowledge_terms: Set[str], requirement_segments: List[str] = None) -> Dict[str, Any]:
+        """分析文本对需求主体和知识术语的依赖程度"""
+        normalized = self._prepare_llm_text(text).lower()
+        req_hits = [term for term in requirement_terms if term and term in normalized]
+        knowledge_only_hits = [term for term in knowledge_terms if term and term in normalized and term not in req_hits]
+        segment_hits = []
+        for segment in requirement_segments or []:
+            segment_terms = self._tokenize_anchor_terms(segment)
+            matched_count = sum(1 for term in segment_terms[:6] if term and term in normalized)
+            if matched_count >= 1:
+                segment_hits.append({
+                    "segment": segment,
+                    "matched_count": matched_count
+                })
+        return {
+            "requirement_hits": req_hits,
+            "knowledge_hits": knowledge_only_hits,
+            "requirement_hit_count": len(req_hits),
+            "knowledge_hit_count": len(knowledge_only_hits),
+            "segment_hits": segment_hits,
+            "segment_hit_count": len(segment_hits)
+        }
+
+    def _is_requirement_anchored(self, text: Any, requirement_terms: List[str], knowledge_terms: Set[str], requirement_segments: List[str] = None) -> bool:
+        """判断生成内容是否仍以需求为主线，而非被知识库术语带偏"""
+        if not requirement_terms:
+            return True
+        balance = self._analyze_anchor_balance(text, requirement_terms, knowledge_terms, requirement_segments)
+        req_hit_count = balance["requirement_hit_count"]
+        knowledge_hit_count = balance["knowledge_hit_count"]
+        segment_hit_count = balance["segment_hit_count"]
+        
+        # 放宽过滤条件：只有在完全没有命中需求，且大量依赖知识库时才判定为偏离
+        if req_hit_count <= 0 and segment_hit_count <= 0 and knowledge_hit_count > 4:
+            return False
+        if knowledge_hit_count >= 8 and req_hit_count == 0 and segment_hit_count <= 1:
+            return False
+            
+        return True
+
+    def _filter_test_points_by_requirement_anchor(self, req: Requirement, blueprint: Dict[str, Any], points: List[str], rag_payload: Dict[str, Any]) -> List[str]:
+        """过滤明显脱离需求主体、转而围绕知识库展开的测试点"""
+        requirement_terms = self._collect_requirement_anchor_terms(req, blueprint)
+        requirement_segments = self._split_requirement_segments(req, blueprint)
+        knowledge_terms = self._collect_knowledge_anchor_terms(rag_payload)
+        filtered_points: List[str] = []
+        original_points: List[str] = []
+        for point in points:
+            if not isinstance(point, str):
+                continue
+            cleaned_point = self._strip_ai_tone(point)
+            if not cleaned_point:
+                continue
+            original_points.append(cleaned_point)
+            if self._is_requirement_anchored(cleaned_point, requirement_terms, knowledge_terms, requirement_segments):
+                filtered_points.append(cleaned_point)
+            else:
+                logger.info(f"过滤偏离需求主体的测试点: {cleaned_point[:120]}")
+
+        if not filtered_points:
+            return original_points[:20] or [f"验证 {req.title} 的验收标准"]
+        # 放宽阈值：如果过滤后剩下的太少，干脆全部保留
+        if original_points and len(filtered_points) < max(2, len(original_points) * 2 // 3):
+            logger.info("需求锚定过滤后测试点保留过少，自动回退为保守放宽策略（保留原始所以测试点）")
+            return original_points[:20]
+        return filtered_points[:20]
+
+    def _filter_cases_by_requirement_anchor(self, req: Requirement, blueprint: Dict[str, Any], cases: List[Dict[str, Any]], rag_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """过滤被知识库内容主导、缺少需求锚点的测试用例"""
+        requirement_terms = self._collect_requirement_anchor_terms(req, blueprint)
+        requirement_segments = self._split_requirement_segments(req, blueprint)
+        knowledge_terms = self._collect_knowledge_anchor_terms(rag_payload)
+        filtered_cases: List[Dict[str, Any]] = []
+        original_cases: List[Dict[str, Any]] = []
+
+        for idx, case in enumerate(cases):
+            if not isinstance(case, dict):
+                continue
+            case_text = "\n".join([
+                str(case.get("title") or case.get("name") or ""),
+                str(case.get("description") or ""),
+                str(case.get("preconditions") or ""),
+                str(case.get("test_data") or ""),
+                str(case.get("expected_result") or ""),
+                str(case.get("notes") or ""),
+                json.dumps(case.get("test_steps", []), ensure_ascii=False)
+            ])
+            original_cases.append(case)
+            if self._is_requirement_anchored(case_text, requirement_terms, knowledge_terms, requirement_segments):
+                filtered_cases.append(case)
+            else:
+                title = case.get("title") or case.get("name") or f"自动生成用例-{idx+1}"
+                logger.info(f"过滤偏离需求主体的测试用例: {title}")
+
+        if not filtered_cases:
+            return original_cases
+        # 如果过滤后丢失太多，则退回使用原来的完整集合
+        if original_cases and len(filtered_cases) < max(2, len(original_cases) * 2 // 3):
+            logger.info("需求锚定过滤后结构化用例保留过少，自动回退为保守放宽策略（保留全部结构化用例）")
+            return original_cases
+        return filtered_cases
 
     def _post_process_cases(self, cases: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """生成后做结构和文风清洗，减少AI味"""
@@ -256,15 +419,18 @@ class AITestCaseGenerator:
             # Step 3: 根据约束，生成测试大纲维度
             logger.info("➡️ Step 3: 结合知识与约束生成测试大纲维度")
             test_points = await self._step3_generate_test_points(requirement, blueprint, combined_context, provider, llm_client)
+            test_points = self._filter_test_points_by_requirement_anchor(requirement, blueprint, test_points, rag_payload)
             logger.info(f"   共生成 {len(test_points)} 个测试点维度")
 
             # Step 4: 基于大纲扩散生成具体用例
             logger.info(f"➡️ Step 4: 扩散生成具体用例 (针对 {len(test_points)} 个测试点)")
             generated_cases = await self._step4_expand_test_cases(requirement, test_points, combined_context, provider, llm_client)
+            generated_cases = self._filter_cases_by_requirement_anchor(requirement, blueprint, generated_cases, rag_payload)
 
             # Step 5: 自我反思/漏测检查
             logger.info("➡️ Step 5: 自我审计与漏测补全 (Review & Self-Correction)")
             final_cases = await self._step5_review_and_correct(requirement, blueprint, generated_cases, provider, llm_client)
+            final_cases = self._filter_cases_by_requirement_anchor(requirement, blueprint, final_cases, rag_payload)
             final_cases = self._post_process_cases(final_cases)
             evidence = self._build_case_evidence(final_cases, explicit_context, rag_payload)
 
@@ -313,10 +479,19 @@ class AITestCaseGenerator:
 }}
 
 【产品需求】：
+请务必完整阅读以下需求的每一句话，不要只看第一句：
+====== 需求开始 ======
 标题：{req.title}
-描述：{req.description}
-验收标准：{req.acceptance_criteria}
-业务价值：{req.business_value}
+
+描述：
+{req.description}
+
+验收标准：
+{req.acceptance_criteria}
+
+业务价值：
+{req.business_value}
+====== 需求结束 ======
 """
         resp = await llm_client.text_completion(prompt, provider=provider)
         if not resp.get('success'): 
@@ -403,10 +578,10 @@ class AITestCaseGenerator:
 作为资深测试专家，请以【需求本身】为唯一主线生成测试点，知识库内容只能作为补充参考，不能替代、改写或压过需求主体。
 不要直接详细写测试用例！不要写步骤！
 请基于 等价类划分、边界值分析、正向业务流程、异常流程容忍度、安全与并发 等多维度，
-列举出此需求所有必须测试的关键点(Test Points 大纲)。
+列举出此需求所有必须测试的关键点(Test Points 大纲)。请尽可能详细展开，生成至少 8-15 个维度的测试点。
 
 输出风格要求（严格）：
-1. 必须优先围绕需求标题、需求描述、验收标准、业务价值来拆解测试点。
+1. 必须优先围绕需求标题、需求描述、验收标准、业务价值来拆解测试点，确保读完所有需求描述！
 2. 知识库内容仅用于补充业务规则、历史约束、术语口径，不能偏离需求目标单独展开。
 3. 每条测试点是“业务动作 + 触发条件 + 可观察结果”的短句，不写空话。
 4. 禁止出现“确保/全面覆盖/建议补充/最佳实践/进一步优化”等泛化表达。
@@ -422,12 +597,22 @@ class AITestCaseGenerator:
 ]
 
 【产品需求（主体，优先级最高）】：
-标题：{req.title}
-描述：{req.description}
+请务必完整仔细阅读以下产品需求的每一段细节，绝不能只看第一句话！
+====== 需求开始 ======
+需求标题：{req.title}
+
+需求描述：
+{req.description}
+
+验收标准：
+{req.acceptance_criteria}
+
+业务价值：
+{req.business_value}
+
 分析提炼后的核心目标：{blueprint.get('core_objective')}
 提炼后的主链路步骤：{blueprint.get('happy_path_steps')}
-验收标准要求：{req.acceptance_criteria}
-业务价值：{req.business_value}
+====== 需求结束 ======
 
 【相关业务知识规则（辅助参考，仅补充，不可喧宾夺主）】：
 {context}
@@ -485,10 +670,19 @@ class AITestCaseGenerator:
 11. 优先使用需求原文里的业务对象、字段、状态、限制条件来组织步骤与断言。
 
 【需求主体信息（优先级最高）】：
+请完整、逐字阅读以下需求的各项细节设置，确保将其中的场景完全展开：
+====== 需求开始 ======
 需求标题：{req.title}
-需求描述：{req.description}
-验收标准：{req.acceptance_criteria}
-业务价值：{req.business_value}
+
+需求描述：
+{req.description}
+
+验收标准：
+{req.acceptance_criteria}
+
+业务价值：
+{req.business_value}
+====== 需求结束 ======
 
 【要展开转换的测试大纲点】：
 {points_str}
@@ -548,6 +742,7 @@ class AITestCaseGenerator:
 3. 如果发现漏测，请补充最多 1 到 3 条全新的测试用例。如果没有明显的遗漏，或者已完全覆盖，则必须返回空数组 []。
 4. 补充用例文风要求与主用例一致：简短、可执行、可断言；禁止空泛AI表达。
 5. 如果发现已有用例偏离需求、过度受知识库影响，不要保留这种偏离思路，补充的用例必须重新拉回需求主体。
+6. 补充用例标题、描述、步骤、断言中，必须至少体现一个需求原文中的业务对象、字段、状态或验收条件，不能只围绕知识库术语写泛化检查。
 
 请务必直接返回补充用例构成的纯 JSON 数组（格式与正常用例保持绝对一致）。例如：
 [
@@ -560,11 +755,22 @@ class AITestCaseGenerator:
   }}
 ]
 
-【原始需求标题】：{req.title}
-【原始需求描述】：{req.description}
-【原始需求验收标准】：{req.acceptance_criteria}
-【原始需求业务价值】：{req.business_value}
-【需求主链路蓝图】：{blueprint.get('happy_path_steps')}
+【原始需求主体信息】：
+请确保你已经完整阅读了下述所有需求内容，而不仅仅是标题。
+====== 需求开始 ======
+需求标题：{req.title}
+
+需求描述：
+{req.description}
+
+验收标准：
+{req.acceptance_criteria}
+
+业务价值：
+{req.business_value}
+
+主链路蓝图：{blueprint.get('happy_path_steps')}
+====== 需求结束 ======
 【待查漏补缺的初版用例简要摘要】：
 {cases_summary}
 """

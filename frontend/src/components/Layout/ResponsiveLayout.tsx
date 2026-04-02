@@ -92,34 +92,33 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     },
     {
       type: 'group' as const,
-      label: '项目与需求',
+      label: '项目与协作',
       children: [
         {
-          key: 'projects',
+          key: '/projects',
           icon: <ProjectOutlined />,
-          label: '项目管理',
-          children: [
-            {
-              key: '/projects',
-              icon: <ProjectOutlined />,
-              label: '项目列表',
-            },
-            {
-              key: '/requirements',
-              icon: <FileSearchOutlined />,
-              label: '需求管理',
-            },
-          ],
+          label: '项目列表',
+        },
+        {
+          key: '/requirements',
+          icon: <FileSearchOutlined />,
+          label: '需求管理',
         },
         {
           key: '/versions',
           icon: <HistoryOutlined />,
-          label: '版本管理',
+          label: '版本追踪',
         },
+      ],
+    },
+    {
+      type: 'group' as const,
+      label: '测试资产',
+      children: [
         {
           key: 'testcases',
           icon: <AppstoreOutlined />,
-          label: '测试中心',
+          label: '测试用例管理',
           children: [
             {
               key: '/testcases/plans',
@@ -134,12 +133,12 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             {
               key: '/testcases/functional',
               icon: <FileTextOutlined />,
-              label: '功能测试用例',
+              label: '功能测试',
             },
             {
               key: '/testcases/interface',
               icon: <ApiOutlined />,
-              label: '接口测试用例',
+              label: '接口测试',
             },
           ],
         },
@@ -152,7 +151,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         {
           key: 'test',
           icon: <BugOutlined />,
-          label: '接口测试',
+          label: '接口调试',
           children: [
             {
               key: '/test/http',
@@ -174,7 +173,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
         {
           key: '/automation',
           icon: <RocketOutlined />,
-          label: '自动化测试',
+          label: '自动化执行',
           children: [
             {
               key: '/api-automation',
@@ -184,35 +183,58 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             {
               key: '/ui-automation',
               icon: <PlayCircleOutlined />,
-              label: 'UI自动化',
+              label: 'UI 自动化',
             },
           ],
-        },
-        {
-          key: '/reports',
-          icon: <BarChartOutlined />,
-          label: '测试报告',
         },
       ],
     },
     {
       type: 'group' as const,
-      label: '工具',
+      label: '数据与报告',
       children: [
+        {
+          key: '/reports',
+          icon: <BarChartOutlined />,
+          label: '测试质量报告',
+        },
+      ],
+    },
+    {
+      type: 'group' as const,
+      label: '引擎与辅助',
+      children: [
+        {
+          key: 'data-warehouse',
+          icon: <DatabaseOutlined />,
+          label: '数据引擎',
+          children: [
+            {
+              key: '/data-warehouse/functions',
+              icon: <FunctionOutlined />,
+              label: '模板内置函数',
+            },
+            {
+              key: '/data-warehouse/business',
+              icon: <HddOutlined />,
+              label: '业务依赖数据',
+            },
+          ],
+        },
         {
           key: 'tools',
           icon: <ToolOutlined />,
-          label: '工具箱',
+          label: '测试工具箱',
           children: [
             {
               key: '/tools/id-generator',
               icon: <IdcardOutlined />,
-              label: '身份证号码',
+              label: '身份证生成',
             },
             {
               key: '/tools/phone-generator',
               icon: <MobileOutlined />,
-              label: '手机号码',
+              label: '手机号生成',
             },
             {
               key: '/tools/json-formatter',
@@ -226,61 +248,38 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
             },
           ],
         },
-        {
-          key: 'data-warehouse',
-          icon: <DatabaseOutlined />,
-          label: '数据仓库',
-          children: [
-            {
-              key: '/data-warehouse/functions',
-              icon: <FunctionOutlined />,
-              label: '常用函数',
-            },
-            {
-              key: '/data-warehouse/business',
-              icon: <HddOutlined />,
-              label: '业务数据',
-            },
-          ],
-        },
       ],
     },
     {
       type: 'group' as const,
-      label: '系统',
+      label: '系统与治理',
       children: [
         {
           key: 'settings',
           icon: <SettingOutlined />,
-          label: '系统设置',
+          label: '平台设置',
           children: [
-            {
-              key: '/rule-config',
-              icon: <SettingOutlined />,
-              label: '规则配置',
-            },
             {
               key: '/ai/knowledge',
               icon: <DatabaseOutlined />,
-              label: 'RAG 知识库',
+              label: '系统知识引擎',
+            },
+            {
+              key: '/rule-config',
+              icon: <SafetyCertificateOutlined />,
+              label: '全局测试规则',
             },
             {
               key: '/settings',
               icon: <SettingOutlined />,
-              label: '全局配置',
+              label: '平台配置中心',
             },
           ],
         },
-      ],
-    },
-    {
-      type: 'group' as const,
-      label: '日志',
-      children: [
         {
           key: '/operation-logs',
           icon: <ClockCircleOutlined />,
-          label: '操作日志',
+          label: '操作审计日志',
         },
       ],
     },
@@ -302,7 +301,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
   const getOpenKeys = () => {
     const openKeys: string[] = [];
-    if (currentPath.startsWith('/test')) {
+    if (currentPath.startsWith('/test') && !currentPath.startsWith('/testcases')) {
       openKeys.push('test');
     }
     if (currentPath.startsWith('/tools')) {
@@ -311,13 +310,13 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     if (currentPath.startsWith('/testcases')) {
       openKeys.push('testcases');
     }
-    if (currentPath.startsWith('/api-automation')) {
+    if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {
       openKeys.push('automation');
     }
-    if (currentPath.startsWith('/requirements')) {
+    if (currentPath.startsWith('/requirements') || currentPath.startsWith('/projects')) {
       openKeys.push('projects');
     }
-    if (currentPath.startsWith('/ai/knowledge')) {
+    if (currentPath.startsWith('/ai/knowledge') || currentPath.startsWith('/rule-config') || currentPath.startsWith('/settings')) {
       openKeys.push('settings');
     }
     if (currentPath.startsWith('/data-warehouse')) {

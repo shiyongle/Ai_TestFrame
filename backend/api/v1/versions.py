@@ -18,6 +18,23 @@ from utils.activity_logger import log_activity
 import json
 import uuid
 
+
+def _recalculate_ai_session_stats(db: Session, session_row: AIGenerationSession) -> None:
+    evidence_rows = db.query(AIGeneratedCaseEvidence).filter(
+        AIGeneratedCaseEvidence.session_id == session_row.id
+    ).all()
+    evidence_ids = [row.id for row in evidence_rows]
+    total_citations = db.query(AIGeneratedCaseCitation).filter(
+        AIGeneratedCaseCitation.generated_case_id.in_(evidence_ids)
+    ).count() if evidence_ids else 0
+    total_generated_cases = len(evidence_rows)
+    total_hit_cases = sum(1 for row in evidence_rows if (row.knowledge_hit_count or 0) > 0)
+
+    session_row.total_generated_cases = total_generated_cases
+    session_row.total_hit_cases = total_hit_cases
+    session_row.total_citations = total_citations
+    session_row.knowledge_hit_rate = round((total_hit_cases / total_generated_cases), 4) if total_generated_cases else 0
+
 router = APIRouter()
 
 # Pydantic模型
@@ -723,6 +740,46 @@ async def get_version_ai_generation_sessions(
         }
         for item in sessions
     ]
+
+@router.delete("/versions/{version_id}/ai-generation-evidence/{evidence_id}")
+async def delete_version_ai_generation_evidence(
+    version_id: int,
+    evidence_id: int,
+    db: Session = Depends(get_db)
+):
+    """删除单条 AI 生成证据及其引用明细"""
+    version = db.query(Version).filter(Version.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="版本不存在")
+
+    evidence_row = db.query(AIGeneratedCaseEvidence).join(
+        AIGenerationSession,
+        AIGeneratedCaseEvidence.session_id == AIGenerationSession.id
+    ).filter(
+        AIGeneratedCaseEvidence.id == evidence_id,
+        AIGenerationSession.version_id == version_id
+    ).first()
+    if not evidence_row:
+        raise HTTPException(status_code=404, detail="AI 生成证据不存在")
+
+    session_row = db.query(AIGenerationSession).filter(
+        AIGenerationSession.id == evidence_row.session_id
+    ).first()
+    if not session_row:
+        raise HTTPException(status_code=404, detail="关联 AI 生成会话不存在")
+
+    try:
+        db.query(AIGeneratedCaseCitation).filter(
+            AIGeneratedCaseCitation.generated_case_id == evidence_row.id
+        ).delete(synchronize_session=False)
+        db.delete(evidence_row)
+        db.flush()
+        _recalculate_ai_session_stats(db, session_row)
+        db.commit()
+        return {"message": "AI 生成证据删除成功", "evidence_id": evidence_id}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"删除 AI 生成证据失败: {str(e)}")
 
 @router.get("/versions/{version_id}/ai-generation-sessions/{session_id}")
 async def get_version_ai_generation_session_detail(

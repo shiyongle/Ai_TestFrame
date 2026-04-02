@@ -132,6 +132,7 @@ const Versions: React.FC = () => {
   const [linkKnowledgeVisible, setLinkKnowledgeVisible] = useState(false);
   const [allKnowledge, setAllKnowledge] = useState<any[]>([]);
   const [selectedKnowledgeIds, setSelectedKnowledgeIds] = useState<number[]>([]);
+  const [linkedKnowledgeCount, setLinkedKnowledgeCount] = useState<number>(0);
 
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(undefined);
@@ -149,10 +150,21 @@ const Versions: React.FC = () => {
   useEffect(() => {
     if (selectedVersion?.id) {
       loadAiSessions(selectedVersion.id);
+      loadLinkedKnowledgeCount(selectedVersion.id);
     } else {
       setAiSessions([]);
+      setLinkedKnowledgeCount(0);
     }
   }, [selectedVersion?.id]);
+
+  const loadLinkedKnowledgeCount = async (versionId: number) => {
+    try {
+      const res = await versionApi.getLinkedKnowledge(versionId);
+      setLinkedKnowledgeCount(res.length || 0);
+    } catch {
+      setLinkedKnowledgeCount(0);
+    }
+  };
 
   const loadProjects = async () => {
     try {
@@ -223,6 +235,19 @@ const Versions: React.FC = () => {
       setSelectedAiSession(null);
     } finally {
       setAiEvidenceLoading(false);
+    }
+  };
+
+  const handleDeleteEvidence = async (evidenceId: number) => {
+    if (!selectedVersion || !selectedAiSession) return;
+    try {
+      await versionApi.deleteAiGenerationEvidence(selectedVersion.id, evidenceId);
+      message.success('AI 生成证据删除成功');
+      const detail = await versionApi.getAiGenerationSessionDetail(selectedVersion.id, selectedAiSession.session_id);
+      setSelectedAiSession(detail || null);
+      await loadAiSessions(selectedVersion.id);
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '删除 AI 生成证据失败');
     }
   };
 
@@ -297,6 +322,7 @@ const Versions: React.FC = () => {
       await versionApi.linkKnowledgeToVersion(selectedVersion.id, selectedKnowledgeIds);
       message.success('关联知识库成功');
       setLinkKnowledgeVisible(false);
+      setLinkedKnowledgeCount(selectedKnowledgeIds.length);
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '关联失败');
     }
@@ -496,7 +522,7 @@ const Versions: React.FC = () => {
                   <Statistic title="关联需求" value={selectedVersion.requirements?.length || 0} prefix={<FileTextOutlined />} />
                 </div>
                 <div style={{ background: 'rgba(52,199,89,0.05)', padding: 20, borderRadius: 12 }}>
-                  <Statistic title="Bug修复" value={0} prefix={<BugOutlined />} suffix="个" />
+                  <Statistic title="绑定RAG知识" value={linkedKnowledgeCount} prefix={<DatabaseOutlined />} suffix="条" />
                 </div>
                 <div style={{ background: 'rgba(255,149,0,0.05)', padding: 20, borderRadius: 12 }}>
                   <Statistic title="测试覆盖率" value="--" suffix="%" prefix={<CheckCircleFilled />} />
@@ -511,78 +537,80 @@ const Versions: React.FC = () => {
                 <Paragraph style={{ fontSize: 15, lineHeight: 1.8, color: '#444' }}>
                   {selectedVersion.description || '暂无详细描述。'}
                 </Paragraph>
-
-                {/* AI Changelog Placeholder */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%)',
-                  borderRadius: 12,
-                  padding: 24,
-                  border: '1px solid #bae7ff'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <RobotFilled style={{ color: '#1890ff', fontSize: 20 }} />
-                    <Text strong style={{ color: '#1890ff', fontSize: 16 }}>AI 智能摘要</Text>
-                  </div>
-                  <ul style={{ paddingLeft: 20, margin: 0, color: '#595959' }}>
-                    <li>此版本主要集中在 <Text strong>用户体验优化</Text> 和 <Text strong>性能提升</Text>。</li>
-                    <li>检测到涉及 <Text code>Authentication</Text> 模块的底层重构，建议进行回归测试。</li>
-                    <li>新增了 3 个 API 端点，已自动生成对应的接口测试用例。</li>
-                  </ul>
-                </div>
               </div>
 
               {/* AI 知识命中分析 */}
               <div style={{ marginBottom: 40 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> AI 知识命中分析</Title>
-                  <Button onClick={() => selectedVersion && loadAiSessions(selectedVersion.id)}>刷新会话</Button>
+                  <Title level={4} style={{ margin: 0 }}><DatabaseOutlined /> AI 知识命中分析生成记录</Title>
+                  <Button type="dashed" onClick={() => selectedVersion && loadAiSessions(selectedVersion.id)}>刷新记录</Button>
                 </div>
                 {aiSessionsLoading ? (
                   <div style={{ padding: '32px 0', textAlign: 'center' }}><Spin /></div>
                 ) : aiSessions.length === 0 ? (
                   <Empty description="暂无 AI 生成证据会话" />
                 ) : (
-                  <List
-                    dataSource={aiSessions}
-                    renderItem={(item) => (
-                      <List.Item
-                        actions={[
-                          <Button key="view" type="link" icon={<EyeOutlined />} onClick={() => openAiEvidence(item.session_id)}>
-                            查看证据
-                          </Button>
-                        ]}
-                      >
-                        <List.Item.Meta
-                          avatar={<Avatar style={{ backgroundColor: '#1677ff' }} icon={<RobotFilled />} />}
-                          title={
-                            <Space>
-                              <Text strong>{item.model}</Text>
-                              <Tag color={getSessionStatusColor(item.status)}>{getSessionStatusLabel(item.status)}</Tag>
-                              <Text type="secondary">{item.session_id.slice(0, 8)}</Text>
-                            </Space>
-                          }
-                          description={
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <Space wrap>
-                                <Text>生成用例：{item.total_generated_cases || 0}</Text>
-                                <Text>命中用例：{item.total_hit_cases || 0}</Text>
-                                <Text>引用条数：{item.total_citations || 0}</Text>
-                                <Text>显式知识：{item.explicit_doc_count || 0}</Text>
-                              </Space>
-                              <Progress
-                                percent={Math.round((item.knowledge_hit_rate || 0) * 100)}
-                                size="small"
-                                status={item.status === 'failed' ? 'exception' : undefined}
-                              />
-                              <Text type="secondary">
-                                创建时间：{item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : '--'}
-                              </Text>
-                            </div>
-                          }
-                        />
-                      </List.Item>
-                    )}
-                  />
+                  <div style={{ background: 'rgba(255, 255, 255, 0.4)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.06)' }}>
+                    <List
+                      dataSource={aiSessions}
+                      pagination={{ pageSize: 3, size: 'small', hideOnSinglePage: true, align: 'center' }}
+                      split={false}
+                      renderItem={(item) => (
+                        <List.Item
+                          style={{
+                            background: '#fff',
+                            borderRadius: '8px',
+                            padding: '16px',
+                            marginBottom: '12px',
+                            border: '1px solid #f0f0f0',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                          }}
+                          actions={[
+                            <Button key="view" type="primary" size="small" icon={<EyeOutlined />} onClick={() => openAiEvidence(item.session_id)}>
+                              查看溯源证据
+                            </Button>
+                          ]}
+                        >
+                          <List.Item.Meta
+                            avatar={<Avatar shape="square" size="large" style={{ backgroundColor: '#f0f5ff', color: '#1677ff', borderRadius: '8px' }} icon={<RobotFilled />} />}
+                            title={
+                              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                                <Space>
+                                  <Text strong>{item.model}</Text>
+                                  <Text type="secondary" style={{ fontSize: 13, userSelect: 'all' }}>#{item.session_id.slice(0, 8)}</Text>
+                                </Space>
+                                <Tag color={getSessionStatusColor(item.status)} style={{ margin: 0 }}>{getSessionStatusLabel(item.status)}</Tag>
+                              </div>
+                            }
+                            description={
+                              <div style={{ marginTop: 8 }}>
+                                <Space split={<Divider type="vertical" />} style={{ flexWrap: 'wrap', marginBottom: 12 }}>
+                                  <Text><Text type="secondary">产出:</Text> {item.total_generated_cases || 0} 条</Text>
+                                  <Text><Text type="secondary">RAG命中:</Text> {item.total_hit_cases || 0} 条</Text>
+                                  <Text><Text type="secondary">引述:</Text> {item.total_citations || 0} 个</Text>
+                                  <Text><Text type="secondary">强关联:</Text> {item.explicit_doc_count || 0} 篇</Text>
+                                </Space>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                  <div style={{ flex: 1 }}>
+                                    <Progress
+                                      percent={Math.round((item.knowledge_hit_rate || 0) * 100)}
+                                      size="small"
+                                      strokeColor={{ '0%': '#108ee9', '100%': '#87d068' }}
+                                      status={item.status === 'failed' ? 'exception' : undefined}
+                                      style={{ margin: 0 }}
+                                    />
+                                  </div>
+                                  <Text type="secondary" style={{ fontSize: 12, minWidth: 140, textAlign: 'right' }}>
+                                    {item.created_at ? dayjs(item.created_at).format('YYYY-MM-DD HH:mm:ss') : '--'}
+                                  </Text>
+                                </div>
+                              </div>
+                            }
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  </div>
                 )}
               </div>
 
@@ -673,6 +701,7 @@ const Versions: React.FC = () => {
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('deepseek')} loading={generating}>使用 DeepSeek 生成</Button>
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('tongyi')} loading={generating}>使用 通义千问 生成</Button>
           <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('siliconflow')} loading={generating}>使用 硅基流动 生成</Button>
+          <Button size="large" icon={<RobotFilled />} onClick={() => handleGenerate('new-api')} loading={generating}>使用 New-API 生成</Button>
         </div>
       </Modal>
 
@@ -769,7 +798,28 @@ const Versions: React.FC = () => {
               dataSource={selectedAiSession.evidence || []}
               locale={{ emptyText: '暂无证据明细' }}
               renderItem={(item: AIGenerationEvidenceItem) => (
-                <List.Item>
+                <List.Item
+                  actions={[
+                    <Button
+                      key={`delete-evidence-${item.id}`}
+                      type="link"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => {
+                        Modal.confirm({
+                          title: '确认删除证据',
+                          content: `确定删除证据“${item.case_title}”吗？删除后不可恢复。`,
+                          okText: '删除',
+                          okButtonProps: { danger: true },
+                          cancelText: '取消',
+                          onOk: async () => handleDeleteEvidence(item.id),
+                        });
+                      }}
+                    >
+                      删除
+                    </Button>
+                  ]}
+                >
                   <div style={{ width: '100%' }}>
                     <Space direction="vertical" style={{ width: '100%' }} size={8}>
                       <Space wrap>

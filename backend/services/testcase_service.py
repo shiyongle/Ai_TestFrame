@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from models.database_models import TestCase, TestResult
+from models.database_models import TestCase, TestResult, AIGeneratedCaseEvidence
 from schemas.response_schemas import TestCaseCreate, TestCaseResponse
 from typing import TYPE_CHECKING
 
@@ -89,8 +89,19 @@ class TestCaseService:
             if not testcase:
                 logger.warning(f"删除测试用例失败，用例不存在: ID {testcase_id}")
                 return False
-            
+
             testcase_name = testcase.name
+
+            # 方案A：AI证据保留为历史审计记录，仅断开与功能用例的弱关联
+            detached_count = db.query(AIGeneratedCaseEvidence).filter(
+                AIGeneratedCaseEvidence.testcase_id == testcase_id
+            ).update(
+                {AIGeneratedCaseEvidence.testcase_id: None},
+                synchronize_session=False
+            )
+            if detached_count:
+                logger.info(f"删除测试用例前已断开 {detached_count} 条AI生成证据与用例的关联: testcase_id={testcase_id}")
+
             db.delete(testcase)
             db.commit()
             logger.info(f"删除测试用例成功: {testcase_name} (ID: {testcase_id})")

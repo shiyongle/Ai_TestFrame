@@ -91,8 +91,9 @@ const FunctionalTestCases: React.FC = () => {
     setLoading(true);
     try {
       const data = await testcaseApi.getAllTestCases();
-      setTestCases(data);
-      if (data.length > 0) setSelectedCase(data[0]);
+      const sortedData = (data || []).sort((a: any, b: any) => b.id - a.id);
+      setTestCases(sortedData);
+      if (sortedData.length > 0) setSelectedCase(sortedData[0]);
     } catch (e: any) {
       message.error(e?.response?.data?.detail || '获取用例列表失败');
     } finally {

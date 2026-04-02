@@ -72,13 +72,14 @@ const TestSuites: React.FC = () => {
         setLoading(true);
         try {
             const data = await testSuiteApi.getTestSuites(projectId);
-            setSuites(data || []);
-            if (data && data.length > 0) {
+            const sortedData = (data || []).sort((a: any, b: any) => b.id - a.id);
+            setSuites(sortedData);
+            if (sortedData && sortedData.length > 0) {
                 // Refresh selected suite if exists, otherwise pick first
                 setSelectedSuite(prev => {
-                    if (!prev) return data[0];
-                    const updated = data.find((s: any) => s.id === prev.id);
-                    return updated || data[0];
+                    if (!prev) return sortedData[0];
+                    const updated = sortedData.find((s: any) => s.id === prev.id);
+                    return updated || sortedData[0];
                 });
             } else {
                 setSelectedSuite(null);
