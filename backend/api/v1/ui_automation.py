@@ -12,7 +12,11 @@ from schemas.ui_automation_schemas import (
     UIAutomationTaskCreateResponse,
     UIAutomationTaskDetail,
     UIAutomationTaskSummary,
+    UIAutomationGenerateStepsRequest,
+    UIAutomationGenerateStepsResponse,
 )
+from services.ai.llm_client import llm_client
+import json
 from utils.activity_logger import log_activity
 
 router = APIRouter()
@@ -108,6 +112,38 @@ async def start_ui_task(
     return UIAutomationStartResponse(task_id=latest.id, status=latest.status, message="任务已启动")
 
 
+@router.post("/ui-automation/tasks/{task_id}/pause", response_model=UIAutomationStartResponse)
+async def pause_task(
+    task_id: int,
+    db: Session = Depends(get_database),
+    service=Depends(get_ui_automation_service),
+):
+    task = service.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI 自动化任务不存在")
+    if task.status != "running":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="任务当前不是运行状态，无法暂停")
+
+    updated_task = service.pause_task(db, task_id)
+    log_activity(db, action="execute", module="UI自动化", target_name=task.name, detail=f"任务ID={task.id} 暂停运行")
+    return UIAutomationStartResponse(task_id=updated_task.id, status=updated_task.status, message="任务已暂停")
+
+@router.post("/ui-automation/tasks/{task_id}/resume", response_model=UIAutomationStartResponse)
+async def resume_task(
+    task_id: int,
+    db: Session = Depends(get_database),
+    service=Depends(get_ui_automation_service),
+):
+    task = service.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI 自动化任务不存在")
+    if task.status != "paused":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="任务当前不是暂停状态，无法恢复")
+
+    updated_task = service.resume_task(db, task_id)
+    log_activity(db, action="execute", module="UI自动化", target_name=task.name, detail=f"任务ID={task.id} 恢复运行")
+    return UIAutomationStartResponse(task_id=updated_task.id, status=updated_task.status, message="任务已恢复执行")
+
 @router.post("/ui-automation/tasks/{task_id}/solidify", response_model=UIAutomationSolidifyResponse)
 async def solidify_ui_task(
     task_id: int,
@@ -127,3 +163,50 @@ async def solidify_ui_task(
         detail=f"固化为脚本: {result['script_name']}",
     )
     return UIAutomationSolidifyResponse(task_id=task.id, **result)
+
+@router.post("/ui-automation/generate-steps", response_model=UIAutomationGenerateStepsResponse)
+async def generate_steps_from_nl(payload: UIAutomationGenerateStepsRequest):
+    prompt = f"""
+请将以下自然语言转化为结构化的 UI 自动化测试步骤。
+自然语言要求：
+"{payload.natural_language}"
+
+请严格返回一个 JSON 数组，每个元素包含：
+- action: 必须是 "goto", "click", "fill", "assert" 之一。
+- target: 目标站点的 URL 或 CSS/XPath 选择器（如果不需要则留空字符串）。
+- value: 需要输入的值或断言的内容（如果不需要则留空字符串）。
+
+例如：
+[
+    {{"action": "goto", "target": "https://example.com/", "value": ""}},
+    {{"action": "fill", "target": "#search", "value": "手机"}},
+    {{"action": "click", "target": "#submit", "value": ""}}
+]
+
+只返回 JSON 数组，不要返回任何其他内容（不要有 markdown 语法如 ```json）。
+"""
+    providers = llm_client.get_available_providers()
+    if not providers:
+        raise HTTPException(status_code=500, detail="系统未配置任何大模型提供商")
+    
+    provider = providers[0]
+    
+    res = await llm_client.text_completion(prompt, temperature=0.1, provider=provider)
+    
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=f"AI 生成失败: {res.get('error')}")
+        
+    content = res.get("content", "").strip()
+    # 移除可能存在的 markdown 代码块
+    if content.startswith("```json"):
+        content = content[7:]
+    if content.endswith("```"):
+        content = content[:-3]
+    content = content.strip()
+    
+    try:
+        steps = json.loads(content)
+        return UIAutomationGenerateStepsResponse(steps=steps)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI 返回的格式错误，无法解析为 JSON")
+

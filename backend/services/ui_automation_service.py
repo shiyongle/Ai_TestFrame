@@ -10,13 +10,8 @@ from core.database import SessionLocal
 from models.database_models import UIAutomationArtifact, UIAutomationStepLog, UIAutomationTask, SystemSetting
 from schemas.ui_automation_schemas import UIAutomationTaskCreate
 from config.settings import settings
-
-try:
-    from browser_use import Agent
-    from langchain_openai import ChatOpenAI
-except ImportError:
-    Agent = None
-    ChatOpenAI = None
+import base64
+from playwright.async_api import async_playwright
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +44,15 @@ class UIAutomationService:
         db.flush()
 
         for idx, step in enumerate(steps, start=1):
+            if isinstance(step, dict):
+                title = f"[{step.get('action')}] {step.get('target', '')} {step.get('value', '')}".strip()
+            else:
+                title = str(step)
             db.add(
                 UIAutomationStepLog(
                     task_id=task.id,
                     step_index=idx,
-                    step_title=step,
+                    step_title=title,
                     status="pending",
                 )
             )
@@ -99,8 +98,24 @@ class UIAutomationService:
         db.refresh(task)
         return task
 
+    def pause_task(self, db: Session, task_id: int) -> UIAutomationTask:
+        task = self.get_task(db, task_id)
+        if task and task.status == "running":
+            task.status = "paused"
+            db.commit()
+            db.refresh(task)
+        return task
+
+    def resume_task(self, db: Session, task_id: int) -> UIAutomationTask:
+        task = self.get_task(db, task_id)
+        if task and task.status == "paused":
+            task.status = "running"
+            db.commit()
+            db.refresh(task)
+        return task
+
     async def run_task_async(self, task_id: int) -> None:
-        """后台执行引擎：使用 Browser-Use 和 Langchain 真机拉起并执行页面动作"""
+        """后台执行引擎：使用 Playwright 执行骨架"""
         db = SessionLocal()
         try:
             task = self.get_task(db, task_id)
@@ -115,108 +130,125 @@ class UIAutomationService:
                 db.commit()
                 return
 
-            total = len(steps)
-            for idx, step in enumerate(steps, start=1):
-                step.status = "running"
-                step.started_at = datetime.utcnow()
-            db.commit()
-            
             # 主动让渡控制权给事件循环，保证主请求可以快速打回 response
             await asyncio.sleep(0.1)
 
-            if Agent is None or ChatOpenAI is None:
-                raise ValueError("未完整安装 browser-use 或 langchain-openai，执行终止")
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context()
+                page = await context.new_page()
 
-            # 读取数据库配置
-            db_settings = {}
-            try:
-                records = db.query(SystemSetting).filter(SystemSetting.category == 'llm').all()
-                for rec in records:
-                    db_settings[rec.setting_key] = rec.setting_value
-            except Exception:
-                pass
-            
-            api_key = db_settings.get('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', None)
-            base_url = db_settings.get('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', "https://api.openai.com/v1")
-            model_name = "gpt-4o"
-            
-            if not api_key:
-                api_key = db_settings.get('SILICONFLOW_API_KEY') or getattr(settings, 'SILICONFLOW_API_KEY', None)
-                base_url = db_settings.get('SILICONFLOW_BASE_URL') or getattr(settings, 'SILICONFLOW_BASE_URL', "https://api.siliconflow.cn/v1")
-                model_name = db_settings.get('SILICONFLOW_CHAT_MODEL') or getattr(settings, 'SILICONFLOW_CHAT_MODEL', 'Qwen/Qwen2.5-7B-Instruct')
-
-            if not api_key:
-                raise ValueError("LLM API Key missing! Needs OpenAI or compatible key for Browser-use.")
-
-            llm = ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
-
-            # 拼接任务指令对象
-            instruction_lines = [f"请打开目标网站: {task.target_url}"]
-            
-            if task.auth_scheme == "account_password" and task.auth_payload:
-                instruction_lines.append(f"需要执行登录，用户名: {task.auth_payload.get('username')}, 密码: {task.auth_payload.get('password')}")
-
-            instruction_lines.append("请执行以下操作：")
-            for idx, s in enumerate(task.natural_language_steps or [], 1):
-                instruction_lines.append(f"{idx}. {s}")
-
-            if task.assertions:
-                instruction_lines.append("并且验证以下断言:")
-                for index, a in enumerate(task.assertions, 1):
-                    instruction_lines.append(f"- {a}")
-
-            full_task_prompt = "\n".join(instruction_lines)
-            
-            # 使用 Browser User
-            agent = Agent(task=full_task_prompt, llm=llm)
-            
-            # 由于大模型Agent可能处理数分钟，先将整体任务进度往前拨
-            task.progress = 20
-            db.commit()
-            
-            result = await agent.run(max_steps=20)
-            
-            for s in steps:
-                s.status = "success"
-                s.finished_at = datetime.utcnow()
-                s.detail = "已交由 Browser-Use Agent 委托执行"
-
-            has_history = hasattr(result, "history")
-            
-            if has_history:
-                for idx, history_item in enumerate(result.history):
-                    b64_img = ""
-                    # 尝试捕获每一步的 state.screenshot base64 对象
-                    if hasattr(history_item, "state") and hasattr(history_item.state, "screenshot") and history_item.state.screenshot:
-                        b64_img = history_item.state.screenshot
-                        if b64_img.startswith("data:image/png;base64,"):
-                            b64_img = b64_img.replace("data:image/png;base64,", "")
-                            
-                    if b64_img:
-                        db.add(
-                            UIAutomationArtifact(
-                                task_id=task.id,
-                                artifact_type="screenshot",
-                                artifact_name=f"browser_step_{idx+1}.png",
-                                artifact_content=b64_img,
-                            )
-                        )
+                try:
+                    # 优先打开目标网站
+                    await page.goto(task.target_url)
                     
-                    if hasattr(history_item, "state") and hasattr(history_item.state, "interacted_element"):
-                        interacted = getattr(history_item.state.interacted_element, "xpath", "Unknown")
-                        db.add(
-                            UIAutomationArtifact(
-                                task_id=task.id,
-                                artifact_type="dom_snapshot",
-                                artifact_name=f"interacted_{idx+1}.txt",
-                                artifact_content=f"History interacted element: {interacted}",
-                            )
-                        )
+                    # 鉴权预处理
+                    if task.auth_scheme == "cookie" and task.auth_payload:
+                        cookies_str = task.auth_payload.get("cookies", "")
+                        # 简单的一维 cookie 解析 (a=b; c=d)
+                        cookies_list = []
+                        if cookies_str:
+                            for c in cookies_str.split(";"):
+                                if "=" in c:
+                                    k, v = c.strip().split("=", 1)
+                                    cookies_list.append({"name": k, "value": v, "url": task.target_url})
+                        if cookies_list:
+                            await context.add_cookies(cookies_list)
+                            await page.reload()
 
-            task.status = "success"
-            task.progress = 100
-            task.finished_at = datetime.utcnow()
-            db.commit()
+                    # 遍历执行步骤
+                    structured_steps_data = task.natural_language_steps or []
+                    for idx, (step_log, step_data) in enumerate(zip(steps, structured_steps_data), start=1):
+                        
+                        # ======== 热暂停锁 ========
+                        # 每次进入下个步骤前，检查任务状态。如果被标记为 paused，则进入死等。
+                        while True:
+                            db.refresh(task)
+                            if task.status == "paused":
+                                await asyncio.sleep(2)
+                            elif task.status == "cancelled":
+                                raise Exception("执行被人工强行终止(Cancelled)")
+                            else:
+                                break
+                        # ==========================
+                        
+                        step_log.status = "running"
+                        step_log.started_at = datetime.utcnow()
+                        db.commit()
+                        
+                        task.progress = int((idx / len(steps)) * 90)
+                        db.commit()
+
+                        action = step_data.get("action") if isinstance(step_data, dict) else "unknown"
+                        target = step_data.get("target") if isinstance(step_data, dict) else ""
+                        value = step_data.get("value") if isinstance(step_data, dict) else ""
+
+                        try:
+                            if action == "goto":
+                                await page.goto(target or value)
+                            elif action == "click":
+                                await page.click(target)
+                            elif action == "fill":
+                                await page.fill(target, value)
+                            elif action == "assert":
+                                if target:
+                                    # 简单的断言元素是否存在并包含文本
+                                    locator = page.locator(target)
+                                    await locator.wait_for(state="visible", timeout=5000)
+                                    if value:
+                                        text = await locator.text_content()
+                                        if value not in (text or ""):
+                                            raise Exception(f"断言失败: '{value}' 不存在于目标元素中")
+                                else:
+                                    # 如果没有 target，则在页面整体检查
+                                    content = await page.content()
+                                    if value not in content:
+                                        raise Exception(f"断言失败: '{value}' 不存在于页面中")
+                            else:
+                                pass # skip unknown or legacy text steps
+                            
+                            step_log.status = "success"
+                            step_log.finished_at = datetime.utcnow()
+                            
+                            # 截图 (仅部分关键步骤截图，或者最后一步)
+                            if idx == len(steps) or action == "assert":
+                                screenshot_bytes = await page.screenshot()
+                                b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
+                                db.add(
+                                    UIAutomationArtifact(
+                                        task_id=task.id,
+                                        artifact_type="screenshot",
+                                        artifact_name=f"step_{idx}_success.png",
+                                        artifact_content=b64_img,
+                                    )
+                                )
+                            db.commit()
+                            await asyncio.sleep(0.5)
+                        except Exception as e:
+                            step_log.status = "failed"
+                            step_log.finished_at = datetime.utcnow()
+                            step_log.detail = str(e)
+                            # 失败截图
+                            screenshot_bytes = await page.screenshot()
+                            b64_img = base64.b64encode(screenshot_bytes).decode('utf-8')
+                            db.add(
+                                UIAutomationArtifact(
+                                    task_id=task.id,
+                                    artifact_type="screenshot",
+                                    artifact_name=f"step_{idx}_failed.png",
+                                    artifact_content=b64_img,
+                                )
+                            )
+                            db.commit()
+                            raise e 
+
+                    task.status = "success"
+                    task.progress = 100
+                    task.finished_at = datetime.utcnow()
+                    db.commit()
+
+                finally:
+                    await browser.close()
 
         except Exception as exc:
             task = self.get_task(db, task_id)
@@ -263,22 +295,36 @@ class UIAutomationService:
 
     def _build_playwright_script(self, task: UIAutomationTask) -> str:
         steps = task.natural_language_steps or []
-        assertions = task.assertions or []
-        steps_block = "\n".join([f"  // Step {i + 1}: {s}" for i, s in enumerate(steps)])
-        assertions_block = "\n".join([f"  // Assert {i + 1}: {a}" for i, a in enumerate(assertions)])
-        if not steps_block:
-            steps_block = "  // TODO: add steps"
-        if not assertions_block:
-            assertions_block = "  // TODO: add assertions"
+        steps_blocks = []
+        for i, s in enumerate(steps):
+            if isinstance(s, dict):
+                action = s.get("action")
+                target = s.get("target")
+                value = s.get("value")
+                if action == "goto":
+                    steps_blocks.append(f"  await page.goto('{target or value}');")
+                elif action == "click":
+                    steps_blocks.append(f"  await page.click('{target}');")
+                elif action == "fill":
+                    steps_blocks.append(f"  await page.fill('{target}', '{value}');")
+                elif action == "assert":
+                    if target:
+                        steps_blocks.append(f"  await expect(page.locator('{target}')).toContainText('{value}');")
+                    else:
+                        steps_blocks.append(f"  // assert global text '{value}'")
+            else:
+                steps_blocks.append(f"  // Step {i + 1}: {s}")
+
+        steps_str = "\n".join(steps_blocks)
+        if not steps_str:
+            steps_str = "  // TODO: add structured steps"
 
         return f"""import {{ test, expect }} from '@playwright/test';
 
 test('{task.name}', async ({{ page }}) => {{
   await page.goto('{task.target_url}');
 
-{steps_block}
-
-{assertions_block}
+{steps_str}
 
   await expect(page).toHaveURL(/.*/);
 }});

@@ -226,6 +226,9 @@ export const uiAutomationApi = {
   getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
   startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
   solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
+  generateSteps: (naturalLanguage: string): Promise<any> => api.post('/api/v1/ui-automation/generate-steps', { natural_language: naturalLanguage }),
+  pauseTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/pause`),
+  resumeTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/resume`),
 };
 
 export const authApi = {

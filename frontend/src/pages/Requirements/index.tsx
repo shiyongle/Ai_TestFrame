@@ -191,6 +191,24 @@ const Requirements: React.FC = () => {
     }
   };
 
+  const handleDelete = (req: Requirement) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除需求 "${req.title}" 吗？该操作不可逆转。`,
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await requirementApi.deleteRequirement(parseInt(req.id));
+          message.success('需求删除成功');
+          if (selectedProjectId) loadRequirements(selectedProjectId);
+          setSelectedRequirement(null);
+        } catch (error: any) {
+          message.error('删除失败');
+        }
+      }
+    });
+  };
+
   // --- Render Helpers ---
 
   const getPriorityColor = (p: string) => {
@@ -364,7 +382,7 @@ const Requirements: React.FC = () => {
                 </Space>
                 <Space>
                   <Tooltip title="编辑"><Button type="text" icon={<EditOutlined />} onClick={() => handleEdit(selectedRequirement)} /></Tooltip>
-                  <Tooltip title="更多"><Button type="text" icon={<EllipsisOutlined />} /></Tooltip>
+                  <Tooltip title="删除"><Button type="text" danger icon={<DeleteOutlined />} onClick={() => handleDelete(selectedRequirement)} /></Tooltip>
                 </Space>
               </div>
 

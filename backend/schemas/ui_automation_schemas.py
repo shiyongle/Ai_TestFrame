@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,8 +9,8 @@ class UIAutomationTaskCreate(BaseModel):
     target_url: str = Field(..., min_length=1, max_length=500)
     auth_scheme: Literal["none", "account_password", "cookie", "token"] = "none"
     auth_payload: Optional[Dict[str, Any]] = None
-    natural_language_steps: List[str] = Field(default_factory=list)
-    assertions: List[str] = Field(default_factory=list)
+    natural_language_steps: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
+    assertions: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
     auto_start: bool = True
 
 
@@ -60,8 +60,8 @@ class UIAutomationArtifactItem(BaseModel):
 class UIAutomationTaskDetail(UIAutomationTaskSummary):
     error_message: Optional[str] = None
     auth_payload: Optional[Dict[str, Any]] = None
-    natural_language_steps: List[str] = Field(default_factory=list)
-    assertions: List[str] = Field(default_factory=list)
+    natural_language_steps: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
+    assertions: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
     step_logs: List[UIAutomationStepLogItem] = Field(default_factory=list)
     artifacts: List[UIAutomationArtifactItem] = Field(default_factory=list)
     playwright_script: Optional[str] = None
@@ -81,3 +81,9 @@ class UIAutomationSolidifyResponse(BaseModel):
     task_id: int
     script_name: str
     script_content: str
+
+class UIAutomationGenerateStepsRequest(BaseModel):
+    natural_language: str
+
+class UIAutomationGenerateStepsResponse(BaseModel):
+    steps: List[Dict[str, Any]]
