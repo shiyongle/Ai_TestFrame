@@ -501,6 +501,7 @@ class UIAutomationTask(Base):
     status = Column(String(20), nullable=False, default="pending")  # pending, running, success, failed
     progress = Column(Integer, nullable=False, default=0)
     executor = Column(String(30), nullable=False, default="browser_use")
+    debug_mode = Column(Boolean, nullable=False, default=False)
     error_message = Column(Text)
     playwright_script = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)

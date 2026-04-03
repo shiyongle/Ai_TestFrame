@@ -27,6 +27,8 @@ def _build_task_summary(task) -> UIAutomationTaskSummary:
 
 
 def _build_task_detail(task, steps, artifacts) -> UIAutomationTaskDetail:
+    trace_artifact = next((item for item in artifacts if item.artifact_type == "trace"), None)
+    replay_script = next((item for item in artifacts if item.artifact_type == "replay_script"), None)
     return UIAutomationTaskDetail(
         id=task.id,
         task_no=task.task_no,
@@ -36,6 +38,7 @@ def _build_task_detail(task, steps, artifacts) -> UIAutomationTaskDetail:
         status=task.status,
         progress=task.progress,
         executor=task.executor,
+        debug_mode=bool(getattr(task, "debug_mode", False)),
         created_at=task.created_at,
         started_at=task.started_at,
         finished_at=task.finished_at,
@@ -46,6 +49,8 @@ def _build_task_detail(task, steps, artifacts) -> UIAutomationTaskDetail:
         step_logs=steps,
         artifacts=artifacts,
         playwright_script=task.playwright_script,
+        trace_artifact_name=trace_artifact.artifact_name if trace_artifact else None,
+        replay_script_name=replay_script.artifact_name if replay_script else None,
     )
 
 
@@ -164,6 +169,26 @@ async def solidify_ui_task(
     )
     return UIAutomationSolidifyResponse(task_id=task.id, **result)
 
+
+@router.delete("/ui-automation/tasks/{task_id}")
+async def delete_ui_task(
+    task_id: int,
+    db: Session = Depends(get_database),
+    service=Depends(get_ui_automation_service),
+):
+    task = service.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI 自动化任务不存在")
+    if task.status == "running":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="任务执行中，暂不支持删除")
+
+    success = service.delete_task(db, task_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="UI 自动化任务不存在")
+
+    log_activity(db, action="delete", module="UI自动化", target_name=task.name, detail=f"任务ID={task.id}")
+    return {"message": "任务删除成功"}
+
 @router.post("/ui-automation/generate-steps", response_model=UIAutomationGenerateStepsResponse)
 async def generate_steps_from_nl(payload: UIAutomationGenerateStepsRequest):
     prompt = f"""
@@ -172,15 +197,29 @@ async def generate_steps_from_nl(payload: UIAutomationGenerateStepsRequest):
 "{payload.natural_language}"
 
 请严格返回一个 JSON 数组，每个元素包含：
-- action: 必须是 "goto", "click", "fill", "assert" 之一。
-- target: 目标站点的 URL 或 CSS/XPath 选择器（如果不需要则留空字符串）。
-- value: 需要输入的值或断言的内容（如果不需要则留空字符串）。
+- action: 必须是 "goto", "click", "fill", "assert", "sleep", "wait_for_visible", "wait_for_hidden", "wait_for_text" 之一。
+- target: 目标站点的 URL、CSS/XPath 选择器；如果是 wait_for_text，则 target 可为空字符串，表示等待整页文本出现。
+- value: 需要输入的值、断言内容、等待文本或等待秒数（如果不需要则留空字符串）。
+
+生成规则：
+- 仅输出当前执行器支持的 8 种动作，不要输出 press、hover、select、drag、upload 等动作。
+- 如果是 fill，target 必须是明确可输入的 input/textarea/contenteditable 元素选择器，不要把按钮、容器、文本节点当作输入框。
+- 如果页面存在异步渲染、接口加载、弹窗动画、搜索结果刷新等不稳定时机，可优先插入 wait_for_visible / wait_for_hidden / wait_for_text / sleep 步骤。
+- sleep 的 value 必须是数字秒数，例如 "1"、"2"、"0.5"。
+- wait_for_visible 与 wait_for_hidden 的 target 必须是明确选择器，value 留空字符串。
+- wait_for_text 的 value 必须是要等待出现的文本；如果有稳定容器，可同时提供 target；如果没有稳定容器，target 留空字符串。
+- 优先使用稳定、具体的选择器，例如 id、name、data-testid；避免使用容易变化的 class 组合或模糊层级。
+- 如果页面是搜索/表单场景，fill 之后可视情况补充 wait_for_visible、click、assert 等步骤，保证流程闭环。
+- assert 优先断言稳定可见的结果元素，不要断言瞬时态或容易变化的大段文本。
+- 如果无法确定可靠选择器，宁可返回更保守、更短的步骤，不要臆造选择器。
 
 例如：
 [
     {{"action": "goto", "target": "https://example.com/", "value": ""}},
+    {{"action": "wait_for_visible", "target": "#search", "value": ""}},
     {{"action": "fill", "target": "#search", "value": "手机"}},
-    {{"action": "click", "target": "#submit", "value": ""}}
+    {{"action": "click", "target": "#submit", "value": ""}},
+    {{"action": "wait_for_text", "target": "", "value": "搜索结果"}}
 ]
 
 只返回 JSON 数组，不要返回任何其他内容（不要有 markdown 语法如 ```json）。

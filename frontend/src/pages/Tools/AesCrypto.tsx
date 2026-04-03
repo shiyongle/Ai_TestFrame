@@ -153,7 +153,7 @@ const AesCrypto: React.FC = () => {
                     <Button type="primary" icon={<LockOutlined />} onClick={handleEncrypt} size="large" style={{ minWidth: 120 }}>
                         加密 (Encrypt)
                     </Button>
-                    <Button type="primary" ghost icon={<UnlockOutlined />} onClick={handleDecrypt} size="large" style={{ minWidth: 120 }}>
+                    <Button type="primary" icon={<UnlockOutlined />} onClick={handleDecrypt} size="large" style={{ minWidth: 120 }}>
                         解密 (Decrypt)
                     </Button>
                     <Button icon={<DeleteOutlined />} onClick={handleClear} size="large">

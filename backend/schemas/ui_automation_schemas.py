@@ -12,6 +12,7 @@ class UIAutomationTaskCreate(BaseModel):
     natural_language_steps: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
     assertions: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
     auto_start: bool = True
+    debug_mode: bool = False
 
 
 class UIAutomationTaskQuery(BaseModel):
@@ -29,6 +30,7 @@ class UIAutomationTaskSummary(BaseModel):
     status: str
     progress: int
     executor: str
+    debug_mode: bool = False
     created_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
@@ -65,6 +67,8 @@ class UIAutomationTaskDetail(UIAutomationTaskSummary):
     step_logs: List[UIAutomationStepLogItem] = Field(default_factory=list)
     artifacts: List[UIAutomationArtifactItem] = Field(default_factory=list)
     playwright_script: Optional[str] = None
+    trace_artifact_name: Optional[str] = None
+    replay_script_name: Optional[str] = None
 
 
 class UIAutomationTaskCreateResponse(BaseModel):

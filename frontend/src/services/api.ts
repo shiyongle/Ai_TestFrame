@@ -187,6 +187,18 @@ export const requirementApi = {
 };
 
 // AI 知识库 API
+export const uiAutomationApi = {
+  createTask: (data: any): Promise<any> => api.post('/api/v1/ui-automation/tasks', data),
+  listTasks: (limit = 20): Promise<any[]> => api.get('/api/v1/ui-automation/tasks', { params: { limit } }),
+  getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
+  startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
+  solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
+  generateSteps: (naturalLanguage: string): Promise<any> => api.post('/api/v1/ui-automation/generate-steps', { natural_language: naturalLanguage }),
+  pauseTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/pause`),
+  resumeTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/resume`),
+  deleteTask: (taskId: number): Promise<any> => api.delete(`/api/v1/ui-automation/tasks/${taskId}`),
+};
+
 export const aiApi = {
   getKnowledgeList: (): Promise<any> => api.get('/api/v1/ai/knowledge/list'),
   addKnowledgeDocument: (data: any): Promise<any> => api.post('/api/v1/ai/knowledge/add', data),
@@ -218,17 +230,6 @@ export const reportApi = {
 
 export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
-};
-
-export const uiAutomationApi = {
-  createTask: (data: any): Promise<any> => api.post('/api/v1/ui-automation/tasks', data),
-  listTasks: (limit = 20): Promise<any[]> => api.get('/api/v1/ui-automation/tasks', { params: { limit } }),
-  getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
-  startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
-  solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
-  generateSteps: (naturalLanguage: string): Promise<any> => api.post('/api/v1/ui-automation/generate-steps', { natural_language: naturalLanguage }),
-  pauseTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/pause`),
-  resumeTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/resume`),
 };
 
 export const authApi = {

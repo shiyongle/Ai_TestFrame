@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import asyncio
+from pathlib import Path
 from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import uuid
@@ -31,6 +33,10 @@ app.add_middleware(
     allow_methods=settings.cors_methods,
     allow_headers=settings.cors_headers,
 )
+
+ui_artifacts_dir = Path(__file__).resolve().parent / "ui_artifacts"
+ui_artifacts_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/backend/ui_artifacts", StaticFiles(directory=str(ui_artifacts_dir)), name="ui_artifacts")
 
 # 认证中间件
 @app.middleware("http")
