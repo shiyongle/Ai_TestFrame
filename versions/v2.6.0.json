@@ -1,0 +1,228 @@
+{
+  "version": "2.6.0",
+  "date": "2026-04-03",
+  "title": "UI 自动化调试证据链增强、执行器鲁棒性修复与截图预览闭环",
+  "description": "本次发布围绕 UI 自动化模块进行了连续性的稳定性和可调试性改造，重点解决了步骤执行过程不可观测、隐藏元素定位不稳定、动态布局导致点击失败、等待动作能力不足、调试工件过大写库失败、执行后浏览器收尾策略不一致以及调试证据链截图无法显示等问题。同时对 UI 自动化前端页面进行了去 browser-use 化重构，并补充任务删除能力；此外修复了测试工具箱 AES 页面中解密按钮的视觉样式，使其符合主按钮蓝底白字规范。整体目标是把 UI 自动化从“能跑”提升到“能诊断、能复现、能追因、能稳定执行”。",
+  "features": [
+    {
+      "title": "UI 自动化调试证据链体系建设",
+      "items": [
+        "新增 debug_mode 执行模式，允许任务在调试视角下输出更完整的运行证据。",
+        "调试模式下补充页面截图、DOM 快照、Trace、运行诊断、选择器诊断、复现脚本、运行时错误等多种工件类型，形成完整证据链。",
+        "任务详情页新增失败原因摘要聚合能力，可同时汇总失败步骤、步骤详情、任务错误、运行诊断、选择器诊断与错误工件信息。",
+        "调试证据链按工件类型分组展示，区分截图证据、运行诊断、DOM 快照、Trace 追踪、选择器诊断、复现脚本、错误工件与固化脚本。",
+        "新增最小复现脚本输出能力，便于将失败步骤从任务运行时上下文中抽离出来进行单独回放。"
+      ]
+    },
+    {
+      "title": "UI 自动化执行器鲁棒性增强",
+      "items": [
+        "重构选择器解析与活跃元素查找逻辑，优先定位可见、可交互的候选元素，避免默认命中隐藏节点。",
+        "为等待类动作补充 wait_for_visible、wait_for_hidden、wait_for_text、sleep 等能力，缓解网络抖动、页面渲染延迟和设备性能波动对执行稳定性的影响。",
+        "为隐藏主选择器补充 fallback selector 推导能力，可基于元素属性自动推导更稳健的候选选择器。",
+        "针对按钮类隐藏目标引入宽松等待与交互策略，在实际可点击但不完全满足可见性判定时依然能够继续尝试。",
+        "点击动作增加多轮重试、force click 与 DOM 级 click/dispatchEvent 兜底机制，以适应输入后页面布局动态变化、元素短暂失稳等场景。",
+        "修复步骤遍历过程被 zip 截断导致后续步骤静默跳过的问题，改为按步骤索引显式遍历。",
+        "修复 wait_for_text 的 Playwright Python API 调用方式，改为使用 arg 命名参数传递脚本参数，消除位置参数签名错误。",
+        "统一浏览器收尾策略，任务执行结束后无论成功或失败都自动关闭浏览器，行为与用户预期保持一致。"
+      ]
+    },
+    {
+      "title": "UI 自动化前端重构与任务管理补齐",
+      "items": [
+        "重构 UI 自动化页面布局，移除 browser-use 时代遗留的页面表达方式，改为围绕 Playwright 执行器设计新的任务编排与调试视图。",
+        "左侧聚焦任务创建、步骤编排、AI 生成步骤与任务队列管理，右侧聚焦任务状态、执行日志、调试证据链与固化脚本。",
+        "任务队列补充删除功能，可直接删除 UI 自动化任务记录及其关联数据。",
+        "步骤编排区补充等待动作选项与提示文案，使前端动作选择与后端执行能力保持一致。",
+        "调试证据链截图卡片从仅支持 base64 预览升级为优先支持文件型 artifact_path，同时兼容历史 base64 数据。"
+      ]
+    },
+    {
+      "title": "调试工件持久化与静态访问闭环",
+      "items": [
+        "截图与 Trace 等大体积工件由数据库大文本写入模式切换为磁盘文件落盘模式，避免 MySQL TEXT 字段长度限制导致的失败。",
+        "工件记录新增以 artifact_path 为主的访问方式，artifact_content 回归为描述性文本或诊断说明。",
+        "后端新增 ui_artifacts 静态资源映射，前端可直接通过 artifact_path 访问调试截图与 Trace 文件。",
+        "前后端完成从“数据库内嵌 base64 工件”到“文件落盘 + 路径访问工件”的一致性适配。"
+      ]
+    },
+    {
+      "title": "工具箱细节修复",
+      "items": [
+        "修复测试工具箱 AES 加解密页面中“解密”按钮视觉样式，使其符合蓝底白字的主按钮规范。"
+      ]
+    }
+  ],
+  "improvements": [
+    "UI 自动化失败排障从依赖零散日志提升为依赖结构化证据链，显著提升问题定位效率。",
+    "前端任务详情对失败原因的表达更加集中，减少用户在步骤日志、报错信息与调试工件之间来回切换的成本。",
+    "执行器在处理隐藏输入框、隐藏按钮、动态位移按钮、延迟渲染元素等复杂页面场景时更稳定。",
+    "调试工件采用落盘方式后，数据库写入压力下降，也避免了单次事务因大字段失败而污染会话状态。",
+    "浏览器生命周期策略重新收敛为固定自动关闭，减少调试策略与用户操作预期不一致造成的理解成本。"
+  ],
+  "fixes": [
+    {
+      "issue": "UI 自动化步骤执行到第二步后长时间轮询、卡住或看似无响应",
+      "root_cause": "执行器缺少足够的步骤级可观测性，且隐藏元素命中、等待策略不当、点击时机不稳等问题会被统称为‘执行中’，前端难以区分真实卡点。",
+      "solution": "补充步骤日志细节、失败摘要、运行诊断、选择器诊断、DOM 快照、截图、Trace 与复现脚本，建立完整证据链；同时增强等待与定位策略，减少假性卡住。"
+    },
+    {
+      "issue": "wait_for_visible 命中隐藏元素导致步骤失败",
+      "root_cause": "原逻辑可能直接使用 locator.first 或默认候选，未优先过滤可见节点。",
+      "solution": "新增活跃定位器解析逻辑，优先选择可见候选；等待类动作支持遍历候选节点并基于可见性重新决策。"
+    },
+    {
+      "issue": "隐藏主选择器无法稳定回退到可操作目标",
+      "root_cause": "部分页面主选择器指向的是隐藏元素，执行器未构建足够的 fallback selector。",
+      "solution": "引入 fallback selector 推导策略，并结合选择器诊断记录候选元素的 visible、editable、text、outerHTML 等信息。"
+    },
+    {
+      "issue": "按钮类目标在视觉上可点击但仍因严格可见性校验失败",
+      "root_cause": "按钮场景与输入框场景共享了偏严格的等待/点击前置条件，导致部分实际可操作目标被提前判定为失败。",
+      "solution": "对按钮类隐藏目标放宽等待与交互策略，允许 presence 级存在判定，并在点击阶段启用更宽松的 clickable 解析。"
+    },
+    {
+      "issue": "输入完成后页面布局变化，后续 click 目标位置变化导致点击失败",
+      "root_cause": "页面动态重排导致既有定位结果失效，单次 click 尝试对瞬时 DOM 状态过于敏感。",
+      "solution": "点击动作增加重试、重新解析目标、force=True 及 DOM 级 click/dispatchEvent 兜底。"
+    },
+    {
+      "issue": "任务只执行第一步即结束，后续步骤被静默跳过",
+      "root_cause": "步骤遍历时使用 zip 等并行结构导致长度以最短数组为准，被意外截断。",
+      "solution": "改为按 step index 显式遍历 structured_steps_data，并在调试工件中补充对齐信息。"
+    },
+    {
+      "issue": "Data too long for column artifact_content 与 PendingRollbackError",
+      "root_cause": "截图与 Trace 等二进制/大文本工件直接写入数据库 artifact_content，超出字段承载能力；失败后 session 未及时 rollback。",
+      "solution": "改为文件落盘，数据库仅保存 artifact_path 与描述文本；封装 safe_commit，在异常时及时 rollback，避免污染后续事务。"
+    },
+    {
+      "issue": "wait_for_text 调用时报 Page.wait_for_function 位置参数错误",
+      "root_cause": "Playwright Python 的 wait_for_function 仅接受 script 加命名参数，原实现误将额外参数作为位置参数传入。",
+      "solution": "改为使用 arg=... 方式传递等待文本或组合参数。"
+    },
+    {
+      "issue": "任务结束后浏览器关闭策略与用户要求不一致",
+      "root_cause": "先前曾尝试在 debug 失败时保留浏览器现场，但与用户要求‘每次执行完毕要自动关闭浏览器’冲突。",
+      "solution": "统一在 finally 中关闭浏览器，并同步调整失败摘要文案与调试预期。"
+    },
+    {
+      "issue": "调试证据链中的截图卡片无法显示",
+      "root_cause": "后端已将截图改为文件落盘并保存 artifact_path，但前端仍假设 artifact_content 为 base64 图片；同时后端此前未挂载 ui_artifacts 静态目录。",
+      "solution": "前端优先使用 artifact_path 生成图片 URL，保留 base64 兼容逻辑；后端补充 /backend/ui_artifacts 静态资源映射。"
+    },
+    {
+      "issue": "AES 页面中解密按钮样式不符合主按钮规范",
+      "root_cause": "页面按钮样式未与设计预期对齐。",
+      "solution": "调整按钮样式，使解密按钮呈现蓝底白字。"
+    }
+  ],
+  "technical_solutions": {
+    "backend_execution_engine": {
+      "summary": "围绕 Playwright 执行器重构了定位、等待、点击、工件持久化与异常收尾策略，核心目标是让失败可归因、步骤可观测、异常可复现。",
+      "strategies": [
+        "引入活跃定位器解析机制，对 locator 的多个候选进行逐个检查，优先选择可见、可编辑、可交互目标。",
+        "将等待策略从单一的显式等待扩展为可见等待、隐藏等待、文本等待和强制等待四类动作，并在 AI 生成 prompt 中同步支持。",
+        "针对隐藏但可触发交互的按钮类元素增加宽松策略，避免把真实可用控件误判为不可点击。",
+        "对点击动作实行多级兜底：正常 click -> 重试 -> force click -> DOM 原生 click/dispatchEvent。",
+        "将失败诊断拆分为运行诊断、选择器诊断、错误工件、DOM 快照、Trace、截图等不同维度，降低单一错误文本的信息损耗。"
+      ]
+    },
+    "artifact_persistence": {
+      "summary": "调试工件从数据库内嵌模式迁移到文件落盘模式，兼顾数据库稳定性与调试工件可访问性。",
+      "strategies": [
+        "新增文件型工件持久化方法，将 screenshot、trace 等二进制数据落盘到 backend/ui_artifacts/task_xx 目录。",
+        "数据库层保留 artifact_type、artifact_name、artifact_path、artifact_content，其中 artifact_content 退化为描述信息而非大二进制正文。",
+        "提交事务时统一通过 safe_commit 封装，若发生异常则 rollback，防止 SQLAlchemy session 进入脏状态。",
+        "在 FastAPI 主应用挂载 ui_artifacts 静态目录，使前端能够通过 HTTP 直接访问工件文件。"
+      ]
+    },
+    "frontend_debug_experience": {
+      "summary": "前端围绕任务编排、执行过程和证据链展示进行了重新设计，弱化旧时代产物，强化调试闭环。",
+      "strategies": [
+        "重构 UI 自动化主页面布局，突出任务编排、任务队列、状态卡片、终端日志、证据链和固化脚本六个核心区域。",
+        "失败摘要使用 useMemo 聚合多源调试信息，降低用户从大量工件中手工归纳根因的成本。",
+        "截图预览兼容新旧两套工件格式：优先读取 artifact_path 文件 URL，回退兼容 base64 artifact_content。",
+        "调试证据按类型分组展示，并提供类型说明文字，帮助非开发角色理解各工件用途。"
+      ]
+    },
+    "schema_and_data_compatibility": {
+      "summary": "在保持 UI 自动化任务表与工件表继续演进的同时，处理了 schema drift 与历史数据兼容问题。",
+      "strategies": [
+        "在请求/响应 schema 中补充 debug_mode 与 artifact_path 等字段，使前后端契约与数据库结构保持一致。",
+        "针对历史截图仍存 base64 的情况保留兼容显示逻辑，避免新版本上线后旧任务截图全部失效。",
+        "对于 debug_mode 列缺失引发的 Unknown column 问题，明确需要数据库手工迁移或补列。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "versions/v2.6.0.json"
+    ],
+    "modified": [
+      "backend/main.py",
+      "backend/models/database_models.py",
+      "backend/schemas/ui_automation_schemas.py",
+      "backend/api/v1/ui_automation.py",
+      "backend/services/ui_automation_service.py",
+      "frontend/src/pages/ApiAutomation/UIAutomation/index.tsx",
+      "frontend/src/services/api.ts",
+      "frontend/src/pages/Tools/AesCrypto.tsx"
+    ]
+  },
+  "affected_modules": [
+    {
+      "module": "UI 自动化执行引擎",
+      "scope": [
+        "步骤执行",
+        "选择器定位",
+        "点击重试",
+        "等待动作",
+        "失败诊断",
+        "浏览器生命周期管理"
+      ]
+    },
+    {
+      "module": "UI 自动化数据模型与接口契约",
+      "scope": [
+        "任务 debug_mode 字段",
+        "工件 artifact_path 字段",
+        "任务详情返回结构",
+        "前后端 schema 对齐"
+      ]
+    },
+    {
+      "module": "UI 自动化前端页面",
+      "scope": [
+        "任务编排区",
+        "任务队列",
+        "执行详情",
+        "失败摘要",
+        "调试证据链",
+        "截图预览逻辑",
+        "删除任务交互"
+      ]
+    },
+    {
+      "module": "静态资源服务",
+      "scope": [
+        "ui_artifacts 目录挂载",
+        "调试截图访问",
+        "Trace 下载访问"
+      ]
+    },
+    {
+      "module": "测试工具箱",
+      "scope": [
+        "AES 加解密页面按钮视觉修复"
+      ]
+    }
+  ],
+  "notes": [
+    "本次版本属于围绕 UI 自动化持续排障后的集中整理版本，包含多轮问题修复与方案收敛，改动跨度较大但主题集中。",
+    "调试相关截图和 Trace 文件现存放于 backend/ui_artifacts 目录，部署时需确保该目录具备可写权限，并在清理策略上考虑磁盘占用。",
+    "若数据库中尚未补充 ui_automation_tasks.debug_mode 等新字段，升级后仍需按实际表结构执行手工迁移。",
+    "由于本轮按用户要求未统一执行前端 build 与后端命令校验，版本记录以实际代码修改结果和问题闭环为准。",
+    "截图显示修复依赖后端静态挂载与前端 artifact_path 预览同时生效，若仅部署单侧改动则问题可能仍会出现。"
+  ]
+}

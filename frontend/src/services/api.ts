@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { HttpTestRequest, HttpTestResponse, TcpTestRequest, TcpTestResponse, MqTestRequest, MqTestResponse, Project } from '../types';
 
-const API_BASE_URL =
-  process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const runtimeApiUrl =
+  typeof window !== 'undefined' ? (window as Window & { __RUNTIME_API_URL__?: string }).__RUNTIME_API_URL__ || '' : '';
+
+export const API_BASE_URL = runtimeApiUrl || (typeof window !== 'undefined' ? window.location.origin : '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -186,7 +188,26 @@ export const requirementApi = {
   generateTestCases: (id: number, model: string): Promise<any> => api.post(`/api/v1/requirements/${id}/generate-testcases`, { model }),
 };
 
-// AI 知识库 API
+// UI 自动化 API
+export const uiAutomationApi = {
+  listCases: (projectId?: number): Promise<any[]> => api.get('/api/v1/ui-automation/cases', { params: { project_id: projectId } }),
+  getCase: (caseId: number): Promise<any> => api.get(`/api/v1/ui-automation/cases/${caseId}`),
+  createCase: (data: any): Promise<any> => api.post('/api/v1/ui-automation/cases', data),
+  updateCase: (caseId: number, data: any): Promise<any> => api.put(`/api/v1/ui-automation/cases/${caseId}`, data),
+  deleteCase: (caseId: number): Promise<any> => api.delete(`/api/v1/ui-automation/cases/${caseId}`),
+  runCase: (caseId: number, data: { auto_start?: boolean; debug_mode?: boolean } = {}): Promise<any> =>
+    api.post(`/api/v1/ui-automation/cases/${caseId}/run`, data),
+  createTask: (data: any): Promise<any> => api.post('/api/v1/ui-automation/tasks', data),
+  listTasks: (limit = 20): Promise<any[]> => api.get('/api/v1/ui-automation/tasks', { params: { limit } }),
+  getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
+  startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
+  solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
+  generateSteps: (naturalLanguage: string): Promise<any> => api.post('/api/v1/ui-automation/generate-steps', { natural_language: naturalLanguage }),
+  pauseTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/pause`),
+  resumeTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/resume`),
+  deleteTask: (taskId: number): Promise<any> => api.delete(`/api/v1/ui-automation/tasks/${taskId}`),
+};
+
 export const aiApi = {
   getKnowledgeList: (): Promise<any> => api.get('/api/v1/ai/knowledge/list'),
   addKnowledgeDocument: (data: any): Promise<any> => api.post('/api/v1/ai/knowledge/add', data),
@@ -220,17 +241,6 @@ export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };
 
-export const uiAutomationApi = {
-  createTask: (data: any): Promise<any> => api.post('/api/v1/ui-automation/tasks', data),
-  listTasks: (limit = 20): Promise<any[]> => api.get('/api/v1/ui-automation/tasks', { params: { limit } }),
-  getTask: (taskId: number): Promise<any> => api.get(`/api/v1/ui-automation/tasks/${taskId}`),
-  startTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/start`),
-  solidifyTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/solidify`),
-  generateSteps: (naturalLanguage: string): Promise<any> => api.post('/api/v1/ui-automation/generate-steps', { natural_language: naturalLanguage }),
-  pauseTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/pause`),
-  resumeTask: (taskId: number): Promise<any> => api.post(`/api/v1/ui-automation/tasks/${taskId}/resume`),
-};
-
 export const authApi = {
   login: (data: { username: string; password: string }): Promise<any> => api.post('/api/v1/auth/login', data),
   me: (): Promise<any> => api.get('/api/v1/auth/me'),
@@ -238,5 +248,3 @@ export const authApi = {
 };
 
 export default api;
-
-

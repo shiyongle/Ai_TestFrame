@@ -422,36 +422,6 @@ const Requirements: React.FC = () => {
                   </div>
                 </div>
 
-                {/* AI Insights Section */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(0,122,255,0.05) 0%, rgba(88,86,214,0.05) 100%)', borderRadius: 12, padding: 20, border: '1px solid rgba(0,122,255,0.1)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                    <RobotFilled style={{ color: '#007AFF' }} />
-                    <Text strong style={{ color: '#007AFF' }}>AI 关联分析</Text>
-                  </div>
-                  <Text style={{ fontSize: 13, color: '#555' }}>
-                    该功能与 <Text code>支付网关模块</Text> 和 <Text code>用户钱包</Text> 有强依赖关系。
-                    建议补充对极端网络延迟情况下的边界测试用例。
-                  </Text>
-                  <Divider style={{ margin: '12px 0' }} />
-                  <Space split={<Divider type="vertical" />}>
-                    <Button type="link" size="small" style={{ padding: 0 }} onClick={handleGenerateTestCases}>生成测试用例</Button>
-                    <Button type="link" size="small" style={{ padding: 0 }}>检查一致性</Button>
-                  </Space>
-                </div>
-
-                <Divider />
-
-                <Tabs defaultActiveKey="1">
-                  <TabPane tab={<span><MessageOutlined /> 评论</span>} key="1">
-                    <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>暂无评论</div>
-                  </TabPane>
-                  <TabPane tab={<span><PaperClipOutlined /> 附件</span>} key="2">
-                    <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>暂无附件</div>
-                  </TabPane>
-                  <TabPane tab={<span><SyncOutlined /> 变更历史</span>} key="3">
-                    <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>暂无变更记录</div>
-                  </TabPane>
-                </Tabs>
 
               </div>
             </>

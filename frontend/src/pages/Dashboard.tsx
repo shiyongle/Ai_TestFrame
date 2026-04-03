@@ -49,15 +49,15 @@ const quickEntries = [
     color: 'linear-gradient(135deg, rgba(0,122,255,0.14) 0%, rgba(88,86,214,0.12) 100%)',
   },
   {
-    title: '数据仓库',
-    desc: '常用函数与业务样本管理',
+    title: '数据引擎',
+    desc: '模板内置函数与业务依赖数据管理',
     path: '/data-warehouse/functions',
     icon: <DatabaseOutlined />,
     tag: '推荐',
     color: 'linear-gradient(135deg, rgba(52,199,89,0.16) 0%, rgba(50,173,230,0.10) 100%)',
   },
   {
-    title: '版本管理',
+    title: '版本追踪',
     desc: '追踪版本周期与发布节点',
     path: '/versions',
     icon: <HistoryOutlined />,
@@ -65,7 +65,7 @@ const quickEntries = [
     color: 'linear-gradient(135deg, rgba(255,149,0,0.18) 0%, rgba(255,94,58,0.12) 100%)',
   },
   {
-    title: '系统设置',
+    title: '平台配置中心',
     desc: '全局配置与模型参数',
     path: '/settings',
     icon: <SettingOutlined />,
@@ -82,14 +82,14 @@ const quickEntries = [
   },
   {
     title: '测试计划',
-    desc: '计划编排与执行追踪',
+    desc: '测试计划编排与执行追踪',
     path: '/testcases/plans',
     icon: <ScheduleOutlined />,
     tag: '计划',
     color: 'linear-gradient(135deg, rgba(0,199,190,0.16) 0%, rgba(0,122,255,0.12) 100%)',
   },
   {
-    title: '接口测试用例',
+    title: '接口测试',
     desc: '接口用例维护与调试',
     path: '/testcases/interface',
     icon: <ApiOutlined />,
@@ -97,7 +97,7 @@ const quickEntries = [
     color: 'linear-gradient(135deg, rgba(90,200,250,0.16) 0%, rgba(0,122,255,0.10) 100%)',
   },
   {
-    title: '操作日志',
+    title: '操作审计日志',
     desc: '查看全局操作流水',
     path: '/operation-logs',
     icon: <HistoryOutlined />,

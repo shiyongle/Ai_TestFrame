@@ -486,12 +486,35 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+# UI 自动化用例表
+class UIAutomationCase(Base):
+    __tablename__ = "ui_automation_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), index=True)
+    target_url = Column(String(500), nullable=False)
+    auth_scheme = Column(String(30), nullable=False, default="none")
+    auth_payload = Column(JSON)
+    natural_language_steps = Column(JSON)
+    assertions = Column(JSON)
+    tags = Column(JSON)
+    status = Column(String(20), nullable=False, default="draft")
+    debug_mode = Column(Boolean, nullable=False, default=False)
+    last_run_status = Column(String(20))
+    last_run_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # UI 自动化任务表
 class UIAutomationTask(Base):
     __tablename__ = "ui_automation_tasks"
 
     id = Column(Integer, primary_key=True, index=True)
     task_no = Column(String(40), unique=True, nullable=False, index=True)
+    case_id = Column(Integer, ForeignKey("ui_automation_cases.id", ondelete="SET NULL"), index=True)
     name = Column(String(120), nullable=False)
     target_url = Column(String(500), nullable=False)
     auth_scheme = Column(String(30), nullable=False, default="none")
@@ -501,6 +524,7 @@ class UIAutomationTask(Base):
     status = Column(String(20), nullable=False, default="pending")  # pending, running, success, failed
     progress = Column(Integer, nullable=False, default=0)
     executor = Column(String(30), nullable=False, default="browser_use")
+    debug_mode = Column(Boolean, nullable=False, default=False)
     error_message = Column(Text)
     playwright_script = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
