@@ -9,6 +9,7 @@ import TestCases from './pages/TestCases';
 import HttpTest from './pages/HttpTest';
 import TcpTest from './pages/TcpTest';
 import MqTest from './pages/MqTest';
+import PerformanceTest from './pages/PerformanceTest';
 import Reports from './pages/Reports';
 import Versions from './pages/Versions';
 import IdGenerator from './pages/Tools/IdGenerator';
@@ -90,6 +91,7 @@ const AppLayout: React.FC = () => {
               <Route path="/test/http" element={<HttpTest />} />
               <Route path="/test/tcp" element={<TcpTest />} />
               <Route path="/test/mq" element={<MqTest />} />
+              <Route path="/test/performance" element={<PerformanceTest />} />
               <Route path="/rule-config" element={<RuleConfig />} />
               <Route path="/ai/knowledge" element={<AiKnowledge />} />
               <Route path="/tools/id-generator" element={<IdGenerator />} />

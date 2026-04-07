@@ -548,6 +548,112 @@ CREATE TABLE IF NOT EXISTS `ui_automation_artifacts` (
         ON DELETE CASCADE ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='UI自动化产物表';
 
+-- ==================== 性能测试表 ====================
+
+CREATE TABLE IF NOT EXISTS `performance_scenarios` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(150) NOT NULL,
+    `description` TEXT NULL,
+    `project_id` INT NULL,
+    `protocol` VARCHAR(20) NOT NULL DEFAULT 'http',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'draft',
+    `tags` JSON NULL,
+    `target_config` JSON NULL,
+    `steps` JSON NULL,
+    `variables` JSON NULL,
+    `environment_config` JSON NULL,
+    `load_profile` JSON NULL,
+    `assertions` JSON NULL,
+    `runtime_options` JSON NULL,
+    `last_run_status` VARCHAR(20) NULL,
+    `last_run_at` DATETIME NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY `ix_performance_scenarios_id` (`id`),
+    KEY `ix_performance_scenarios_project_id` (`project_id`),
+    CONSTRAINT `fk_performance_scenarios_project_id` FOREIGN KEY (`project_id`) REFERENCES `projects` (`id`)
+        ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='性能测试场景表';
+
+CREATE TABLE IF NOT EXISTS `performance_test_runs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `run_no` VARCHAR(40) NOT NULL,
+    `scenario_id` INT NOT NULL,
+    `scenario_name` VARCHAR(150) NOT NULL,
+    `protocol` VARCHAR(20) NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `stage` VARCHAR(30) NOT NULL DEFAULT 'created',
+    `trigger_source` VARCHAR(20) NOT NULL DEFAULT 'manual',
+    `load_profile` JSON NULL,
+    `target_config` JSON NULL,
+    `scenario_snapshot` JSON NULL,
+    `step_summary` JSON NULL,
+    `engine_metadata` JSON NULL,
+    `runtime_options` JSON NULL,
+    `assertions` JSON NULL,
+    `current_users` INT NOT NULL DEFAULT 0,
+    `target_users` INT NOT NULL DEFAULT 0,
+    `spawn_rate` DOUBLE NOT NULL DEFAULT 1,
+    `duration_seconds` INT NOT NULL DEFAULT 0,
+    `progress` INT NOT NULL DEFAULT 0,
+    `current_rps` DOUBLE NOT NULL DEFAULT 0,
+    `avg_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `p95_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `p99_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `error_rate` DOUBLE NOT NULL DEFAULT 0,
+    `worker_count` INT NOT NULL DEFAULT 1,
+    `summary` JSON NULL,
+    `error_message` TEXT NULL,
+    `started_at` DATETIME NULL,
+    `finished_at` DATETIME NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY `uk_performance_test_runs_run_no` (`run_no`),
+    KEY `ix_performance_test_runs_id` (`id`),
+    KEY `ix_performance_test_runs_run_no` (`run_no`),
+    KEY `ix_performance_test_runs_scenario_id` (`scenario_id`),
+    CONSTRAINT `fk_performance_test_runs_scenario_id` FOREIGN KEY (`scenario_id`) REFERENCES `performance_scenarios` (`id`)
+        ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='性能测试运行记录表';
+
+CREATE TABLE IF NOT EXISTS `performance_metric_points` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `run_id` INT NOT NULL,
+    `timestamp_offset` INT NOT NULL DEFAULT 0,
+    `active_users` INT NOT NULL DEFAULT 0,
+    `current_rps` DOUBLE NOT NULL DEFAULT 0,
+    `avg_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `p95_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `p99_response_time` DOUBLE NOT NULL DEFAULT 0,
+    `error_rate` DOUBLE NOT NULL DEFAULT 0,
+    `total_requests` INT NOT NULL DEFAULT 0,
+    `total_failures` INT NOT NULL DEFAULT 0,
+    `cpu_usage` DOUBLE NULL,
+    `memory_usage` DOUBLE NULL,
+    `worker_count` INT NOT NULL DEFAULT 1,
+    `spawned_users` INT NOT NULL DEFAULT 0,
+    `raw_data` JSON NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY `ix_performance_metric_points_id` (`id`),
+    KEY `ix_performance_metric_points_run_id` (`run_id`),
+    CONSTRAINT `fk_performance_metric_points_run_id` FOREIGN KEY (`run_id`) REFERENCES `performance_test_runs` (`id`)
+        ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='性能测试指标时序表';
+
+CREATE TABLE IF NOT EXISTS `performance_run_events` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `run_id` INT NOT NULL,
+    `stage` VARCHAR(30) NOT NULL,
+    `level` VARCHAR(20) NOT NULL DEFAULT 'info',
+    `message` VARCHAR(500) NOT NULL,
+    `payload` JSON NULL,
+    `event_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY `ix_performance_run_events_id` (`id`),
+    KEY `ix_performance_run_events_run_id` (`run_id`),
+    CONSTRAINT `fk_performance_run_events_run_id` FOREIGN KEY (`run_id`) REFERENCES `performance_test_runs` (`id`)
+        ON DELETE CASCADE ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='性能测试事件表';
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ==================== 基础初始化数据 ====================

@@ -208,6 +208,22 @@ export const uiAutomationApi = {
   deleteTask: (taskId: number): Promise<any> => api.delete(`/api/v1/ui-automation/tasks/${taskId}`),
 };
 
+// 性能测试 API
+export const performanceApi = {
+  getOverview: (projectId?: number): Promise<any> => api.get('/api/v1/performance/overview', { params: { project_id: projectId } }),
+  listScenarios: (projectId?: number): Promise<any[]> => api.get('/api/v1/performance/scenarios', { params: { project_id: projectId } }),
+  getScenario: (scenarioId: number): Promise<any> => api.get(`/api/v1/performance/scenarios/${scenarioId}`),
+  createScenario: (data: any): Promise<any> => api.post('/api/v1/performance/scenarios', data),
+  updateScenario: (scenarioId: number, data: any): Promise<any> => api.put(`/api/v1/performance/scenarios/${scenarioId}`, data),
+  deleteScenario: (scenarioId: number): Promise<any> => api.delete(`/api/v1/performance/scenarios/${scenarioId}`),
+  listRuns: (projectId?: number, limit = 20): Promise<any[]> => api.get('/api/v1/performance/runs', { params: { project_id: projectId, limit } }),
+  getRun: (runId: number): Promise<any> => api.get(`/api/v1/performance/runs/${runId}`),
+  createRun: (data: any): Promise<any> => api.post('/api/v1/performance/runs', data),
+  startRun: (runId: number): Promise<any> => api.post(`/api/v1/performance/runs/${runId}/start`),
+  stopRun: (runId: number): Promise<any> => api.post(`/api/v1/performance/runs/${runId}/stop`),
+  getTrend: (runId: number): Promise<any> => api.get(`/api/v1/performance/runs/${runId}/trend`),
+};
+
 export const aiApi = {
   getKnowledgeList: (): Promise<any> => api.get('/api/v1/ai/knowledge/list'),
   addKnowledgeDocument: (data: any): Promise<any> => api.post('/api/v1/ai/knowledge/add', data),

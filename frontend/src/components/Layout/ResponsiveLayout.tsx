@@ -8,6 +8,7 @@ import {
   BugOutlined,
   ApiOutlined,
   BarChartOutlined,
+  ThunderboltOutlined,
   ClockCircleOutlined,
   HistoryOutlined,
   SettingOutlined,
@@ -169,6 +170,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               label: 'MQ 测试',
             },
           ],
+        },
+        {
+          key: '/test/performance',
+          icon: <ThunderboltOutlined />,
+          label: '性能测试',
         },
         {
           key: '/automation',

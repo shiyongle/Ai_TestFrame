@@ -10,7 +10,7 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent
+from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent, performance
 from core.security import decode_access_token, ensure_default_admin
 from fastapi import HTTPException
 
@@ -173,6 +173,7 @@ try:
     app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
     app.include_router(ui_automation.router, prefix="/api/v1", tags=["ui_automation"])
     app.include_router(agent.router, prefix="/api/v1", tags=["agent"])
+    app.include_router(performance.router, prefix="/api/v1", tags=["performance"])
     main_logger.info("API路由注册成功")
 except Exception as e:
     main_logger.error(f"API路由注册失败: {str(e)}")

@@ -558,3 +558,101 @@ class UIAutomationArtifact(Base):
     artifact_path = Column(String(500))
     artifact_content = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# 性能测试场景表
+class PerformanceScenario(Base):
+    __tablename__ = "performance_scenarios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), index=True)
+    protocol = Column(String(20), nullable=False, default="http")
+    status = Column(String(20), nullable=False, default="draft")
+    tags = Column(JSON)
+    target_config = Column(JSON)
+    steps = Column(JSON)
+    variables = Column(JSON)
+    environment_config = Column(JSON)
+    load_profile = Column(JSON)
+    assertions = Column(JSON)
+    runtime_options = Column(JSON)
+    last_run_status = Column(String(20))
+    last_run_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 性能测试运行记录表
+class PerformanceTestRun(Base):
+    __tablename__ = "performance_test_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_no = Column(String(40), unique=True, nullable=False, index=True)
+    scenario_id = Column(Integer, ForeignKey("performance_scenarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    scenario_name = Column(String(150), nullable=False)
+    protocol = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    stage = Column(String(30), nullable=False, default="created")
+    trigger_source = Column(String(20), nullable=False, default="manual")
+    load_profile = Column(JSON)
+    target_config = Column(JSON)
+    scenario_snapshot = Column(JSON)
+    step_summary = Column(JSON)
+    engine_metadata = Column(JSON)
+    runtime_options = Column(JSON)
+    assertions = Column(JSON)
+    current_users = Column(Integer, nullable=False, default=0)
+    target_users = Column(Integer, nullable=False, default=0)
+    spawn_rate = Column(Float, nullable=False, default=1)
+    duration_seconds = Column(Integer, nullable=False, default=0)
+    progress = Column(Integer, nullable=False, default=0)
+    current_rps = Column(Float, nullable=False, default=0)
+    avg_response_time = Column(Float, nullable=False, default=0)
+    p95_response_time = Column(Float, nullable=False, default=0)
+    p99_response_time = Column(Float, nullable=False, default=0)
+    error_rate = Column(Float, nullable=False, default=0)
+    worker_count = Column(Integer, nullable=False, default=1)
+    summary = Column(JSON)
+    error_message = Column(Text)
+    started_at = Column(DateTime)
+    finished_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# 性能测试指标时序表
+class PerformanceMetricPoint(Base):
+    __tablename__ = "performance_metric_points"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("performance_test_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    timestamp_offset = Column(Integer, nullable=False, default=0)
+    active_users = Column(Integer, nullable=False, default=0)
+    current_rps = Column(Float, nullable=False, default=0)
+    avg_response_time = Column(Float, nullable=False, default=0)
+    p95_response_time = Column(Float, nullable=False, default=0)
+    p99_response_time = Column(Float, nullable=False, default=0)
+    error_rate = Column(Float, nullable=False, default=0)
+    total_requests = Column(Integer, nullable=False, default=0)
+    total_failures = Column(Integer, nullable=False, default=0)
+    cpu_usage = Column(Float)
+    memory_usage = Column(Float)
+    worker_count = Column(Integer, nullable=False, default=1)
+    spawned_users = Column(Integer, nullable=False, default=0)
+    raw_data = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# 性能测试事件表
+class PerformanceRunEvent(Base):
+    __tablename__ = "performance_run_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("performance_test_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    stage = Column(String(30), nullable=False)
+    level = Column(String(20), nullable=False, default="info")
+    message = Column(String(500), nullable=False)
+    payload = Column(JSON)
+    event_time = Column(DateTime, default=datetime.utcnow)
