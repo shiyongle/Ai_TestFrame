@@ -9,6 +9,7 @@ export interface Project {
 export interface AuthUser {
   id: number;
   username: string;
+  real_name?: string;
   role: string;
   is_active: boolean;
   created_at: string;

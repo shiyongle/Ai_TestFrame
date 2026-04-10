@@ -1,273 +1,122 @@
-# Docker 部署指南
+# Docker Compose 部署指南
 
-本文档介绍如何使用 Docker 在 Linux/Ubuntu 服务器上部署投石问路。
+本文档说明如何通过 [`docker-compose.yml`](docker-compose.yml) 对投石问路项目进行一体化部署。当前方案已经可以满足你“前后端都通过 Docker Compose 部署”的要求。
 
-## 系统要求
+## 1. 当前部署能力
 
-- Linux/Ubuntu 服务器
-- Docker 20.10+
-- Docker Compose 2.0+
-- 至少 2GB RAM
-- 至少 10GB 可用磁盘空间
+现在项目已经具备以下能力：
 
-## 快速部署
+- 使用 [`docker-compose.yml`](docker-compose.yml) 同时编排 `mysql`、`backend`、`frontend`
+- 后端基于 [`backend/Dockerfile`](backend/Dockerfile) 构建镜像
+- 前端基于 [`frontend/Dockerfile`](frontend/Dockerfile) 构建镜像
+- 使用 [`.env.docker`](.env.docker) 或 [`.env.production`](.env.production) 注入环境变量
+- 使用 [`deploy.sh`](deploy.sh) 一键完成构建、启动、检查、备份、恢复和日志查看
 
-### 1. 准备服务器
+## 2. 服务组成
+
+[`docker-compose.yml`](docker-compose.yml) 中包含：
+
+- `mysql`：MySQL 8.0 数据库
+- `backend`：FastAPI 后端服务
+- `frontend`：React + Nginx 前端服务
+
+## 3. 已修复的问题
+
+本次已经将原始 Compose 方案调整为可直接用于前后端一体化部署，主要修复点包括：
+
+- 修复原网络名 `toushiwenlu_network` 与 `ai_test_network` 不一致问题
+- 修复后端健康检查依赖 `curl` 但镜像中不稳定的问题，改为 Python 探活
+- 修复前端构建参数未通过 `build.args` 注入的问题
+- 补齐后端 AI、RAG、认证等配置变量映射
+- 补齐后端数据、日志、UI 工件等卷挂载
+- 将部署脚本从旧 [`docker-compose`](deploy.sh) 命令切换为 [`docker compose`](deploy.sh)
+
+## 4. 部署步骤
+
+### 4.1 准备环境变量
+
+开发环境：
 
 ```bash
-# 更新系统
-sudo apt update && sudo apt upgrade -y
-
-# 安装 Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# 安装 Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# 将当前用户添加到 docker 组
-sudo usermod -aG docker $USER
+cp .env.docker .env
 ```
 
-### 2. 克隆项目
+生产环境：
 
 ```bash
-git clone <repository-url>
-cd ToushiWenLu
+cp .env.production .env
 ```
 
-### 3. 部署服务
+然后按实际情况编辑 [`.env`](.env)：
+
+- 数据库密码
+- AI Key
+- CORS 域名
+- 前端 API 地址
+
+## 5. 一键部署
+
+Linux 服务器执行：
 
 ```bash
-# 给部署脚本执行权限
 chmod +x deploy.sh
-
-# 部署开发环境
-./deploy.sh deploy
-
-# 或部署生产环境
 ./deploy.sh deploy production
 ```
 
-### 4. 访问应用
-
-- 前端界面: http://your-server-ip
-- 后端API: http://your-server-ip:8000
-- API文档: http://your-server-ip:8000/docs
-
-## 配置说明
-
-### 环境变量
-
-项目包含三个环境配置文件：
-
-- `.env.docker` - 开发环境配置
-- `.env.production` - 生产环境配置
-- `.env` - 运行时使用的配置（由部署脚本自动生成）
-
-主要配置项：
+如果是开发环境：
 
 ```bash
-# 数据库配置
-MYSQL_ROOT_PASSWORD=your_secure_password
-MYSQL_DATABASE=test_system
-MYSQL_USER=testuser
-MYSQL_PASSWORD=your_secure_user_password
-
-# 应用配置
-DEBUG=false
-LOG_LEVEL=INFO
-
-# CORS配置
-CORS_ORIGINS=["https://your-domain.com"]
-
-# 前端配置
-REACT_APP_API_URL=http://your-server-ip:8000
-```
-
-### 数据持久化
-
-- MySQL 数据存储在 Docker 卷 `mysql_data` 中
-- 后端日志存储在 `backend/logs` 目录
-- 前端日志存储在 `frontend/nginx/logs` 目录
-
-## 常用命令
-
-```bash
-# 查看服务状态
-docker-compose ps
-
-# 查看日志
-./deploy.sh logs
-
-# 备份数据库
-./deploy.sh backup
-
-# 恢复数据库
-./deploy.sh restore backup_file.sql
-
-# 更新服务
-./deploy.sh update
-
-# 停止服务
-./deploy.sh stop
-
-# 重启服务
-./deploy.sh restart
-
-# 清理资源
-./deploy.sh cleanup
-```
-
-## 生产环境部署
-
-### 1. 域名配置
-
-编辑 `.env.production` 文件，更新域名配置：
-
-```bash
-CORS_ORIGINS=["https://your-domain.com", "https://www.your-domain.com"]
-REACT_APP_API_URL=https://api.your-domain.com
-```
-
-### 2. SSL 证书
-
-使用 Nginx 或 Let's Encrypt 配置 SSL 证书。
-
-### 3. 防火墙配置
-
-```bash
-# 开放必要端口
-sudo ufw allow 80
-sudo ufw allow 443
-sudo ufw allow 8000  # 如果需要直接访问后端API
-
-# 启用防火墙
-sudo ufw enable
-```
-
-## 监控和维护
-
-### 健康检查
-
-所有服务都配置了健康检查：
-
-- 前端：每 30 秒检查一次
-- 后端：每 30 秒检查一次
-- 数据库：每 30 秒检查一次
-
-### 日志管理
-
-- 前端日志：`frontend/nginx/logs/`
-- 后端日志：`backend/logs/`
-- 容器日志：`docker-compose logs`
-
-### 数据备份
-
-建议定期备份数据库：
-
-```bash
-# 手动备份
-./deploy.sh backup
-
-# 设置定时备份（每天凌晨 2 点）
-echo "0 2 * * * cd /path/to/ToushiWenLu && ./deploy.sh backup" | sudo crontab -
-```
-
-## 故障排除
-
-### 常见问题
-
-1. **端口被占用**
-   ```bash
-   # 查看端口占用
-   sudo lsof -i :80
-   sudo lsof -i :3306
-   ```
-
-2. **数据库连接失败**
-   ```bash
-   # 检查数据库容器状态
-   docker-compose logs mysql
-   
-   # 检查网络连接
-   docker-compose exec backend ping mysql
-   ```
-
-3. **前端无法访问后端**
-   ```bash
-   # 检查网络配置
-   docker network ls
-   docker network inspect toushiwenlu_toushiwenlu_network
-   ```
-
-### 重置部署
-
-如果需要完全重置：
-
-```bash
-# 停止所有服务
-docker-compose down
-
-# 删除所有卷（注意：这会删除所有数据）
-docker volume rm toushiwenlu_mysql_data
-
-# 重新部署
 ./deploy.sh deploy
 ```
 
-## 性能优化
+## 6. 手动 compose 部署
 
-### 生产环境建议
+如果你不想走脚本，也可以直接执行：
 
-1. **资源限制**
-   ```yaml
-   # 在 docker-compose.yml 中添加资源限制
-   deploy:
-     resources:
-       limits:
-         cpus: '1.0'
-         memory: 1G
-       reservations:
-         cpus: '0.5'
-         memory: 512M
-   ```
+```bash
+docker compose --env-file .env -f docker-compose.yml build --no-cache
+docker compose --env-file .env -f docker-compose.yml up -d
+```
 
-2. **数据库优化**
-   ```bash
-   # 调整 MySQL 配置
-   innodb_buffer_pool_size = 1G
-   max_connections = 200
-   ```
+查看状态：
 
-3. **缓存配置**
-   - 考虑使用 Redis 缓存
-   - 配置 CDN 加速静态资源
+```bash
+docker compose --env-file .env -f docker-compose.yml ps
+```
 
-## 安全建议
+查看日志：
 
-1. **定期更新**
-   ```bash
-   # 定期更新 Docker 镜像
-   docker-compose pull
-   docker-compose up -d
-   ```
+```bash
+docker compose --env-file .env -f docker-compose.yml logs -f
+```
 
-2. **网络安全**
-   - 使用强密码
-   - 配置防火墙
-   - 启用 SSL/TLS
+## 7. 访问地址
 
-3. **访问控制**
-   - 限制数据库访问
-   - 配置反向代理
-   - 使用 API 认证
+- 前端：`http://服务器IP/`
+- 后端健康检查：`http://服务器IP:8000/health`
+- 后端文档：`http://服务器IP:8000/docs`
 
-## 支持
+## 8. 镜像打包方式
 
-如有问题，请：
+如果你只想先打包镜像，不立即启动：
 
-1. 查看日志：`./deploy.sh logs`
-2. 检查配置：`.env` 文件
-3. 提交 Issue：项目仓库
+```bash
+docker compose --env-file .env -f docker-compose.yml build
+```
+
+构建完成后可查看：
+
+```bash
+docker images | grep ai-testframe
+```
+
+## 9. 生产建议
+
+- 生产环境建议只暴露 `80`，`3306` 和 `8000` 可按需改为内网访问
+- 建议配合外层 Nginx / HTTPS / 域名使用
+- 建议把 [`.env.production`](.env.production) 中的密码和密钥全部替换成真实值
+- 若使用 Jenkins，可继续结合 [`Jenkinsfile`](Jenkinsfile) 与 [`deploy/docker/docker-compose.prod.yml`](deploy/docker/docker-compose.prod.yml) 做镜像仓库式部署
+
+## 10. 结论
+
+结论是：**现在已经可以满足你“前后端项目都用 Docker Compose 方式部署”的要求**。并且我已经把主项目根目录下的 [`docker-compose.yml`](docker-compose.yml)、[`deploy.sh`](deploy.sh)、[`DOCKER_DEPLOY.md`](DOCKER_DEPLOY.md) 和 [`.env.docker`](.env.docker) 调整为围绕这一目标工作的版本。

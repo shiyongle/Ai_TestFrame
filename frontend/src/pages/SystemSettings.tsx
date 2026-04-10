@@ -9,28 +9,56 @@ import {
     Tabs,
     Divider,
     Alert,
-    Switch
+    Switch,
+    Table,
+    Modal,
+    Popconfirm,
+    Space
 } from 'antd';
 import {
     SettingOutlined,
     SaveOutlined,
     RobotOutlined,
     SafetyCertificateOutlined,
-    NotificationOutlined
+    NotificationOutlined,
+    TeamOutlined,
+    PlusOutlined,
+    EditOutlined,
+    DeleteOutlined
 } from '@ant-design/icons';
-import { systemApi } from '../services/api';
+import { authStorage, systemApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
+interface ManagedUser {
+    id: number;
+    username: string;
+    real_name?: string;
+    role: string;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
 const SystemSettings: React.FC = () => {
     const [aiForm] = Form.useForm();
     const [webhookForm] = Form.useForm();
+    const [userForm] = Form.useForm();
     const [loading, setLoading] = useState(false);
+    const [usersLoading, setUsersLoading] = useState(false);
+    const [users, setUsers] = useState<ManagedUser[]>([]);
+    const [userModalOpen, setUserModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+    const currentUser = authStorage.getUser();
+    const isSuperAdmin = currentUser?.role === 'super_admin';
 
     useEffect(() => {
         loadSettings();
-    }, []);
+        if (isSuperAdmin) {
+            loadUsers();
+        }
+    }, [isSuperAdmin]);
 
     const loadSettings = async () => {
         setLoading(true);
@@ -95,6 +123,82 @@ const SystemSettings: React.FC = () => {
             message.error('保存失败');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadUsers = async () => {
+        setUsersLoading(true);
+        try {
+            const userList = await systemApi.getUsers();
+            setUsers(userList || []);
+        } catch (error: any) {
+            message.error(error?.response?.data?.detail || '加载用户列表失败');
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
+    const openCreateUserModal = () => {
+        setEditingUser(null);
+        userForm.resetFields();
+        setUserModalOpen(true);
+    };
+
+    const openEditUserModal = (user: ManagedUser) => {
+        setEditingUser(user);
+        userForm.setFieldsValue({
+            username: user.username,
+            real_name: user.real_name,
+            password: '',
+        });
+        setUserModalOpen(true);
+    };
+
+    const handleCloseUserModal = () => {
+        setUserModalOpen(false);
+        setEditingUser(null);
+        userForm.resetFields();
+    };
+
+    const handleSaveUser = async () => {
+        try {
+            const values = await userForm.validateFields();
+            setUsersLoading(true);
+            if (editingUser) {
+                await systemApi.updateUser(editingUser.id, {
+                    username: values.username,
+                    real_name: values.real_name,
+                    password: values.password || undefined,
+                });
+                message.success('用户更新成功');
+            } else {
+                await systemApi.createUser({
+                    username: values.username,
+                    real_name: values.real_name,
+                    password: values.password,
+                });
+                message.success('用户创建成功');
+            }
+            handleCloseUserModal();
+            loadUsers();
+        } catch (error: any) {
+            if (error?.errorFields) {
+                return;
+            }
+            message.error(error?.response?.data?.detail || '保存用户失败');
+            setUsersLoading(false);
+        }
+    };
+
+    const handleDeleteUser = async (user: ManagedUser) => {
+        setUsersLoading(true);
+        try {
+            await systemApi.deleteUser(user.id);
+            message.success('用户删除成功');
+            loadUsers();
+        } catch (error: any) {
+            message.error(error?.response?.data?.detail || '删除用户失败');
+            setUsersLoading(false);
         }
     };
 
@@ -194,6 +298,130 @@ const SystemSettings: React.FC = () => {
             ]
         }
     ];
+
+    const userManagementTab = {
+        key: 'users',
+        label: <span><TeamOutlined /> 用户管理</span>,
+        children: (
+            <div style={{ padding: '0 24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                    <div>
+                        <Title level={4} style={{ marginBottom: 8 }}><TeamOutlined /> 平台用户管理</Title>
+                        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                            维护系统登录账号。新增或修改后会立即生效；删除用户后，该账号将无法再使用用户名和密码登录。
+                        </Paragraph>
+                    </div>
+                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreateUserModal} style={{ borderRadius: 8 }}>
+                        新增用户
+                    </Button>
+                </div>
+
+                <Alert
+                    message="管理说明"
+                    description="当前页签仅超级管理员可见。新增用户默认以普通用户身份创建，但可以正常登录和使用系统。"
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 24, borderRadius: 8 }}
+                />
+
+                <Card bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
+                    <Table
+                        rowKey="id"
+                        loading={usersLoading}
+                        dataSource={users}
+                        pagination={{ pageSize: 8, showSizeChanger: false }}
+                        columns={[
+                            { title: '用户名', dataIndex: 'username', key: 'username' },
+                            {
+                                title: '真实姓名',
+                                dataIndex: 'real_name',
+                                key: 'real_name',
+                                render: (value: string) => value || '-',
+                            },
+                            { title: '角色', dataIndex: 'role', key: 'role' },
+                            {
+                                title: '状态',
+                                dataIndex: 'is_active',
+                                key: 'is_active',
+                                render: (value: boolean) => value ? '启用' : '停用',
+                            },
+                            {
+                                title: '创建时间',
+                                dataIndex: 'created_at',
+                                key: 'created_at',
+                                render: (value: string) => value ? value.replace('T', ' ').slice(0, 19) : '-',
+                            },
+                            {
+                                title: '操作',
+                                key: 'actions',
+                                width: 180,
+                                render: (_: any, record: ManagedUser) => (
+                                    <Space size="small">
+                                        <Button type="link" icon={<EditOutlined />} onClick={() => openEditUserModal(record)}>
+                                            编辑
+                                        </Button>
+                                        <Popconfirm
+                                            title="确认删除该用户吗？"
+                                            description="删除后该账号将无法继续登录系统。"
+                                            okText="删除"
+                                            cancelText="取消"
+                                            onConfirm={() => handleDeleteUser(record)}
+                                        >
+                                            <Button type="link" danger icon={<DeleteOutlined />} disabled={record.id === currentUser?.id}>
+                                                删除
+                                            </Button>
+                                        </Popconfirm>
+                                    </Space>
+                                ),
+                            },
+                        ]}
+                    />
+                </Card>
+
+                <Modal
+                    title={editingUser ? '编辑用户' : '新增用户'}
+                    open={userModalOpen}
+                    onCancel={handleCloseUserModal}
+                    onOk={handleSaveUser}
+                    confirmLoading={usersLoading}
+                    destroyOnHidden
+                    okText={editingUser ? '保存' : '创建'}
+                    cancelText="取消"
+                >
+                    <Form form={userForm} layout="vertical">
+                        <Form.Item
+                            label="用户名"
+                            name="username"
+                            rules={[
+                                { required: true, message: '请输入用户名' },
+                                { max: 50, message: '用户名长度不能超过 50' },
+                            ]}
+                        >
+                            <Input placeholder="请输入登录用户名" />
+                        </Form.Item>
+                        <Form.Item
+                            label="真实姓名"
+                            name="real_name"
+                            rules={[
+                                { required: true, message: '请输入真实姓名' },
+                                { max: 100, message: '真实姓名长度不能超过 100' },
+                            ]}
+                        >
+                            <Input placeholder="请输入真实姓名" />
+                        </Form.Item>
+                        <Form.Item
+                            label="密码"
+                            name="password"
+                            rules={editingUser ? [] : [{ required: true, message: '请输入密码' }]}
+                            extra={editingUser ? '留空表示不修改密码' : '创建后用户可使用该用户名和密码登录'}
+                        >
+                            <Input.Password placeholder={editingUser ? '不修改则留空' : '请输入登录密码'} />
+                        </Form.Item>
+                    </Form>
+                </Modal>
+            </div>
+        )
+    };
 
     return (
         <div className="app-content fade-in" style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
@@ -337,6 +565,7 @@ const SystemSettings: React.FC = () => {
                         </div>
                             )
                         },
+                        ...(isSuperAdmin ? [userManagementTab] : []),
                         {
                             key: 'webhook',
                             label: <span><NotificationOutlined /> Webhook 通知配置</span>,

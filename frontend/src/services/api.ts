@@ -239,6 +239,10 @@ export const aiApi = {
 export const systemApi = {
   getSettings: (category: string): Promise<any> => api.get(`/api/v1/system/settings/${category}`),
   updateSettings: (category: string, data: any): Promise<any> => api.put(`/api/v1/system/settings/${category}`, data),
+  getUsers: (): Promise<any[]> => api.get('/api/v1/system/users'),
+  createUser: (data: { username: string; password: string; real_name: string }): Promise<any> => api.post('/api/v1/system/users', data),
+  updateUser: (id: number, data: { username: string; password?: string; real_name: string }): Promise<any> => api.put(`/api/v1/system/users/${id}`, data),
+  deleteUser: (id: number): Promise<any> => api.delete(`/api/v1/system/users/${id}`),
 };
 
 // 仪表盘 API

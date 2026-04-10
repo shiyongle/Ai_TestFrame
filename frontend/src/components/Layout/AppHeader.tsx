@@ -117,7 +117,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ onMobileMenuClick, isMobile = fal
         <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenuClick }} placement="bottomRight">
           <Space style={{ cursor: 'pointer' }}>
             <Avatar icon={<UserOutlined />} />
-            {!isMobile && <Text>{currentUser?.username || '管理员'}</Text>}
+            {!isMobile && <Text>{currentUser?.real_name || currentUser?.username || '管理员'}</Text>}
           </Space>
         </Dropdown>
       </Space>

@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config.settings import settings
@@ -78,6 +79,7 @@ def decode_access_token(token: str) -> Dict[str, Any]:
 
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
+    ensure_user_schema(db)
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:
         return None
@@ -87,6 +89,7 @@ def authenticate_user(db: Session, username: str, password: str) -> Optional[Use
 
 
 def get_user_by_token(db: Session, token: str) -> User:
+    ensure_user_schema(db)
     payload = decode_access_token(token)
     user = db.query(User).filter(User.id == payload.get("user_id")).first()
     if not user or not user.is_active:
@@ -95,9 +98,13 @@ def get_user_by_token(db: Session, token: str) -> User:
 
 
 def ensure_default_admin(db: Session) -> User:
+    ensure_user_schema(db)
     admin = db.query(User).filter(User.username == "admin").first()
     if admin:
         updated = False
+        if admin.real_name != "系统管理员":
+            admin.real_name = "系统管理员"
+            updated = True
         if admin.role != "super_admin":
             admin.role = "super_admin"
             updated = True
@@ -113,6 +120,7 @@ def ensure_default_admin(db: Session) -> User:
     admin = User(
         username="admin",
         password_hash=hash_password("admin"),
+        real_name="系统管理员",
         role="super_admin",
         is_active=True,
     )
@@ -126,3 +134,24 @@ async def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = sec
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未提供认证信息")
     return decode_access_token(credentials.credentials)
+
+
+def ensure_user_schema(db: Session) -> None:
+    """补齐 users 表的增量字段，避免无迁移场景下启动失败。"""
+    statements = [
+        (
+            "real_name",
+            "ALTER TABLE users ADD COLUMN real_name VARCHAR(100) NULL AFTER password_hash",
+        ),
+    ]
+    for column_name, ddl in statements:
+        exists = db.execute(
+            text(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = :column_name"
+            ),
+            {"column_name": column_name},
+        ).scalar()
+        if not exists:
+            db.execute(text(ddl))
+            db.commit()

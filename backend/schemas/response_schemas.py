@@ -27,6 +27,7 @@ class LoginRequest(BaseModel):
 class UserProfileResponse(ORMModel):
     id: int
     username: str
+    real_name: Optional[str] = None
     role: str
     is_active: bool
     created_at: datetime
