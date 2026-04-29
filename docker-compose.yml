@@ -1,5 +1,10 @@
 version: '3.9'
 
+# 推荐宿主机规格：
+# - 最低可跑：2 vCPU / 4 GB RAM
+# - 推荐生产：4 vCPU / 8 GB RAM
+# - 若频繁使用 UI 自动化 / 性能测试 / RAG 导入：8 vCPU / 16 GB RAM
+
 services:
   mysql:
     image: mysql:8.0
@@ -13,6 +18,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-testpass}
     ports:
       - "3306:3306"
+    cpus: "${MYSQL_CPUS:-1.0}"
+    mem_limit: "${MYSQL_MEM_LIMIT:-1g}"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./backend/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql:ro
@@ -64,6 +71,9 @@ services:
       WORKFLOW_MAX_CONCURRENT: ${WORKFLOW_MAX_CONCURRENT:-10}
     ports:
       - "8000:8000"
+    cpus: "${BACKEND_CPUS:-2.0}"
+    mem_limit: "${BACKEND_MEM_LIMIT:-4g}"
+    shm_size: "${BACKEND_SHM_SIZE:-1gb}"
     volumes:
       - backend_logs:/app/logs
       - backend_data:/app/data
@@ -91,6 +101,8 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+    cpus: "${FRONTEND_CPUS:-0.5}"
+    mem_limit: "${FRONTEND_MEM_LIMIT:-256m}"
     depends_on:
       backend:
         condition: service_healthy

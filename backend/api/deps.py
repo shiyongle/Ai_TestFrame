@@ -15,6 +15,7 @@ from services.test_plan_service import TestPlanService
 from services.webhook_service import WebhookService, webhook_service
 from services.ui_automation_service import UIAutomationService
 from services.performance_locust_service import PerformanceLocustService
+from services.agent_evaluation_service import AgentEvaluationService, agent_evaluation_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -57,3 +58,8 @@ def get_ui_automation_service() -> UIAutomationService:
 def get_performance_service() -> PerformanceLocustService:
     """获取性能测试服务实例"""
     return PerformanceLocustService()
+
+
+def get_agent_evaluation_service() -> AgentEvaluationService:
+    """获取 Agent 评测服务实例"""
+    return agent_evaluation_service

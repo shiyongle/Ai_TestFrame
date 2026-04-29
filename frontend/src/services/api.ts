@@ -261,6 +261,13 @@ export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };
 
+export const agentEvaluationApi = {
+  getProviders: (): Promise<{ providers: string[] }> => api.get('/api/v1/agent-evaluation/providers'),
+  listRuns: (limit = 20): Promise<any[]> => api.get('/api/v1/agent-evaluation/runs', { params: { limit } }),
+  getRun: (runId: number): Promise<any> => api.get(`/api/v1/agent-evaluation/runs/${runId}`),
+  createRun: (data: any): Promise<any> => api.post('/api/v1/agent-evaluation/runs', data),
+};
+
 export const authApi = {
   login: (data: { username: string; password: string }): Promise<any> => api.post('/api/v1/auth/login', data),
   me: (): Promise<any> => api.get('/api/v1/auth/me'),

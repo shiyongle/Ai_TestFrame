@@ -657,3 +657,47 @@ class PerformanceRunEvent(Base):
     message = Column(String(500), nullable=False)
     payload = Column(JSON)
     event_time = Column(DateTime, default=datetime.utcnow)
+
+
+# Agent 评测运行记录表
+class AgentEvaluationRun(Base):
+    __tablename__ = "agent_evaluation_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    provider = Column(String(50), nullable=False)
+    model = Column(String(100))
+    status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
+    total_count = Column(Integer, nullable=False, default=0)
+    valid_count = Column(Integer, nullable=False, default=0)
+    invalid_count = Column(Integer, nullable=False, default=0)
+    failed_count = Column(Integer, nullable=False, default=0)
+    valid_rate = Column(Float, nullable=False, default=0)
+    failure_rate = Column(Float, nullable=False, default=0)
+    summary = Column(JSON)
+    error_message = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+
+    items = relationship("AgentEvaluationItem", back_populates="run", cascade="all, delete-orphan")
+
+
+# Agent 评测明细表
+class AgentEvaluationItem(Base):
+    __tablename__ = "agent_evaluation_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("agent_evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    expected_answer = Column(Text)
+    actual_answer = Column(Text)
+    status = Column(String(20), nullable=False, default="pending")  # pending, valid, invalid, failed
+    score = Column(Float, nullable=False, default=0)
+    reason = Column(Text)
+    error_message = Column(Text)
+    latency_ms = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+
+    run = relationship("AgentEvaluationRun", back_populates="items")

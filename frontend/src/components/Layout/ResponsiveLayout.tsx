@@ -31,6 +31,7 @@ import {
   AppstoreOutlined,
   ScheduleOutlined,
   FolderOpenOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import CabbageIcon from '../common/CabbageIcon';
 
@@ -175,6 +176,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           key: '/test/performance',
           icon: <ThunderboltOutlined />,
           label: '性能测试',
+        },
+        {
+          key: '/agent-evaluation',
+          icon: <ExperimentOutlined />,
+          label: 'Agent 评测',
         },
         {
           key: '/automation',

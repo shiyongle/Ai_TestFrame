@@ -32,6 +32,7 @@ import BusinessData from './pages/DataWarehouse/BusinessData';
 import OperationLogs from './pages/OperationLogs';
 import UiAutomation from './pages/ApiAutomation/UIAutomation';
 import Login from './pages/Login';
+import AgentEvaluation from './pages/AgentEvaluation';
 import { authStorage } from './services/api';
 
 const { Content } = Layout;
@@ -92,6 +93,7 @@ const AppLayout: React.FC = () => {
               <Route path="/test/tcp" element={<TcpTest />} />
               <Route path="/test/mq" element={<MqTest />} />
               <Route path="/test/performance" element={<PerformanceTest />} />
+              <Route path="/agent-evaluation" element={<AgentEvaluation />} />
               <Route path="/rule-config" element={<RuleConfig />} />
               <Route path="/ai/knowledge" element={<AiKnowledge />} />
               <Route path="/tools/id-generator" element={<IdGenerator />} />
