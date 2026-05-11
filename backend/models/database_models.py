@@ -659,19 +659,176 @@ class PerformanceRunEvent(Base):
     event_time = Column(DateTime, default=datetime.utcnow)
 
 
-# Agent 评测运行记录表
+# 模型配置表（Agent评测专用，支持多模型切换）
+class ModelConfig(Base):
+    __tablename__ = "model_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider = Column(String(50), nullable=False)  # openai, bailian, glm, deepseek, siliconflow
+    name = Column(String(100), nullable=False)  # 配置名称
+    api_key = Column(Text, nullable=False)
+    base_url = Column(String(500), nullable=False)
+    model = Column(String(100), nullable=False)  # 具体模型名称
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    extraction_templates = relationship("ExtractionTemplate", back_populates="model_config")
+    recognition_templates = relationship("RecognitionTemplate", back_populates="model_config")
+    agent_evaluation_templates = relationship("AgentEvaluationTemplate", back_populates="model_config")
+
+
+# 黄金测试集表
+class GoldenDataset(Base):
+    """黄金测试集"""
+    __tablename__ = "golden_datasets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    tags = Column(JSON)  # 标签列表
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship("GoldenDatasetItem", back_populates="dataset", cascade="all, delete-orphan")
+
+
+# 黄金测试集条目表
+class GoldenDatasetItem(Base):
+    """黄金测试集中的单条 Q&A"""
+    __tablename__ = "golden_dataset_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    dataset_id = Column(Integer, ForeignKey("golden_datasets.id", ondelete="CASCADE"), nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    expected_answer = Column(Text, nullable=False)
+    category = Column(String(100))  # 分类标签
+    priority = Column(String(20), default="medium")  # high, medium, low
+    tags = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    dataset = relationship("GoldenDataset", back_populates="items")
+
+
+# 被测 Agent 配置表（支持 Dify 和通用 HTTP API）
+class DifyAgent(Base):
+    __tablename__ = "dify_agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    agent_type = Column(String(20), nullable=False, default="dify")  # dify, http_api
+    base_url = Column(String(500), nullable=False)
+    app_id = Column(String(100), nullable=False, default="")  # Dify 专用
+    api_key = Column(String(255))
+    request_config = Column(JSON)  # 通用 HTTP Agent 配置: {headers, answer_path, method, body_template}
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    bad_cases = relationship("BadCase", back_populates="agent", cascade="all, delete-orphan")
+
+
+# BadCase（不良案例）表
+class BadCase(Base):
+    __tablename__ = "bad_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("dify_agents.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id = Column(String(100))
+    remark = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    agent = relationship("DifyAgent", back_populates="bad_cases")
+    turns = relationship("BadCaseTurn", back_populates="bad_case", cascade="all, delete-orphan")
+
+
+# BadCaseTurn（不良案例轮次）表
+class BadCaseTurn(Base):
+    __tablename__ = "bad_case_turns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bad_case_id = Column(Integer, ForeignKey("bad_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    message_id = Column(String(100))
+    query = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    expected_answer = Column(Text)
+    evaluation_score = Column(Integer)  # LLM评测得分
+    evaluation_reason = Column(Text)  # LLM评测原因
+    evaluation_id = Column(Integer, ForeignKey("agent_evaluations.id"))  # 关联的评测记录
+    rerun_answer = Column(Text)  # 重跑后的回答
+    rerun_score = Column(Integer)  # 重跑后评测得分
+    rerun_reason = Column(Text)  # 重跑后评测原因
+    rerun_evaluation_id = Column(Integer, ForeignKey("agent_evaluations.id"))  # 重跑关联评测
+    remark = Column(Text)
+    turn_index = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    bad_case = relationship("BadCase", back_populates="turns")
+
+
+# Agent 评测模板表
+class AgentEvaluationTemplate(Base):
+    __tablename__ = "agent_evaluation_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    system_prompt = Column(Text)
+    user_prompt = Column(Text, nullable=False)  # 支持 {{query}}, {{expected_answer}}, {{answer}} 变量
+    eval_mode = Column(String(20), nullable=False, default="f1")  # f1, llm
+    model_config_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    pass_threshold = Column(Float, default=0.55)  # f1模式通过阈值
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    model_config = relationship("ModelConfig", back_populates="agent_evaluation_templates")
+    evaluations = relationship("AgentEvaluation", back_populates="template", cascade="all, delete-orphan")
+
+
+# Agent 评测记录表（单条评测，对应xapp的AgentEvaluation）
+class AgentEvaluation(Base):
+    __tablename__ = "agent_evaluations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("agent_evaluation_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    bad_case_turn_id = Column(Integer, ForeignKey("bad_case_turns.id"), index=True)  # 可关联BadCaseTurn
+    query = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    expected_answer = Column(Text)
+    extracted_items = Column(Text)  # LLM提取的结构化评测项
+    evaluation_result = Column(Text)  # LLM原始评测结果
+    score = Column(Float, default=0)
+    reason = Column(Text)
+    status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
+    error_message = Column(Text)
+    latency_ms = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    template = relationship("AgentEvaluationTemplate", back_populates="evaluations")
+
+
+# Agent 评测运行记录表（批量评测，保留原有结构并增强）
 class AgentEvaluationRun(Base):
     __tablename__ = "agent_evaluation_runs"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(150), nullable=False)
-    provider = Column(String(50), nullable=False)
+    dataset_id = Column(Integer, ForeignKey("golden_datasets.id"), index=True)  # 关联黄金测试集
+    agent_id = Column(Integer, ForeignKey("dify_agents.id"), index=True)  # 关联被测 Agent
+    template_id = Column(Integer, ForeignKey("agent_evaluation_templates.id"), index=True)  # 关联评测模板
+    eval_mode = Column(String(20), nullable=False, default="f1")  # f1, llm
+    provider = Column(String(50), nullable=False, default="")  # 兼容旧数据
     model = Column(String(100))
+    model_config_id = Column(Integer, ForeignKey("model_configs.id"))  # 关联模型配置
     status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
     total_count = Column(Integer, nullable=False, default=0)
     valid_count = Column(Integer, nullable=False, default=0)
     invalid_count = Column(Integer, nullable=False, default=0)
     failed_count = Column(Integer, nullable=False, default=0)
+    human_override_count = Column(Integer, nullable=False, default=0)
     valid_rate = Column(Float, nullable=False, default=0)
     failure_rate = Column(Float, nullable=False, default=0)
     summary = Column(JSON)
@@ -681,23 +838,99 @@ class AgentEvaluationRun(Base):
     completed_at = Column(DateTime)
 
     items = relationship("AgentEvaluationItem", back_populates="run", cascade="all, delete-orphan")
+    template = relationship("AgentEvaluationTemplate")
+    dataset = relationship("GoldenDataset")
+    agent = relationship("DifyAgent")
 
 
-# Agent 评测明细表
+# Agent 评测明细表（批量评测中的单条，保留原有结构并增强）
 class AgentEvaluationItem(Base):
     __tablename__ = "agent_evaluation_items"
 
     id = Column(Integer, primary_key=True, index=True)
     run_id = Column(Integer, ForeignKey("agent_evaluation_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    dataset_item_id = Column(Integer, ForeignKey("golden_dataset_items.id"), index=True)  # 关联黄金测试集条目
+    evaluation_id = Column(Integer, ForeignKey("agent_evaluations.id"), index=True)  # 可关联单条评测
     question = Column(Text, nullable=False)
     expected_answer = Column(Text)
     actual_answer = Column(Text)
+    evaluation_result = Column(Text)  # LLM原始评测结果（llm模式）
     status = Column(String(20), nullable=False, default="pending")  # pending, valid, invalid, failed
     score = Column(Float, nullable=False, default=0)
     reason = Column(Text)
     error_message = Column(Text)
     latency_ms = Column(Integer, nullable=False, default=0)
+    human_override = Column(Boolean, nullable=False, default=False)  # 是否有人工标注
+    human_label = Column(String(20))  # correct, incorrect
+    human_comment = Column(Text)  # 人工标注备注
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime)
 
     run = relationship("AgentEvaluationRun", back_populates="items")
+
+
+# 知识提取模板表
+class ExtractionTemplate(Base):
+    __tablename__ = "extraction_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    system_prompt = Column(Text)
+    user_prompt = Column(Text, nullable=False)
+    model_config_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    model_config = relationship("ModelConfig", back_populates="extraction_templates")
+    extractions = relationship("Extraction", back_populates="template", cascade="all, delete-orphan")
+
+
+# 知识提取记录表
+class Extraction(Base):
+    __tablename__ = "extractions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("extraction_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    input_text = Column(Text, nullable=False)
+    output_text = Column(Text)
+    status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    template = relationship("ExtractionTemplate", back_populates="extractions")
+
+
+# 知识识别模板表
+class RecognitionTemplate(Base):
+    __tablename__ = "recognition_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    system_prompt = Column(Text)
+    user_prompt = Column(Text, nullable=False)
+    model_config_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    model_config = relationship("ModelConfig", back_populates="recognition_templates")
+    recognitions = relationship("Recognition", back_populates="template", cascade="all, delete-orphan")
+
+
+# 知识识别记录表
+class Recognition(Base):
+    __tablename__ = "recognitions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("recognition_templates.id", ondelete="CASCADE"), nullable=False, index=True)
+    input_text = Column(Text, nullable=False)
+    scoring_items = Column(Text)  # 评分项
+    output_text = Column(Text)
+    status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    template = relationship("RecognitionTemplate", back_populates="recognitions")

@@ -13,6 +13,10 @@ import {
   ToolOutlined,
   IdcardOutlined,
   MobileOutlined,
+  RobotOutlined,
+  FileTextOutlined,
+  AlertOutlined,
+  ControlOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -21,8 +25,6 @@ const AppSider: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-
-  console.log('AppSider rendered, collapsed:', collapsed);
 
   const menuItems = [
     {
@@ -34,6 +36,33 @@ const AppSider: React.FC = () => {
       key: '/projects',
       icon: <ProjectOutlined />,
       label: '项目管理',
+    },
+    {
+      key: 'agent-eval',
+      icon: <RobotOutlined />,
+      label: 'Agent评测',
+      children: [
+        {
+          key: '/agent-evaluation',
+          icon: <ApiOutlined />,
+          label: '评测运行',
+        },
+        {
+          key: '/agent-evaluation/templates',
+          icon: <FileTextOutlined />,
+          label: '评测模板',
+        },
+        {
+          key: '/agent-evaluation/badcases',
+          icon: <AlertOutlined />,
+          label: 'BadCase管理',
+        },
+        {
+          key: '/agent-evaluation/model-configs',
+          icon: <ControlOutlined />,
+          label: '模型配置',
+        },
+      ],
     },
     {
       key: 'tools',
@@ -99,8 +128,6 @@ const AppSider: React.FC = () => {
   ];
 
   const handleMenuClick = ({ key }: { key: string }) => {
-    console.log('Menu clicked:', key);
-    console.log('Current openKeys:', openKeys);
     navigate(key);
   };
 
@@ -116,29 +143,23 @@ const AppSider: React.FC = () => {
     if (location.pathname.startsWith('/tools')) {
       openKeys.push('tools');
     }
-    if (location.pathname.startsWith('/rule-config')) {
+    if (location.pathname.startsWith('/agent-evaluation')) {
+      openKeys.push('agent-eval');
+    }
+    if (location.pathname.startsWith('/rule-config') || location.pathname.startsWith('/settings')) {
       openKeys.push('settings');
     }
     return openKeys;
   };
 
-  const [openKeys, setOpenKeys] = useState<string[]>(['test', 'tools', 'settings']); // 默认展开工具箱、接口测试和系统设置
+  const [openKeys, setOpenKeys] = useState<string[]>(['test', 'tools', 'settings', 'agent-eval']);
 
-  // 监听路由变化，动态更新菜单展开状态
   React.useEffect(() => {
     const newOpenKeys = getOpenKeys();
-    console.log('Route changed to:', location.pathname, 'Setting openKeys to:', newOpenKeys);
-    // 确保工具箱菜单始终可见
-    if (!newOpenKeys.includes('tools')) {
-      newOpenKeys.push('tools');
-    }
     setOpenKeys(newOpenKeys);
   }, [location.pathname]);
 
-  // 处理菜单展开/收起
   const handleOpenChange = (keys: string[]) => {
-    console.log('Menu openChange:', keys);
-    // 确保工具箱菜单始终可以展开
     setOpenKeys(keys);
   };
 

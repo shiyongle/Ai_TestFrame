@@ -16,6 +16,10 @@ from services.webhook_service import WebhookService, webhook_service
 from services.ui_automation_service import UIAutomationService
 from services.performance_locust_service import PerformanceLocustService
 from services.agent_evaluation_service import AgentEvaluationService, agent_evaluation_service
+from services.model_config_service import ModelConfigService, model_config_service
+from services.badcase_service import DifyAgentService, dify_agent_service, BadCaseService, bad_case_service
+from services.evaluation_template_service import EvaluationTemplateService, evaluation_template_service
+from services.golden_dataset_service import GoldenDatasetService, golden_dataset_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -63,3 +67,23 @@ def get_performance_service() -> PerformanceLocustService:
 def get_agent_evaluation_service() -> AgentEvaluationService:
     """获取 Agent 评测服务实例"""
     return agent_evaluation_service
+
+
+def get_model_config_service() -> ModelConfigService:
+    """获取模型配置服务实例"""
+    return model_config_service
+
+
+def get_dify_agent_service() -> DifyAgentService:
+    """获取 DifyAgent 管理服务实例"""
+    return dify_agent_service
+
+
+def get_bad_case_service() -> BadCaseService:
+    """获取 BadCase 管理服务实例"""
+    return bad_case_service
+
+
+def get_evaluation_template_service() -> EvaluationTemplateService:
+    """获取评测模板管理服务实例"""
+    return evaluation_template_service

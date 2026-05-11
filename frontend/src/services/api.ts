@@ -262,10 +262,81 @@ export const agentApi = {
 };
 
 export const agentEvaluationApi = {
-  getProviders: (): Promise<{ providers: string[] }> => api.get('/api/v1/agent-evaluation/providers'),
+  getProviders: (): Promise<any> => api.get('/api/v1/agent-evaluation/providers'),
   listRuns: (limit = 20): Promise<any[]> => api.get('/api/v1/agent-evaluation/runs', { params: { limit } }),
   getRun: (runId: number): Promise<any> => api.get(`/api/v1/agent-evaluation/runs/${runId}`),
   createRun: (data: any): Promise<any> => api.post('/api/v1/agent-evaluation/runs', data),
+  deleteRun: (runId: number): Promise<any> => api.delete(`/api/v1/agent-evaluation/runs/${runId}`),
+  updateHumanLabel: (itemId: number, data: { human_label: string; human_comment?: string }): Promise<any> =>
+    api.put(`/api/v1/agent-evaluation/items/${itemId}/human-label`, data),
+  clearHumanLabel: (itemId: number): Promise<any> =>
+    api.delete(`/api/v1/agent-evaluation/items/${itemId}/human-label`),
+};
+
+export const goldenDatasetApi = {
+  list: (params?: { keyword?: string; limit?: number; offset?: number }): Promise<any> =>
+    api.get('/api/v1/golden-datasets', { params }),
+  get: (id: number): Promise<any> => api.get(`/api/v1/golden-datasets/${id}`),
+  create: (data: any): Promise<any> => api.post('/api/v1/golden-datasets', data),
+  update: (id: number, data: any): Promise<any> => api.put(`/api/v1/golden-datasets/${id}`, data),
+  delete: (id: number): Promise<any> => api.delete(`/api/v1/golden-datasets/${id}`),
+  addItems: (datasetId: number, items: any[]): Promise<any> =>
+    api.post(`/api/v1/golden-datasets/${datasetId}/items`, items),
+  updateItem: (itemId: number, data: any): Promise<any> =>
+    api.put(`/api/v1/golden-dataset-items/${itemId}`, data),
+  deleteItem: (itemId: number): Promise<any> =>
+    api.delete(`/api/v1/golden-dataset-items/${itemId}`),
+};
+
+// 模型配置管理 API
+export const modelConfigApi = {
+  listConfigs: (enabledOnly = false): Promise<any[]> => api.get('/api/v1/model-configs', { params: { enabled_only: enabledOnly } }),
+  getConfig: (configId: number): Promise<any> => api.get(`/api/v1/model-configs/${configId}`),
+  createConfig: (data: any): Promise<any> => api.post('/api/v1/model-configs', data),
+  updateConfig: (configId: number, data: any): Promise<any> => api.put(`/api/v1/model-configs/${configId}`, data),
+  deleteConfig: (configId: number): Promise<any> => api.delete(`/api/v1/model-configs/${configId}`),
+  getProviders: (): Promise<any> => api.get('/api/v1/model-configs/providers'),
+};
+
+// DifyAgent 管理 API
+export const difyAgentApi = {
+  listAgents: (): Promise<any[]> => api.get('/api/v1/dify-agents'),
+  getAgent: (agentId: number): Promise<any> => api.get(`/api/v1/dify-agents/${agentId}`),
+  createAgent: (data: any): Promise<any> => api.post('/api/v1/dify-agents', data),
+  updateAgent: (agentId: number, data: any): Promise<any> => api.put(`/api/v1/dify-agents/${agentId}`, data),
+  deleteAgent: (agentId: number): Promise<any> => api.delete(`/api/v1/dify-agents/${agentId}`),
+};
+
+// BadCase 管理 API
+export const badCaseApi = {
+  listBadCases: (params?: { agent_id?: number; limit?: number; offset?: number }): Promise<any[]> =>
+    api.get('/api/v1/bad-cases', { params }),
+  getBadCase: (caseId: number): Promise<any> => api.get(`/api/v1/bad-cases/${caseId}`),
+  createBadCase: (data: any): Promise<any> => api.post('/api/v1/bad-cases', data),
+  updateBadCase: (caseId: number, data: any): Promise<any> => api.put(`/api/v1/bad-cases/${caseId}`, data),
+  deleteBadCase: (caseId: number): Promise<any> => api.delete(`/api/v1/bad-cases/${caseId}`),
+  updateTurn: (turnId: number, data: any): Promise<any> => api.put(`/api/v1/bad-case-turns/${turnId}`, data),
+  deleteTurn: (turnId: number): Promise<any> => api.delete(`/api/v1/bad-case-turns/${turnId}`),
+  evaluateTurn: (turnId: number, templateId: number): Promise<any> =>
+    api.post(`/api/v1/bad-case-turns/${turnId}/evaluate`, { template_id: templateId }),
+};
+
+// 评测模板管理 API
+export const evaluationTemplateApi = {
+  listTemplates: (params?: { keyword?: string; limit?: number; offset?: number }): Promise<any[]> =>
+    api.get('/api/v1/evaluation-templates', { params }),
+  getTemplate: (templateId: number): Promise<any> => api.get(`/api/v1/evaluation-templates/${templateId}`),
+  createTemplate: (data: any): Promise<any> => api.post('/api/v1/evaluation-templates', data),
+  updateTemplate: (templateId: number, data: any): Promise<any> => api.put(`/api/v1/evaluation-templates/${templateId}`, data),
+  deleteTemplate: (templateId: number): Promise<any> => api.delete(`/api/v1/evaluation-templates/${templateId}`),
+};
+
+// 单条评测 API
+export const agentEvaluationRecordApi = {
+  listEvaluations: (params?: { template_id?: number; limit?: number; offset?: number }): Promise<any[]> =>
+    api.get('/api/v1/agent-evaluations', { params }),
+  getEvaluation: (evaluationId: number): Promise<any> => api.get(`/api/v1/agent-evaluations/${evaluationId}`),
+  createEvaluation: (data: any): Promise<any> => api.post('/api/v1/agent-evaluations', data),
 };
 
 export const authApi = {

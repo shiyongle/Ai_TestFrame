@@ -178,9 +178,36 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           label: '性能测试',
         },
         {
-          key: '/agent-evaluation',
+          key: 'agent-eval',
           icon: <ExperimentOutlined />,
           label: 'Agent 评测',
+          children: [
+            {
+              key: '/agent-evaluation',
+              icon: <ExperimentOutlined />,
+              label: '评测执行',
+            },
+            {
+              key: '/agent-evaluation/golden-datasets',
+              icon: <DatabaseOutlined />,
+              label: '黄金测试集',
+            },
+            {
+              key: '/agent-evaluation/badcases',
+              icon: <ExperimentOutlined />,
+              label: '被测Agent管理',
+            },
+            {
+              key: '/agent-evaluation/templates',
+              icon: <FileTextOutlined />,
+              label: '评测模板',
+            },
+            {
+              key: '/agent-evaluation/model-configs',
+              icon: <SettingOutlined />,
+              label: '模型配置',
+            },
+          ],
         },
         {
           key: '/automation',
@@ -321,6 +348,9 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     }
     if (currentPath.startsWith('/testcases')) {
       openKeys.push('testcases');
+    }
+    if (currentPath.startsWith('/agent-evaluation')) {
+      openKeys.push('agent-eval');
     }
     if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {
       openKeys.push('automation');
