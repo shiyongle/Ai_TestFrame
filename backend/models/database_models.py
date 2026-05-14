@@ -819,10 +819,11 @@ class AgentEvaluationRun(Base):
     dataset_id = Column(Integer, ForeignKey("golden_datasets.id"), index=True)  # 关联黄金测试集
     agent_id = Column(Integer, ForeignKey("dify_agents.id"), index=True)  # 关联被测 Agent
     template_id = Column(Integer, ForeignKey("agent_evaluation_templates.id"), index=True)  # 关联评测模板
-    eval_mode = Column(String(20), nullable=False, default="f1")  # f1, llm
+    eval_mode = Column(String(20), nullable=False, default="f1")  # f1, llm, semantic, multi_judge, rouge, bleu
     provider = Column(String(50), nullable=False, default="")  # 兼容旧数据
     model = Column(String(100))
     model_config_id = Column(Integer, ForeignKey("model_configs.id"))  # 关联模型配置
+    baseline_run_id = Column(Integer, index=True)  # 回归测试基线
     status = Column(String(20), nullable=False, default="pending")  # pending, running, completed, failed
     total_count = Column(Integer, nullable=False, default=0)
     valid_count = Column(Integer, nullable=False, default=0)
@@ -831,6 +832,9 @@ class AgentEvaluationRun(Base):
     human_override_count = Column(Integer, nullable=False, default=0)
     valid_rate = Column(Float, nullable=False, default=0)
     failure_rate = Column(Float, nullable=False, default=0)
+    avg_cost = Column(Float, nullable=False, default=0)  # 平均成本
+    avg_latency_ms = Column(Float, nullable=False, default=0)  # 平均延迟
+    total_tokens = Column(Integer, nullable=False, default=0)  # 总token消耗
     summary = Column(JSON)
     error_message = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -860,6 +864,12 @@ class AgentEvaluationItem(Base):
     reason = Column(Text)
     error_message = Column(Text)
     latency_ms = Column(Integer, nullable=False, default=0)
+    cost = Column(Float, nullable=False, default=0)  # 本次评测成本
+    tokens = Column(Integer, nullable=False, default=0)  # token消耗
+    semantic_score = Column(Float)  # 语义相似度分数
+    rouge_score = Column(Float)  # ROUGE-L分数
+    bleu_score = Column(Float)  # BLEU分数
+    multi_judge_scores = Column(JSON)  # 多模型评分 {"gpt-4": 0.9, "claude": 0.85}
     human_override = Column(Boolean, nullable=False, default=False)  # 是否有人工标注
     human_label = Column(String(20))  # correct, incorrect
     human_comment = Column(Text)  # 人工标注备注

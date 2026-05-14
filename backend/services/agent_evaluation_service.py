@@ -1,6 +1,7 @@
 """
 Agent评测服务（重构版）
-支持：黄金测试集关联 → 调用被测Agent → LLM-as-Judge语义评判 → 人工标注覆盖
+支持：黄金测试集关联 → 调用被测Agent → 多种评测模式 → 人工标注覆盖
+评测模式：F1、LLM-as-Judge、语义相似度、ROUGE、BLEU、多模型交叉验证
 """
 
 import asyncio
@@ -30,6 +31,13 @@ from schemas.agent_evaluation_schemas import (
     AgentEvaluationRunCreate,
 )
 from services.ai.llm_client import llm_client
+from services.advanced_evaluators import (
+    SemanticEvaluator,
+    RougeEvaluator,
+    BleuEvaluator,
+    MultiJudgeEvaluator,
+    CostCalculator,
+)
 
 
 INVALID_ANSWER_PATTERNS = [
@@ -164,6 +172,13 @@ def render_prompt(template_str: str, variables: Dict[str, str]) -> str:
 
 
 class AgentEvaluationService:
+
+    def __init__(self):
+        """初始化评测器"""
+        self.semantic_evaluator = SemanticEvaluator()
+        self.rouge_evaluator = RougeEvaluator()
+        self.bleu_evaluator = BleuEvaluator()
+        self.multi_judge_evaluator = MultiJudgeEvaluator(llm_client)
 
     # ---- 被测 Agent 调用 ----
 
@@ -505,20 +520,53 @@ class AgentEvaluationService:
 
             item.actual_answer = answer
 
-            # Step 2: 评判
+            # Step 2: 评判（支持多种评测模式）
             if eval_mode == "llm":
                 await self._judge_item_llm(
                     db, item, answer=answer, template=template,
                     model_config=model_config, provider=provider, model=model,
                     max_tokens=max_tokens, pass_threshold=pass_threshold,
                 )
-            else:
+            elif eval_mode == "semantic":
+                score, reason, metadata = self.semantic_evaluator.evaluate(answer, item.expected_answer or "")
+                item.score = score
+                item.semantic_score = score
+                item.status = "valid" if score >= pass_threshold else "invalid"
+                item.reason = reason
+            elif eval_mode == "rouge":
+                score, reason, metadata = self.rouge_evaluator.evaluate(answer, item.expected_answer or "")
+                item.score = score
+                item.rouge_score = score
+                item.status = "valid" if score >= pass_threshold else "invalid"
+                item.reason = reason
+            elif eval_mode == "bleu":
+                score, reason, metadata = self.bleu_evaluator.evaluate(answer, item.expected_answer or "")
+                item.score = score
+                item.bleu_score = score
+                item.status = "valid" if score >= pass_threshold else "invalid"
+                item.reason = reason
+            elif eval_mode == "multi_judge":
+                await self._judge_item_multi_judge(
+                    db, item, answer=answer, template=template,
+                    model_config=model_config, provider=provider, model=model,
+                    max_tokens=max_tokens, pass_threshold=pass_threshold,
+                )
+            else:  # f1 或其他默认使用 F1
                 score, status, reason = self.evaluate_answer_f1(answer, item.expected_answer, pass_threshold)
                 item.score = score
                 item.status = status
                 item.reason = reason
 
+            # Step 3: 计算成本和延迟
             item.latency_ms = int((time.perf_counter() - started) * 1000)
+
+            # 估算 token 和成本
+            if model:
+                input_tokens = CostCalculator.estimate_tokens(item.question + (item.expected_answer or ""))
+                output_tokens = CostCalculator.estimate_tokens(answer)
+                item.tokens = input_tokens + output_tokens
+                item.cost = CostCalculator.calculate_cost(model, input_tokens, output_tokens)
+
             item.completed_at = datetime.utcnow()
             db.commit()
         except Exception as exc:
@@ -594,6 +642,53 @@ class AgentEvaluationService:
             {"raw": judge_output, "dimensions": dimensions},
             ensure_ascii=False,
         ) if dimensions else judge_output
+
+    async def _judge_item_multi_judge(
+        self, db: Session, item: AgentEvaluationItem, *, answer: str,
+        template: Optional[AgentEvaluationTemplate], model_config: Optional[ModelConfig],
+        provider: str, model: Optional[str], max_tokens: int, pass_threshold: float,
+    ) -> None:
+        """多模型交叉验证评判"""
+        if template:
+            system_prompt = template.system_prompt or ""
+            user_prompt = render_prompt(
+                template.user_prompt,
+                {"query": item.question, "expected_answer": item.expected_answer or "", "answer": answer},
+            )
+        else:
+            system_prompt = (
+                "你是一个专业的AI回答质量评估专家。请从多个维度评估AI回答的质量。\n"
+                "请严格以JSON格式返回：\n"
+                "{\n"
+                '  "score": <0到1的综合分数>,\n'
+                '  "reason": <一句话评估理由>\n'
+                "}"
+            )
+            user_prompt = (
+                f"问题：{item.question}\n"
+                f"期望答案：{item.expected_answer or '无'}\n"
+                f"实际回答：{answer}\n\n"
+                f"请评估实际回答的质量。"
+            )
+
+        # 构建完整提示词
+        full_prompt = user_prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+        # 使用多模型评判
+        score, reason, metadata = await self.multi_judge_evaluator.evaluate(
+            answer=answer,
+            expected=item.expected_answer or "",
+            template_prompt=full_prompt,
+            parse_func=parse_llm_eval_result
+        )
+
+        item.score = score
+        item.reason = reason
+        item.status = "valid" if score >= pass_threshold else "invalid"
+        item.multi_judge_scores = metadata.get("scores", {})
+        item.evaluation_result = json.dumps(metadata, ensure_ascii=False)
 
     # ---- 人工标注 ----
 
@@ -879,7 +974,7 @@ class AgentEvaluationService:
         1. 基础统计：总数、通过、不通过、失败、待处理
         2. 人工标注统计：人工覆盖数量
         3. 分类统计：按category分组统计
-        4. 性能统计：平均延迟
+        4. 性能统计：平均延迟、平均成本、总token消耗
         """
         run = self.get_run(db, run_id)
         if not run:
@@ -899,6 +994,8 @@ class AgentEvaluationService:
         }
 
         latencies = []
+        costs = []
+        tokens_list = []
         category_stats = {}
 
         for item in items:
@@ -921,6 +1018,14 @@ class AgentEvaluationService:
             # 延迟统计
             if item.latency_ms:
                 latencies.append(item.latency_ms)
+
+            # 成本统计
+            if hasattr(item, 'cost') and item.cost:
+                costs.append(item.cost)
+
+            # Token统计
+            if hasattr(item, 'tokens') and item.tokens:
+                tokens_list.append(item.tokens)
 
             # 分类统计
             cat = self._get_item_category(db, item)
@@ -950,13 +1055,21 @@ class AgentEvaluationService:
         run.failure_rate = round((stats["invalid"] + stats["failed"]) / total * 100, 2) if total else 0
         run.status = "completed" if finished == total else "running"
 
+        # 成本和性能统计
+        run.avg_latency_ms = round(sum(latencies) / len(latencies), 1) if latencies else 0
+        run.avg_cost = round(sum(costs) / len(costs), 6) if costs else 0
+        run.total_tokens = sum(tokens_list)
+
         if run.status == "completed":
             run.completed_at = datetime.utcnow()
 
         # 更新summary
         run.summary = {
             **(run.summary or {}),
-            "avg_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0,
+            "avg_latency_ms": run.avg_latency_ms,
+            "avg_cost": run.avg_cost,
+            "total_tokens": run.total_tokens,
+            "total_cost": round(sum(costs), 4) if costs else 0,
             "category_stats": category_stats,
         }
 
@@ -1006,6 +1119,29 @@ class AgentEvaluationService:
         except Exception:
             pass
 
+        # 基线对比
+        baseline_comparison = None
+        if hasattr(run, 'baseline_run_id') and run.baseline_run_id:
+            try:
+                from core.database import SessionLocal
+                baseline_db = SessionLocal()
+                try:
+                    baseline_run = baseline_db.query(AgentEvaluationRun).filter(
+                        AgentEvaluationRun.id == run.baseline_run_id
+                    ).first()
+                    if baseline_run:
+                        baseline_comparison = {
+                            "baseline_id": baseline_run.id,
+                            "baseline_name": baseline_run.name,
+                            "valid_rate_diff": round(run.valid_rate - baseline_run.valid_rate, 2),
+                            "avg_latency_diff": round(run.avg_latency_ms - baseline_run.avg_latency_ms, 1),
+                            "avg_cost_diff": round(run.avg_cost - baseline_run.avg_cost, 6),
+                        }
+                finally:
+                    baseline_db.close()
+            except Exception:
+                pass
+
         return {
             "id": run.id,
             "name": run.name,
@@ -1018,6 +1154,8 @@ class AgentEvaluationService:
             "provider": run.provider or "",
             "model": run.model,
             "model_config_id": run.model_config_id,
+            "baseline_run_id": getattr(run, "baseline_run_id", None),
+            "baseline_comparison": baseline_comparison,
             "status": run.status,
             "total_count": run.total_count,
             "valid_count": run.valid_count,
@@ -1026,6 +1164,9 @@ class AgentEvaluationService:
             "human_override_count": getattr(run, "human_override_count", 0) or 0,
             "valid_rate": run.valid_rate,
             "failure_rate": run.failure_rate,
+            "avg_cost": getattr(run, "avg_cost", 0) or 0,
+            "avg_latency_ms": getattr(run, "avg_latency_ms", 0) or 0,
+            "total_tokens": getattr(run, "total_tokens", 0) or 0,
             "summary": run.summary,
             "error_message": run.error_message,
             "created_at": run.created_at,
@@ -1047,6 +1188,12 @@ class AgentEvaluationService:
             "reason": item.reason,
             "error_message": item.error_message,
             "latency_ms": item.latency_ms,
+            "cost": getattr(item, "cost", 0) or 0,
+            "tokens": getattr(item, "tokens", 0) or 0,
+            "semantic_score": getattr(item, "semantic_score", None),
+            "rouge_score": getattr(item, "rouge_score", None),
+            "bleu_score": getattr(item, "bleu_score", None),
+            "multi_judge_scores": getattr(item, "multi_judge_scores", None),
             "human_override": getattr(item, "human_override", False) or False,
             "human_label": getattr(item, "human_label", None),
             "human_comment": getattr(item, "human_comment", None),

@@ -25,6 +25,12 @@ interface EvaluationItem {
   reason?: string;
   error_message?: string;
   latency_ms: number;
+  cost?: number;
+  tokens?: number;
+  semantic_score?: number;
+  rouge_score?: number;
+  bleu_score?: number;
+  multi_judge_scores?: Record<string, number>;
   human_override: boolean;
   human_label?: string;
   human_comment?: string;
@@ -41,6 +47,14 @@ interface EvaluationRun {
   eval_mode: string;
   provider: string;
   model?: string;
+  baseline_run_id?: number;
+  baseline_comparison?: {
+    baseline_id: number;
+    baseline_name: string;
+    valid_rate_diff: number;
+    avg_latency_diff: number;
+    avg_cost_diff: number;
+  };
   status: string;
   total_count: number;
   valid_count: number;
@@ -49,6 +63,9 @@ interface EvaluationRun {
   human_override_count: number;
   valid_rate: number;
   failure_rate: number;
+  avg_cost?: number;
+  avg_latency_ms?: number;
+  total_tokens?: number;
   summary?: Record<string, any>;
   error_message?: string;
   created_at: string;
@@ -72,6 +89,10 @@ const statusMap: Record<string, { color: string; label: string }> = {
 const evalModeMap: Record<string, { color: string; label: string }> = {
   f1: { color: 'blue', label: 'F1 关键词' },
   llm: { color: 'purple', label: 'LLM 语义' },
+  semantic: { color: 'cyan', label: '语义相似度' },
+  rouge: { color: 'green', label: 'ROUGE-L' },
+  bleu: { color: 'orange', label: 'BLEU' },
+  multi_judge: { color: 'magenta', label: '多模型交叉验证' },
 };
 
 const AgentEvaluation: React.FC = () => {
@@ -237,6 +258,7 @@ const AgentEvaluation: React.FC = () => {
       render: (t, r) => t || r.error_message || '-',
     },
     { title: '耗时', dataIndex: 'latency_ms', width: 80, render: (v) => `${v || 0}ms` },
+    { title: '成本', dataIndex: 'cost', width: 80, render: (v) => v ? `$${v.toFixed(4)}` : '-' },
     { title: '操作', width: 160, fixed: 'right' as const,
       render: (_, record) => {
         if (record.status === 'pending' || record.status === 'failed') return '-';
@@ -344,8 +366,23 @@ const AgentEvaluation: React.FC = () => {
                 </Form.Item>
                 <Form.Item name="eval_mode" label="评测模式" rules={[{ required: true }]}>
                   <Select>
-                    <Select.Option value="llm"><Space><Tag color="purple">LLM</Tag> 语义评判</Space></Select.Option>
                     <Select.Option value="f1"><Space><Tag color="blue">F1</Tag> 关键词覆盖</Space></Select.Option>
+                    <Select.Option value="llm"><Space><Tag color="purple">LLM</Tag> 语义评判</Space></Select.Option>
+                    <Select.Option value="semantic"><Space><Tag color="cyan">语义</Tag> 语义相似度</Space></Select.Option>
+                    <Select.Option value="rouge"><Space><Tag color="green">ROUGE</Tag> ROUGE-L</Space></Select.Option>
+                    <Select.Option value="bleu"><Space><Tag color="orange">BLEU</Tag> BLEU-4</Space></Select.Option>
+                    <Select.Option value="multi_judge"><Space><Tag color="magenta">多模型</Tag> 交叉验证</Space></Select.Option>
+                  </Select>
+                </Form.Item>
+                <Form.Item name="baseline_run_id" label={
+                  <Space>回归基线<Tooltip title="选择历史评测作为基线，用于对比性能变化"><InfoCircleOutlined /></Tooltip></Space>
+                }>
+                  <Select placeholder="选择基线评测（可选）" allowClear>
+                    {runs.filter(r => r.status === 'completed').map(r => (
+                      <Select.Option key={r.id} value={r.id}>
+                        {r.name} (通过率: {r.valid_rate}%)
+                      </Select.Option>
+                    ))}
                   </Select>
                 </Form.Item>
                 <Form.Item name="model_config_id" label="裁判模型配置">
@@ -396,6 +433,42 @@ const AgentEvaluation: React.FC = () => {
                         <Col xs={8} md={4}><Statistic title="通过率" value={activeRun.valid_rate} suffix="%" /></Col>
                         <Col xs={8} md={4}><Statistic title="人工覆盖" value={activeRun.human_override_count} valueStyle={{ color: '#1677ff' }} /></Col>
                       </Row>
+                      {(activeRun.avg_latency_ms || activeRun.avg_cost || activeRun.total_tokens) && (
+                        <Row gutter={16} style={{ marginTop: 8 }}>
+                          {(activeRun.avg_latency_ms ?? 0) > 0 && (
+                            <Col xs={8} md={6}><Statistic title="平均延迟" value={activeRun.avg_latency_ms} suffix="ms" precision={1} /></Col>
+                          )}
+                          {(activeRun.avg_cost ?? 0) > 0 && (
+                            <Col xs={8} md={6}><Statistic title="平均成本" value={activeRun.avg_cost} prefix="$" precision={4} /></Col>
+                          )}
+                          {(activeRun.total_tokens ?? 0) > 0 && (
+                            <Col xs={8} md={6}><Statistic title="总Token" value={activeRun.total_tokens} /></Col>
+                          )}
+                          {(activeRun.summary?.total_cost ?? 0) > 0 && (
+                            <Col xs={8} md={6}><Statistic title="总成本" value={activeRun.summary?.total_cost ?? 0} prefix="$" precision={4} /></Col>
+                          )}
+                        </Row>
+                      )}
+                      {activeRun.baseline_comparison && (
+                        <Card size="small" title="📊 基线对比" style={{ marginTop: 8 }}>
+                          <Space direction="vertical" size={4}>
+                            <Text>基线: {activeRun.baseline_comparison.baseline_name}</Text>
+                            <Text>通过率变化: <strong style={{ color: activeRun.baseline_comparison.valid_rate_diff >= 0 ? '#52c41a' : '#ff4d4f' }}>
+                              {activeRun.baseline_comparison.valid_rate_diff >= 0 ? '+' : ''}{activeRun.baseline_comparison.valid_rate_diff}%
+                            </strong></Text>
+                            {activeRun.baseline_comparison.avg_latency_diff !== 0 && (
+                              <Text>延迟变化: <strong style={{ color: activeRun.baseline_comparison.avg_latency_diff <= 0 ? '#52c41a' : '#ff4d4f' }}>
+                                {activeRun.baseline_comparison.avg_latency_diff >= 0 ? '+' : ''}{activeRun.baseline_comparison.avg_latency_diff}ms
+                              </strong></Text>
+                            )}
+                            {activeRun.baseline_comparison.avg_cost_diff !== 0 && (
+                              <Text>成本变化: <strong style={{ color: activeRun.baseline_comparison.avg_cost_diff <= 0 ? '#52c41a' : '#ff4d4f' }}>
+                                {activeRun.baseline_comparison.avg_cost_diff >= 0 ? '+$' : '-$'}{Math.abs(activeRun.baseline_comparison.avg_cost_diff).toFixed(4)}
+                              </strong></Text>
+                            )}
+                          </Space>
+                        </Card>
+                      )}
                       {activeRun.error_message && <Paragraph type="danger">{activeRun.error_message}</Paragraph>}
                     </Space>
                   ) : (
@@ -431,9 +504,25 @@ const AgentEvaluation: React.FC = () => {
             <Card size="small" title="实际回答"><Paragraph>{detailItem.actual_answer || '无'}</Paragraph></Card>
             <Card size="small" title="评判结果">
               <Space direction="vertical" size={4}>
-                <Text>得分：<strong>{Number(detailItem.score || 0).toFixed(2)}</strong></Text>
+                <Text>综合得分：<strong>{Number(detailItem.score || 0).toFixed(2)}</strong></Text>
+                {detailItem.semantic_score && <Text>语义相似度：<strong>{detailItem.semantic_score.toFixed(3)}</strong></Text>}
+                {detailItem.rouge_score && <Text>ROUGE-L：<strong>{detailItem.rouge_score.toFixed(3)}</strong></Text>}
+                {detailItem.bleu_score && <Text>BLEU-4：<strong>{detailItem.bleu_score.toFixed(3)}</strong></Text>}
+                {detailItem.multi_judge_scores && (
+                  <div>
+                    <Text>多模型评分：</Text>
+                    {Object.entries(detailItem.multi_judge_scores).map(([model, score]) => (
+                      <div key={model} style={{ marginLeft: 16 }}>
+                        <Text>{model}: <strong>{typeof score === 'number' ? score.toFixed(3) : '失败'}</strong></Text>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <Text>自动判定：<Tag color={statusMap[detailItem.status]?.color}>{statusMap[detailItem.status]?.label}</Tag></Text>
                 <Text>原因：{detailItem.reason || '-'}</Text>
+                {(detailItem.latency_ms ?? 0) > 0 && <Text>耗时：{detailItem.latency_ms}ms</Text>}
+                {detailItem.cost && detailItem.cost > 0 && <Text>成本：${detailItem.cost.toFixed(4)}</Text>}
+                {detailItem.tokens && detailItem.tokens > 0 && <Text>Token：{detailItem.tokens}</Text>}
                 {detailItem.human_override && (
                   <Text>人工标注：<Tag color={detailItem.human_label === 'correct' ? 'cyan' : 'magenta'}>
                     {detailItem.human_label === 'correct' ? '✓ 正确' : '✗ 错误'}
