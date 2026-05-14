@@ -263,14 +263,30 @@ export const agentApi = {
 
 export const agentEvaluationApi = {
   getProviders: (): Promise<any> => api.get('/api/v1/agent-evaluation/providers'),
-  listRuns: (limit = 20): Promise<any[]> => api.get('/api/v1/agent-evaluation/runs', { params: { limit } }),
-  getRun: (runId: number): Promise<any> => api.get(`/api/v1/agent-evaluation/runs/${runId}`),
-  createRun: (data: any): Promise<any> => api.post('/api/v1/agent-evaluation/runs', data),
-  deleteRun: (runId: number): Promise<any> => api.delete(`/api/v1/agent-evaluation/runs/${runId}`),
-  updateHumanLabel: (itemId: number, data: { human_label: string; human_comment?: string }): Promise<any> =>
-    api.put(`/api/v1/agent-evaluation/items/${itemId}/human-label`, data),
-  clearHumanLabel: (itemId: number): Promise<any> =>
-    api.delete(`/api/v1/agent-evaluation/items/${itemId}/human-label`),
+  listRuns: async (limit = 20): Promise<any[]> => {
+    const response = await api.get('/api/v1/agent-evaluation/runs', { params: { limit } });
+    return response.data || [];
+  },
+  getRun: async (runId: number): Promise<any> => {
+    const response = await api.get(`/api/v1/agent-evaluation/runs/${runId}`);
+    return response.data;
+  },
+  createRun: async (data: any): Promise<any> => {
+    const response = await api.post('/api/v1/agent-evaluation/runs', data);
+    return response.data;
+  },
+  deleteRun: async (runId: number): Promise<any> => {
+    const response = await api.delete(`/api/v1/agent-evaluation/runs/${runId}`);
+    return response;
+  },
+  updateHumanLabel: async (itemId: number, data: { human_label: string; human_comment?: string }): Promise<any> => {
+    const response = await api.put(`/api/v1/agent-evaluation/items/${itemId}/human-label`, data);
+    return response.data;
+  },
+  clearHumanLabel: async (itemId: number): Promise<any> => {
+    const response = await api.delete(`/api/v1/agent-evaluation/items/${itemId}/human-label`);
+    return response.data;
+  },
 };
 
 export const goldenDatasetApi = {
@@ -286,6 +302,29 @@ export const goldenDatasetApi = {
     api.put(`/api/v1/golden-dataset-items/${itemId}`, data),
   deleteItem: (itemId: number): Promise<any> =>
     api.delete(`/api/v1/golden-dataset-items/${itemId}`),
+  downloadTemplate: async (): Promise<void> => {
+    const response = await api.get('/api/v1/golden-datasets/template/download', {
+      responseType: 'blob',
+    });
+    const blob = new Blob([response as any], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'golden_dataset_template.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+  importExcel: (datasetId: number, file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/api/v1/golden-datasets/${datasetId}/import-excel`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // 模型配置管理 API

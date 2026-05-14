@@ -10,7 +10,7 @@ import {
   InfoCircleOutlined, EyeOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { agentEvaluationApi, evaluationTemplateApi, modelConfigApi } from '../services/api';
+import { agentEvaluationApi, evaluationTemplateApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 

@@ -8,24 +8,30 @@ from pydantic import BaseModel, Field
 
 class DifyAgentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="智能体名称")
-    base_url: str = Field(..., min_length=1, max_length=500, description="Dify API基础URL")
-    app_id: str = Field(..., min_length=1, max_length=100, description="Dify App ID")
-    api_key: Optional[str] = Field(default=None, max_length=255, description="Dify API密钥")
+    agent_type: str = Field(default="dify", description="Agent类型: dify, http_api")
+    base_url: str = Field(..., min_length=1, max_length=500, description="API基础URL")
+    app_id: str = Field(default="", max_length=100, description="Dify App ID（Dify类型必填）")
+    api_key: Optional[str] = Field(default=None, max_length=255, description="API密钥")
+    request_config: Optional[Dict] = Field(default=None, description="通用HTTP Agent配置")
 
 
 class DifyAgentUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=100)
+    agent_type: Optional[str] = Field(default=None)
     base_url: Optional[str] = Field(default=None, max_length=500)
     app_id: Optional[str] = Field(default=None, max_length=100)
     api_key: Optional[str] = Field(default=None, max_length=255)
+    request_config: Optional[Dict] = Field(default=None)
 
 
 class DifyAgentResponse(BaseModel):
     id: int
     name: str
+    agent_type: str = "dify"
     base_url: str
-    app_id: str
+    app_id: str = ""
     api_key: Optional[str] = None
+    request_config: Optional[Dict] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

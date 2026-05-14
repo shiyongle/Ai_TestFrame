@@ -183,6 +183,22 @@ try:
 except Exception as e:
     main_logger.error(f"API路由注册失败: {str(e)}")
 
+def _run_alembic_migrations():
+    """运行Alembic数据库迁移"""
+    try:
+        from alembic.config import Config
+        from alembic import command
+        import os
+
+        # 获取alembic.ini路径
+        alembic_cfg = Config(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+
+        # 运行迁移到最新版本
+        command.upgrade(alembic_cfg, "head")
+        main_logger.info("数据库迁移执行成功")
+    except Exception as e:
+        main_logger.warning(f"数据库迁移执行失败（可能已是最新版本）: {e}")
+
 # 启动时创建数据库表
 @app.on_event("startup")
 async def startup_event():
@@ -196,6 +212,10 @@ async def startup_event():
             main_logger.info(f"数据库连接测试成功! Result: {result.scalar()}")
             
         create_tables()
+
+        # 运行Alembic数据库迁移
+        _run_alembic_migrations()
+
         db = SessionLocal()
         try:
             ensure_default_admin(db)

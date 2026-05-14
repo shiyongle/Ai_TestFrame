@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Button, Card, Drawer, Empty, Form, Input, InputNumber, Modal, Select,
-  Space, Table, Tag, Typography, message, Popconfirm, Badge, Tooltip,
+  Space, Table, Tag, Typography, message, Popconfirm, Badge, Tooltip, Upload,
 } from 'antd';
 import {
   DatabaseOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
-  ReloadOutlined, EyeOutlined, FileAddOutlined,
+  ReloadOutlined, EyeOutlined, FileAddOutlined, DownloadOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { goldenDatasetApi } from '../../services/api';
@@ -56,6 +56,7 @@ const GoldenDatasets: React.FC = () => {
   const [datasetForm] = Form.useForm();
   const [itemForm] = Form.useForm();
   const [editItemForm] = Form.useForm();
+  const [importUploading, setImportUploading] = useState(false);
 
   const loadDatasets = useCallback(async () => {
     setLoading(true);
@@ -167,6 +168,24 @@ const GoldenDatasets: React.FC = () => {
     setCreateModalVisible(true);
   };
 
+  const handleImportExcel = async (file: File) => {
+    if (!activeDataset) { message.warning('请先打开一个测试集'); return; }
+    setImportUploading(true);
+    try {
+      const res = await goldenDatasetApi.importExcel(activeDataset.id, file);
+      message.success(res.message || `成功导入 ${res.imported_count} 条`);
+      if (res.errors?.length) {
+        message.warning(`${res.error_count} 行存在问题: ${res.errors.join('; ')}`);
+      }
+      handleViewDetail(activeDataset.id);
+      loadDatasets();
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || '导入失败');
+    } finally {
+      setImportUploading(false);
+    }
+  };
+
   const datasetColumns: ColumnsType<Dataset> = [
     { title: '名称', dataIndex: 'name', width: 200, ellipsis: true,
       render: (text, record) => (
@@ -183,13 +202,19 @@ const GoldenDatasets: React.FC = () => {
     { title: '更新时间', dataIndex: 'updated_at', width: 170,
       render: (t) => t ? new Date(t).toLocaleString('zh-CN') : '-',
     },
-    { title: '操作', width: 180,
+    { title: '操作', width: 120, align: 'center' as const,
       render: (_, record) => (
-        <Space>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>查看</Button>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(record)}>编辑</Button>
+        <Space size={4}>
+          <Tooltip title="查看">
+            <Button size="small" type="text" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)} />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(record)} />
+          </Tooltip>
           <Popconfirm title="确认删除此测试集？" okType="danger" onConfirm={() => handleDelete(record.id)}>
-            <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+            <Tooltip title="删除">
+              <Button size="small" type="text" danger icon={<DeleteOutlined />} />
+            </Tooltip>
           </Popconfirm>
         </Space>
       ),
@@ -232,6 +257,9 @@ const GoldenDatasets: React.FC = () => {
             <Input.Search placeholder="搜索测试集" value={keyword} onChange={e => setKeyword(e.target.value)}
               onSearch={loadDatasets} style={{ width: 200 }} allowClear />
             <Button icon={<ReloadOutlined />} onClick={loadDatasets} loading={loading}>刷新</Button>
+            <Button icon={<DownloadOutlined />} onClick={async () => {
+              try { await goldenDatasetApi.downloadTemplate(); } catch { message.error('模板下载失败'); }
+            }}>下载模板</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建测试集</Button>
           </Space>
         </div>
@@ -260,11 +288,20 @@ const GoldenDatasets: React.FC = () => {
       {/* 测试集详情 Drawer */}
       <Drawer title={`测试集详情 — ${activeDataset?.name || ''}`} open={detailDrawerVisible}
         onClose={() => setDetailDrawerVisible(false)} width={960} extra={
-          <Button type="primary" icon={<FileAddOutlined />} onClick={() => {
-            itemForm.resetFields();
-            itemForm.setFieldsValue({ items: [{ question: '', expected_answer: '', priority: 'medium' }] });
-            setAddItemModalVisible(true);
-          }}>添加条目</Button>
+          <Space>
+            <Upload
+              accept=".xlsx,.xls"
+              showUploadList={false}
+              beforeUpload={(file) => { handleImportExcel(file as unknown as File); return false; }}
+            >
+              <Button icon={<UploadOutlined />} loading={importUploading}>Excel 导入</Button>
+            </Upload>
+            <Button type="primary" icon={<FileAddOutlined />} onClick={() => {
+              itemForm.resetFields();
+              itemForm.setFieldsValue({ items: [{ question: '', expected_answer: '', priority: 'medium' }] });
+              setAddItemModalVisible(true);
+            }}>手动添加</Button>
+          </Space>
         }>
         {activeDataset && (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>

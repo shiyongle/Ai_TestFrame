@@ -9,7 +9,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from api.deps import get_database, get_dify_agent_service, get_bad_case_service, get_agent_evaluation_service
-from models.database_models import BadCase, DifyAgent
+from models.database_models import BadCase, BadCaseTurn, DifyAgent
 from schemas.badcase_schemas import (
     BadCaseCreate,
     BadCaseResponse,

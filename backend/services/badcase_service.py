@@ -30,9 +30,11 @@ class DifyAgentService:
     def create_agent(self, db: Session, payload: DifyAgentCreate) -> DifyAgent:
         agent = DifyAgent(
             name=payload.name.strip(),
+            agent_type=getattr(payload, 'agent_type', 'dify') or 'dify',
             base_url=payload.base_url.strip(),
-            app_id=payload.app_id.strip(),
+            app_id=(payload.app_id or '').strip(),
             api_key=payload.api_key.strip() if payload.api_key else None,
+            request_config=getattr(payload, 'request_config', None),
         )
         db.add(agent)
         db.commit()
@@ -64,9 +66,11 @@ class DifyAgentService:
         return {
             "id": agent.id,
             "name": agent.name,
+            "agent_type": getattr(agent, "agent_type", "dify") or "dify",
             "base_url": agent.base_url,
-            "app_id": agent.app_id,
+            "app_id": agent.app_id or "",
             "api_key": agent.api_key,
+            "request_config": getattr(agent, "request_config", None),
             "created_at": agent.created_at,
             "updated_at": agent.updated_at,
         }
