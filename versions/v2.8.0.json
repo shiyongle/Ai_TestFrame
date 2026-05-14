@@ -1,0 +1,66 @@
+{
+  "version": "v2.8.0",
+  "date": "2026-04-29",
+  "title": "Agent 评测功能上线",
+  "description": "本次发布新增 Agent 评测模块，用于针对已配置的大模型提供商执行问答测试，自动识别有效回答、无效回答和模型调用失败，并输出有效率、失败率、平均耗时及逐题判定明细。",
+  "features": [
+    {
+      "title": "大模型问答评测",
+      "items": [
+        "左侧菜单新增 Agent 评测入口。",
+        "支持选择系统内已配置的大模型提供商，并可指定模型名称、温度、最大输出和通过阈值。",
+        "支持录入多条问题与期望答案，后台逐条调用目标模型生成回答。",
+        "支持评测运行记录、运行状态轮询、历史记录和明细查看。"
+      ]
+    },
+    {
+      "title": "有效性判定与指标统计",
+      "items": [
+        "自动识别空答、拒答、无信息回答等无效模式。",
+        "提供期望答案时，基于关键词覆盖度输出得分并判定有效或无效。",
+        "汇总输出总数、有效数、无效数、调用失败数、有效率、失败率和平均耗时。",
+        "每条用例保留问题、期望答案、实际回答、判定状态、得分、原因和耗时。"
+      ]
+    }
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增 Agent 评测数据模型、服务层和 API 路由，复用现有 LLMClient 调用已配置模型。",
+      "strategies": [
+        "新增 agent_evaluation_runs 与 agent_evaluation_items 两张表保存评测运行和逐题明细。",
+        "创建评测任务后通过 FastAPI BackgroundTasks 后台执行，避免被现有请求超时中间件中断。",
+        "评测服务封装模型调用、回答有效性判定、指标汇总和序列化逻辑。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增 AgentEvaluation 页面并接入主路由和左侧菜单。",
+      "strategies": [
+        "页面提供新建评测、运行概览、评测明细和历史记录。",
+        "运行中的任务通过轮询刷新状态，完成后展示最终统计指标。",
+        "前端 API 封装集中接入 services/api.ts，保持与现有项目风格一致。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/api/v1/agent_evaluation.py",
+      "backend/schemas/agent_evaluation_schemas.py",
+      "backend/services/agent_evaluation_service.py",
+      "frontend/src/pages/AgentEvaluation.tsx",
+      "versions/v2.8.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/api/deps.py",
+      "backend/main.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/services/api.ts"
+    ]
+  },
+  "notes": [
+    "首次部署后端时会通过 create_tables 自动创建新增表。",
+    "Agent 评测依赖系统设置中已配置可用的大模型 API Key。",
+    "当前有效性判定采用规则与期望答案关键词覆盖度，后续可扩展为独立裁判模型评测。"
+  ]
+}
