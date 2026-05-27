@@ -293,6 +293,45 @@ export const traceabilityApi = {
     api.post(`/api/v1/requirements/${requirementId}/apply-suggested-status`, { status }),
 };
 
+export const assetAuditApi = {
+  getSummary: (params?: { project_id?: number }): Promise<any> =>
+    api.get('/api/v1/test-assets/audit/summary', { params }),
+  listAssets: (params?: { project_id?: number; asset_type?: string }): Promise<any> =>
+    api.get('/api/v1/test-assets/audit/assets', { params }),
+  listVersions: (assetType: string, assetId: number): Promise<any[]> =>
+    api.get(`/api/v1/test-assets/audit/assets/${assetType}/${assetId}/versions`),
+  getVersionDiff: (versionId: number): Promise<any> =>
+    api.get(`/api/v1/test-assets/audit/versions/${versionId}/diff`),
+  approveVersion: (versionId: number, data: { decision: string; approver?: string; comment?: string }): Promise<any> =>
+    api.post(`/api/v1/test-assets/audit/versions/${versionId}/approval`, data),
+  confirmAiCase: (evidenceId: number, data: { approver?: string; comment?: string }): Promise<any> =>
+    api.post(`/api/v1/test-assets/audit/ai-evidence/${evidenceId}/confirm`, data),
+  listBaselines: (params?: { project_id?: number }): Promise<any[]> =>
+    api.get('/api/v1/test-assets/audit/baselines', { params }),
+  createBaseline: (data: any): Promise<any> =>
+    api.post('/api/v1/test-assets/audit/baselines', data),
+  freezeBaseline: (baselineId: number, data: { frozen_by?: string }): Promise<any> =>
+    api.post(`/api/v1/test-assets/audit/baselines/${baselineId}/freeze`, data),
+  listEvents: (params?: { project_id?: number; asset_type?: string; asset_id?: number; limit?: number }): Promise<any[]> =>
+    api.get('/api/v1/test-assets/audit/events', { params }),
+};
+
+export const environmentApi = {
+  list: (params?: { project_id?: number }): Promise<any[]> => api.get('/api/v1/environments', { params }),
+  create: (data: any): Promise<any> => api.post('/api/v1/environments', data),
+  update: (id: number, data: any): Promise<any> => api.put(`/api/v1/environments/${id}`, data),
+  delete: (id: number): Promise<any> => api.delete(`/api/v1/environments/${id}`),
+  createVariable: (environmentId: number, data: any): Promise<any> => api.post(`/api/v1/environments/${environmentId}/variables`, data),
+  updateVariable: (id: number, data: any): Promise<any> => api.put(`/api/v1/environment-variables/${id}`, data),
+  deleteVariable: (id: number): Promise<any> => api.delete(`/api/v1/environment-variables/${id}`),
+  createAccountPool: (environmentId: number, data: any): Promise<any> => api.post(`/api/v1/environments/${environmentId}/account-pools`, data),
+  updateAccountPool: (id: number, data: any): Promise<any> => api.put(`/api/v1/environment-account-pools/${id}`, data),
+  deleteAccountPool: (id: number): Promise<any> => api.delete(`/api/v1/environment-account-pools/${id}`),
+  createDataPool: (environmentId: number, data: any): Promise<any> => api.post(`/api/v1/environments/${environmentId}/data-pools`, data),
+  updateDataPool: (id: number, data: any): Promise<any> => api.put(`/api/v1/environment-data-pools/${id}`, data),
+  deleteDataPool: (id: number): Promise<any> => api.delete(`/api/v1/environment-data-pools/${id}`),
+};
+
 export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };

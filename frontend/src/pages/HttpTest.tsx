@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -24,7 +24,7 @@ import {
   HistoryOutlined,
   SendOutlined,
 } from '@ant-design/icons';
-import { testApi } from '../services/api';
+import { environmentApi, testApi } from '../services/api';
 import { HttpTestRequest, HttpTestResponse } from '../types';
 
 const { Title, Text } = Typography;
@@ -87,6 +87,13 @@ const HttpTest: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<HttpTestResponse | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [environments, setEnvironments] = useState<any[]>([]);
+  const [environmentId, setEnvironmentId] = useState<number | undefined>();
+  const [accountPoolId, setAccountPoolId] = useState<number | undefined>();
+  const [dataPoolId, setDataPoolId] = useState<number | undefined>();
+  const [preScript, setPreScript] = useState('');
+  const [postScript, setPostScript] = useState('');
+  const [persistExtracted, setPersistExtracted] = useState(false);
 
   const [method, setMethod] = useState<Method>('GET');
   const [url, setUrl] = useState('');
@@ -97,6 +104,24 @@ const HttpTest: React.FC = () => {
   const [timeout, setTimeoutValue] = useState(30);
   const [verifySSL, setVerifySSL] = useState(true);
   const [followRedirects, setFollowRedirects] = useState(true);
+
+  useEffect(() => {
+    environmentApi
+      .list()
+      .then((items) => {
+        setEnvironments(items || []);
+        const defaultEnv = (items || []).find((item: any) => item.is_default);
+        if (defaultEnv) {
+          setEnvironmentId(defaultEnv.id);
+        }
+      })
+      .catch(() => message.warning('环境列表加载失败，仍可直接请求'));
+  }, []);
+
+  const selectedEnvironment = useMemo(
+    () => environments.find((item) => item.id === environmentId),
+    [environmentId, environments]
+  );
 
   const responseBodyText = useMemo(() => {
     if (!result) return '';
@@ -183,6 +208,12 @@ const HttpTest: React.FC = () => {
       timeout,
       verify_ssl: verifySSL,
       follow_redirects: followRedirects,
+      environment_id: environmentId,
+      account_pool_id: accountPoolId,
+      data_pool_id: dataPoolId,
+      pre_script: preScript,
+      post_script: postScript,
+      persist_extracted: persistExtracted,
     };
 
     setLoading(true);
@@ -228,13 +259,26 @@ const HttpTest: React.FC = () => {
           <Text type="secondary">参数清晰、响应直观的接口调试面板</Text>
         </div>
         <Space>
+          {selectedEnvironment && <Tag color="processing">环境 {selectedEnvironment.name}</Tag>}
           <Tag icon={<HistoryOutlined />} color="blue">最近记录 {history.length}</Tag>
           <Tag icon={<ClockCircleOutlined />} color="geekblue">超时 {timeout}s</Tag>
         </Space>
       </div>
 
       <div className="glass-panel" style={{ borderRadius: 16, background: '#fff', padding: 16, marginBottom: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr 120px', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '190px 130px 1fr 120px', gap: 10 }}>
+          <Select
+            allowClear
+            size="large"
+            placeholder="选择环境"
+            value={environmentId}
+            onChange={(value) => {
+              setEnvironmentId(value);
+              setAccountPoolId(undefined);
+              setDataPoolId(undefined);
+            }}
+            options={environments.map((item) => ({ label: `${item.name}${item.base_url ? ` - ${item.base_url}` : ''}`, value: item.id }))}
+          />
           <Select value={method} onChange={setMethod} size="large">
             {METHODS.map((m) => (
               <Select.Option key={m} value={m}>
@@ -313,9 +357,29 @@ const HttpTest: React.FC = () => {
               },
               {
                 key: 'settings',
-                label: '请求设置',
+                label: '环境与脚本',
                 children: (
                   <Row gutter={[12, 12]}>
+                    <Col span={12}>
+                      <Text type="secondary">账号池</Text>
+                      <Select
+                        allowClear
+                        value={accountPoolId}
+                        onChange={setAccountPoolId}
+                        style={{ width: '100%', marginTop: 6 }}
+                        options={(selectedEnvironment?.account_pools || []).map((item: any) => ({ label: item.name, value: item.id }))}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">数据池</Text>
+                      <Select
+                        allowClear
+                        value={dataPoolId}
+                        onChange={setDataPoolId}
+                        style={{ width: '100%', marginTop: 6 }}
+                        options={(selectedEnvironment?.data_pools || []).map((item: any) => ({ label: item.name, value: item.id }))}
+                      />
+                    </Col>
                     <Col span={12}>
                       <Text type="secondary">超时（秒）</Text>
                       <InputNumber
@@ -333,6 +397,30 @@ const HttpTest: React.FC = () => {
                     <Col span={12}>
                       <Text type="secondary">跟随重定向</Text>
                       <div style={{ marginTop: 10 }}><Switch checked={followRedirects} onChange={setFollowRedirects} /></div>
+                    </Col>
+                    <Col span={12}>
+                      <Text type="secondary">提取变量写回环境</Text>
+                      <div style={{ marginTop: 10 }}><Switch checked={persistExtracted} onChange={setPersistExtracted} /></div>
+                    </Col>
+                    <Col span={24}>
+                      <Text type="secondary">前置脚本</Text>
+                      <TextArea
+                        rows={4}
+                        value={preScript}
+                        onChange={(e) => setPreScript(e.target.value)}
+                        placeholder={'set token={{account.token}}\nset requestId={{$uuid}}'}
+                        style={{ marginTop: 6, fontFamily: 'Consolas, Monaco, monospace' }}
+                      />
+                    </Col>
+                    <Col span={24}>
+                      <Text type="secondary">后置脚本 / 依赖取值</Text>
+                      <TextArea
+                        rows={4}
+                        value={postScript}
+                        onChange={(e) => setPostScript(e.target.value)}
+                        placeholder={'extract token json $.data.token\nextract traceId header X-Trace-Id'}
+                        style={{ marginTop: 6, fontFamily: 'Consolas, Monaco, monospace' }}
+                      />
                     </Col>
                   </Row>
                 ),
@@ -386,6 +474,14 @@ const HttpTest: React.FC = () => {
 
               {result.error_message && (
                 <Alert type="error" showIcon message="请求异常" description={result.error_message} />
+              )}
+              {result.extracted_variables && Object.keys(result.extracted_variables).length > 0 && (
+                <Alert
+                  type="success"
+                  showIcon
+                  message="已提取变量"
+                  description={<pre style={{ margin: 0 }}>{JSON.stringify(result.extracted_variables, null, 2)}</pre>}
+                />
               )}
 
               <Tabs

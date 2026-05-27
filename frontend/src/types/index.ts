@@ -42,6 +42,14 @@ export interface HttpTestRequest {
   timeout?: number;
   verify_ssl?: boolean;
   follow_redirects?: boolean;
+  environment_id?: number;
+  account_pool_id?: number;
+  data_pool_id?: number;
+  variable_overrides?: Record<string, any>;
+  pre_script?: string;
+  post_script?: string;
+  extractors?: Array<Record<string, any>>;
+  persist_extracted?: boolean;
 }
 
 export interface HttpTestResponse {
@@ -51,6 +59,11 @@ export interface HttpTestResponse {
   execution_time: number;
   success: boolean;
   error_message?: string;
+  resolved_request?: Record<string, any>;
+  environment?: Record<string, any>;
+  selected_account?: Record<string, any>;
+  selected_data?: Record<string, any>;
+  extracted_variables?: Record<string, any>;
 }
 
 export interface TcpTestRequest {

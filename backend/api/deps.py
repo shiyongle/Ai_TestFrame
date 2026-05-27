@@ -22,6 +22,8 @@ from services.evaluation_template_service import EvaluationTemplateService, eval
 from services.golden_dataset_service import GoldenDatasetService, golden_dataset_service
 from services.defect_service import DefectService, defect_service
 from services.traceability_service import TraceabilityService, traceability_service
+from services.test_asset_audit_service import TestAssetAuditService, test_asset_audit_service
+from services.environment_service import EnvironmentService, environment_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -99,3 +101,13 @@ def get_defect_service() -> DefectService:
 def get_traceability_service() -> TraceabilityService:
     """获取质量追踪矩阵服务实例"""
     return traceability_service
+
+
+def get_test_asset_audit_service() -> TestAssetAuditService:
+    """获取测试资产版本化与审计服务实例"""
+    return test_asset_audit_service
+
+
+def get_environment_service() -> EnvironmentService:
+    """获取 API 环境与变量管理服务实例"""
+    return environment_service

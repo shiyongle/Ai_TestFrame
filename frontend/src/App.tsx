@@ -33,6 +33,8 @@ import OperationLogs from './pages/OperationLogs';
 import Defects from './pages/Defects';
 import TraceabilityMatrix from './pages/TraceabilityMatrix';
 import ImpactAnalysis from './pages/ImpactAnalysis';
+import TestAssetAudit from './pages/TestAssetAudit';
+import EnvironmentManagement from './pages/EnvironmentManagement';
 import UiAutomation from './pages/ApiAutomation/UIAutomation';
 import Login from './pages/Login';
 import AgentEvaluation from './pages/AgentEvaluation';
@@ -118,6 +120,8 @@ const AppLayout: React.FC = () => {
               <Route path="/defects" element={<Defects />} />
               <Route path="/traceability" element={<TraceabilityMatrix />} />
               <Route path="/impact-analysis" element={<ImpactAnalysis />} />
+              <Route path="/test-assets/audit" element={<TestAssetAudit />} />
+              <Route path="/environments" element={<EnvironmentManagement />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
               <Route path="/tasks" element={<TaskCenter />} />

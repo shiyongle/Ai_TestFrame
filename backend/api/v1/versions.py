@@ -6,6 +6,7 @@ from models.database_models import Version, Requirement, VersionRequirement, Ver
 from pydantic import BaseModel
 from datetime import datetime
 from services.ai.ai_service import ai_service
+from services.test_asset_audit_service import test_asset_audit_service
 from models.database_models import (
     KnowledgeDocument,
     TestSuite,
@@ -569,6 +570,19 @@ async def generate_test_cases_for_version(
                         )
                         bg_db.add(generated_case)
                         bg_db.flush()
+                        test_asset_audit_service.record_asset_version(
+                            bg_db,
+                            "functional_case",
+                            new_tc,
+                            action="create",
+                            source="ai_generation",
+                            source_ref_type="ai_generation_session",
+                            source_ref_id=session_identifier,
+                            requirement_id=req.id,
+                            actor="AI",
+                            approval_status="pending",
+                            commit=False,
+                        )
 
                         citations = evidence_item.get('citations', []) if isinstance(evidence_item.get('citations', []), list) else []
                         if citations:

@@ -64,6 +64,14 @@ class HttpTestRequest(BaseModel):
     timeout: int = Field(default=30, ge=1, le=300)
     verify_ssl: bool = True
     follow_redirects: bool = True
+    environment_id: Optional[int] = None
+    account_pool_id: Optional[int] = None
+    data_pool_id: Optional[int] = None
+    variable_overrides: Optional[Dict[str, Any]] = None
+    pre_script: Optional[str] = None
+    post_script: Optional[str] = None
+    extractors: Optional[List[Dict[str, Any]]] = None
+    persist_extracted: bool = False
 
 class HttpTestResponse(BaseModel):
     status_code: int
@@ -72,6 +80,11 @@ class HttpTestResponse(BaseModel):
     execution_time: int  # 毫秒
     success: bool
     error_message: Optional[str] = None
+    resolved_request: Optional[Dict[str, Any]] = None
+    environment: Optional[Dict[str, Any]] = None
+    selected_account: Optional[Dict[str, Any]] = None
+    selected_data: Optional[Dict[str, Any]] = None
+    extracted_variables: Optional[Dict[str, Any]] = None
 
 # TCP测试请求模型
 class TcpTestRequest(BaseModel):

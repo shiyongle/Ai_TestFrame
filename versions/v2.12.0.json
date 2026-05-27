@@ -1,0 +1,105 @@
+{
+  "version": "v2.12.0",
+  "date": "2026-05-27",
+  "title": "测试资产版本化、基线冻结与审计治理上线",
+  "description": "本次发布新增测试资产治理层，覆盖功能用例与接口用例的版本历史、变更 diff、审批确认、AI 生成用例确认、基线冻结和不可变审计事件，补齐成熟测试平台在测试资产变更追溯、基线管理和执行记录审计方面的核心能力。",
+  "features": [
+    {
+      "title": "测试资产版本历史",
+      "items": [
+        "新增测试资产审计页面 /test-assets/audit，菜单入口为“系统与治理 -> 测试资产审计”。",
+        "功能用例和接口用例创建、更新、删除时自动生成测试资产版本快照。",
+        "每个版本保存完整资产快照、变更字段 diff、版本号、来源、操作者、内容哈希和上一版本哈希。",
+        "存量测试资产以 legacy/unversioned 状态展示，新变更后自动进入版本化治理。"
+      ]
+    },
+    {
+      "title": "审批确认与 AI 生成用例治理",
+      "items": [
+        "AI 生成用例在生成测试资产版本时默认进入 pending 状态。",
+        "支持在测试资产审计页面确认 AI 生成用例，记录确认人、确认时间和审批意见。",
+        "支持对任意测试资产版本进行 approved/rejected 审批，保留审批记录。",
+        "AI 生成证据与测试资产版本打通，可追溯用例由哪个 AI 生成会话、哪个需求、哪些知识引用产生。"
+      ]
+    },
+    {
+      "title": "基线冻结与不可篡改审计",
+      "items": [
+        "支持按项目创建测试资产基线，可关联版本并默认纳入当前全部功能用例和接口用例。",
+        "基线冻结后，纳入基线的测试资产禁止直接更新或删除，避免回归资产被无审计地改动。",
+        "新增不可变审计事件表，使用事件哈希记录资产创建、更新、删除、审批、基线纳入、基线冻结和执行记录。",
+        "功能用例执行结果保存时同步写入 execution_recorded 审计事件，为执行记录不可篡改提供哈希链依据。"
+      ]
+    }
+  ],
+  "improvements": [
+    "测试资产从单纯 CRUD 升级为可追溯治理对象，能回答谁改了、改了什么、何时纳入基线、是否已确认。",
+    "冻结基线内资产被改删时接口返回 409，避免无意破坏已发布或已回归的测试集。",
+    "新增审计页面统一展示资产、版本、基线、审批和审计事件，减少在多个页面之间查证。"
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增测试资产版本、基线、基线明细、审批记录和审计事件模型，并接入功能用例、接口用例和 AI 生成用例流程。",
+      "strategies": [
+        "database_models.py 新增 TestAssetVersion、TestAssetBaseline、TestAssetBaselineItem、TestAssetApproval、TestAssetAuditEvent。",
+        "新增 services/test_asset_audit_service.py，封装快照序列化、diff 计算、哈希链审计、基线冻结、审批确认和 AI 用例确认逻辑。",
+        "新增 api/v1/test_asset_audit.py，提供资产列表、版本历史、版本 diff、审批、AI 证据确认、基线创建/冻结和审计事件查询接口。",
+        "testcase_service.py 与 interface_testcase_service.py 在创建、更新、删除时写入资产版本与审计事件。",
+        "versions.py 在 AI 生成用例保存后写入 pending 状态的资产版本，等待人工确认。",
+        "新增 Alembic 迁移脚本 4b1c2d3e4f5a_add_test_asset_audit.py，创建测试资产治理相关表。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增测试资产审计页面、菜单入口、路由和前端 API 封装。",
+      "strategies": [
+        "新增 pages/TestAssetAudit.tsx，展示资产清单、审批状态、冻结基线、AI 证据、版本历史、Diff 和审计事件。",
+        "App.tsx 新增 /test-assets/audit 路由。",
+        "ResponsiveLayout.tsx 与 AppSider.tsx 新增“测试资产审计”菜单入口。",
+        "services/api.ts 新增 assetAuditApi，封装测试资产治理相关接口。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/alembic/versions/4b1c2d3e4f5a_add_test_asset_audit.py",
+      "backend/api/v1/test_asset_audit.py",
+      "backend/schemas/test_asset_audit_schemas.py",
+      "backend/services/test_asset_audit_service.py",
+      "frontend/src/pages/TestAssetAudit.tsx",
+      "versions/v2.12.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/api/deps.py",
+      "backend/main.py",
+      "backend/api/v1/testcases.py",
+      "backend/api/v1/interface_testcases.py",
+      "backend/api/v1/versions.py",
+      "backend/services/testcase_service.py",
+      "backend/services/interface_testcase_service.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/services/api.ts"
+    ]
+  },
+  "api_changes": [
+    "GET /api/v1/test-assets/audit/summary",
+    "GET /api/v1/test-assets/audit/assets",
+    "GET /api/v1/test-assets/audit/assets/{asset_type}/{asset_id}/versions",
+    "GET /api/v1/test-assets/audit/versions/{version_id}/diff",
+    "POST /api/v1/test-assets/audit/versions/{version_id}/approval",
+    "POST /api/v1/test-assets/audit/ai-evidence/{evidence_id}/confirm",
+    "GET /api/v1/test-assets/audit/baselines",
+    "POST /api/v1/test-assets/audit/baselines",
+    "POST /api/v1/test-assets/audit/baselines/{baseline_id}/freeze",
+    "GET /api/v1/test-assets/audit/events",
+    "POST /api/v1/test-assets/audit/events"
+  ],
+  "notes": [
+    "首次部署需执行 alembic upgrade head，创建测试资产治理相关表。",
+    "存量测试资产不会被强制批量生成历史版本；在审计页面展示为 legacy/unversioned，新建或后续变更时自动进入版本化管理。",
+    "冻结基线后，如需修改资产，应先走复制新版本或后续扩展的变更审批流程，避免直接破坏已冻结测试集。",
+    "前端构建已通过，当前仅存在项目既有 ESLint warning。"
+  ]
+}

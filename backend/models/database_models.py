@@ -455,6 +455,182 @@ class RequirementChangeLog(Base):
     requirement = relationship("Requirement")
     project = relationship("Project")
 
+
+class TestAssetVersion(Base):
+    """测试资产版本快照，记录用例每次变更的内容、diff、来源和审批状态。"""
+    __tablename__ = "test_asset_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    asset_type = Column(String(50), nullable=False)  # functional_case/interface_case
+    asset_id = Column(Integer, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    version_no = Column(Integer, nullable=False, default=1)
+    action = Column(String(30), nullable=False, default="update")
+    snapshot = Column(JSON)
+    diff = Column(JSON)
+    change_summary = Column(Text)
+    source = Column(String(50), nullable=False, default="manual")
+    source_ref_type = Column(String(50))
+    source_ref_id = Column(String(100))
+    requirement_id = Column(Integer, ForeignKey("requirements.id"))
+    created_by = Column(String(100), default="system")
+    approval_status = Column(String(20), nullable=False, default="approved")  # pending, approved, rejected
+    approved_by = Column(String(100))
+    approved_at = Column(DateTime)
+    content_hash = Column(String(64), nullable=False)
+    previous_hash = Column(String(64))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project")
+    requirement = relationship("Requirement")
+
+
+class TestAssetBaseline(Base):
+    """测试资产基线，可冻结某项目/版本的一组测试资产。"""
+    __tablename__ = "test_asset_baselines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    version_id = Column(Integer, ForeignKey("versions.id"))
+    status = Column(String(20), nullable=False, default="draft")  # draft, frozen, archived
+    created_by = Column(String(100), default="system")
+    frozen_by = Column(String(100))
+    frozen_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    version = relationship("Version")
+    items = relationship("TestAssetBaselineItem", back_populates="baseline", cascade="all, delete-orphan")
+
+
+class TestAssetBaselineItem(Base):
+    """基线内的测试资产快照，冻结后作为可审计依据。"""
+    __tablename__ = "test_asset_baseline_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    baseline_id = Column(Integer, ForeignKey("test_asset_baselines.id", ondelete="CASCADE"), nullable=False)
+    asset_type = Column(String(50), nullable=False)
+    asset_id = Column(Integer, nullable=False)
+    asset_version_id = Column(Integer, ForeignKey("test_asset_versions.id"))
+    snapshot = Column(JSON)
+    content_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    baseline = relationship("TestAssetBaseline", back_populates="items")
+    asset_version = relationship("TestAssetVersion")
+
+
+class TestAssetApproval(Base):
+    """测试资产版本审批记录，记录谁确认、何时确认以及审批意见。"""
+    __tablename__ = "test_asset_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    asset_version_id = Column(Integer, ForeignKey("test_asset_versions.id", ondelete="CASCADE"), nullable=False)
+    decision = Column(String(20), nullable=False)  # approved, rejected
+    approver = Column(String(100), default="system")
+    comment = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    asset_version = relationship("TestAssetVersion")
+
+
+class TestAssetAuditEvent(Base):
+    """测试资产不可变审计事件，使用哈希链记录关键动作。"""
+    __tablename__ = "test_asset_audit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    asset_type = Column(String(50), nullable=False)
+    asset_id = Column(Integer, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    action = Column(String(50), nullable=False)
+    actor = Column(String(100), default="system")
+    detail = Column(Text)
+    metadata_json = Column(JSON)
+    before_hash = Column(String(64))
+    after_hash = Column(String(64))
+    event_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("Project")
+
+
+class ApiEnvironment(Base):
+    """API 执行环境，承载 dev/test/stage/prod 的基础地址和脚本配置。"""
+    __tablename__ = "api_environments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    code = Column(String(50), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    base_url = Column(Text)
+    description = Column(Text)
+    status = Column(String(20), nullable=False, default="active")
+    is_default = Column(Boolean, default=False)
+    pre_script = Column(Text)
+    post_script = Column(Text)
+    created_by = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    variables = relationship("ApiEnvironmentVariable", back_populates="environment", cascade="all, delete-orphan")
+    account_pools = relationship("ApiAccountPool", back_populates="environment", cascade="all, delete-orphan")
+    data_pools = relationship("ApiDataPool", back_populates="environment", cascade="all, delete-orphan")
+
+
+class ApiEnvironmentVariable(Base):
+    """环境变量，支持普通变量、密钥变量和动态变量。"""
+    __tablename__ = "api_environment_variables"
+
+    id = Column(Integer, primary_key=True, index=True)
+    environment_id = Column(Integer, ForeignKey("api_environments.id", ondelete="CASCADE"), nullable=False)
+    key = Column(String(100), nullable=False)
+    value = Column(Text)
+    variable_type = Column(String(20), nullable=False, default="normal")  # normal, secret, dynamic
+    description = Column(Text)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    environment = relationship("ApiEnvironment", back_populates="variables")
+
+
+class ApiAccountPool(Base):
+    """账号池，可在执行时按策略取账号并注入 account.* 变量。"""
+    __tablename__ = "api_account_pools"
+
+    id = Column(Integer, primary_key=True, index=True)
+    environment_id = Column(Integer, ForeignKey("api_environments.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    strategy = Column(String(20), nullable=False, default="round_robin")  # round_robin, first
+    accounts = Column(JSON)
+    current_index = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    environment = relationship("ApiEnvironment", back_populates="account_pools")
+
+
+class ApiDataPool(Base):
+    """数据池，可在执行时按策略取一行数据并注入 data.* 变量。"""
+    __tablename__ = "api_data_pools"
+
+    id = Column(Integer, primary_key=True, index=True)
+    environment_id = Column(Integer, ForeignKey("api_environments.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    strategy = Column(String(20), nullable=False, default="round_robin")  # round_robin, first
+    rows = Column(JSON)
+    current_index = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    environment = relationship("ApiEnvironment", back_populates="data_pools")
+
 # 批量测试任务表
 class BatchTestTask(Base):
     __tablename__ = "batch_test_tasks"

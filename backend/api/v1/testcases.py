@@ -67,7 +67,10 @@ async def update_testcase(
     testcase_service = Depends(get_testcase_service)
 ):
     """更新测试用例"""
-    testcase = testcase_service.update_testcase(db, testcase_id, testcase_update)
+    try:
+        testcase = testcase_service.update_testcase(db, testcase_id, testcase_update)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     if not testcase:
         raise HTTPException(status_code=404, detail="测试用例不存在")
     log_activity(db, action="update", module="测试用例", target_name=testcase.name, detail=f"测试用例ID={testcase_id}")
@@ -85,7 +88,10 @@ async def delete_testcase(
     if not testcase:
         raise HTTPException(status_code=404, detail="测试用例不存在")
 
-    success = testcase_service.delete_testcase(db, testcase_id)
+    try:
+        success = testcase_service.delete_testcase(db, testcase_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     if not success:
         raise HTTPException(status_code=404, detail="测试用例不存在")
     log_activity(db, action="delete", module="测试用例", target_name=testcase.name, detail=f"测试用例ID={testcase_id}")

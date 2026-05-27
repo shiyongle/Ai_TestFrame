@@ -19,6 +19,8 @@ import {
   ControlOutlined,
   IssuesCloseOutlined,
   FileSearchOutlined,
+  SafetyCertificateOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -129,6 +131,16 @@ const AppSider: React.FC = () => {
       key: '/versions',
       icon: <HistoryOutlined />,
       label: '版本管理',
+    },
+    {
+      key: '/test-assets/audit',
+      icon: <SafetyCertificateOutlined />,
+      label: '测试资产审计',
+    },
+    {
+      key: '/environments',
+      icon: <CloudServerOutlined />,
+      label: '环境变量管理',
     },
     {
       key: 'settings',

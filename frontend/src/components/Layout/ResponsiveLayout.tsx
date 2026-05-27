@@ -33,6 +33,7 @@ import {
   FolderOpenOutlined,
   ExperimentOutlined,
   IssuesCloseOutlined,
+  CloudServerOutlined,
 } from '@ant-design/icons';
 import CabbageIcon from '../common/CabbageIcon';
 
@@ -335,6 +336,16 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           key: '/operation-logs',
           icon: <ClockCircleOutlined />,
           label: '操作审计日志',
+        },
+        {
+          key: '/test-assets/audit',
+          icon: <SafetyCertificateOutlined />,
+          label: '测试资产审计',
+        },
+        {
+          key: '/environments',
+          icon: <CloudServerOutlined />,
+          label: '环境变量管理',
         },
       ],
     },

@@ -119,7 +119,10 @@ async def update_interface_testcase(
     db: Session = Depends(get_database),
     service=Depends(get_interface_testcase_service),
 ):
-    obj = service.update(db, case_id, payload.model_dump(exclude_unset=True))
+    try:
+        obj = service.update(db, case_id, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     if not obj:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
     log_activity(db, action="update", module="接口测试用例", target_name=obj.name, detail=f"用例ID={case_id}")
@@ -135,7 +138,10 @@ async def delete_interface_testcase(
     obj = service.get_one(db, case_id)
     if not obj:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
-    ok = service.delete(db, case_id)
+    try:
+        ok = service.delete(db, case_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     if not ok:
         raise HTTPException(status_code=404, detail="接口测试用例不存在")
     log_activity(db, action="delete", module="接口测试用例", target_name=obj.name, detail=f"用例ID={case_id}")

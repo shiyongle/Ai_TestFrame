@@ -14,11 +14,12 @@ router = APIRouter()
 @router.post("/test/http", response_model=HttpTestResponse)
 async def test_http_interface(
     test_request: HttpTestRequest,
+    db: Session = Depends(get_database),
     test_execution_service = Depends(get_test_execution_service)
 ):
     """执行HTTP接口测试"""
     try:
-        result = await test_execution_service.execute_http_test(test_request)
+        result = await test_execution_service.execute_http_test(test_request, db)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

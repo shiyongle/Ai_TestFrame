@@ -6,6 +6,7 @@ from utils.http_client import HttpClient
 from utils.tcp_client import TcpClient
 from utils.mq_client import MqClient
 from core.logging import setup_logging
+from services.environment_service import environment_service
 import uuid
 import asyncio
 
@@ -20,21 +21,29 @@ class TestExecutionService:
         self.tcp_client = TcpClient()
         self.mq_client = MqClient()
     
-    async def execute_http_test(self, request: HttpTestRequest) -> HttpTestResponse:
+    async def execute_http_test(self, request: HttpTestRequest, db: Optional[Session] = None) -> HttpTestResponse:
         """执行HTTP接口测试"""
         try:
-            async with HttpClient(timeout=request.timeout) as client:
+            context = environment_service.prepare_http_request(db, request)
+            resolved = context["request"]
+            async with HttpClient(timeout=resolved["timeout"]) as client:
                 result = await client.request(
-                    method=request.method,
-                    url=request.url,
-                    headers=request.headers,
-                    params=request.params,
-                    data=request.body,
-                    verify_ssl=request.verify_ssl,
-                    follow_redirects=request.follow_redirects
+                    method=resolved["method"],
+                    url=resolved["url"],
+                    headers=resolved["headers"],
+                    params=resolved["params"],
+                    data=resolved["body"],
+                    verify_ssl=resolved["verify_ssl"],
+                    follow_redirects=resolved["follow_redirects"]
                 )
-                
-                logger.info(f"HTTP测试完成: {request.method} {request.url}")
+                extracted = environment_service.extract_after_http(db, request, result, context)
+                result["resolved_request"] = self._mask_resolved_request(resolved, context.get("secret_keys", set()))
+                result["environment"] = context.get("environment")
+                result["selected_account"] = context.get("selected_account")
+                result["selected_data"] = context.get("selected_data")
+                result["extracted_variables"] = extracted
+
+                logger.info(f"HTTP测试完成: {request.method} {resolved['url']}")
                 return HttpTestResponse(**result)
         except Exception as e:
             logger.error(f"HTTP测试失败: {request.method} {request.url} - {str(e)}")
@@ -46,6 +55,15 @@ class TestExecutionService:
                 success=False,
                 error_message=str(e)
             )
+
+    def _mask_resolved_request(self, resolved: Dict[str, Any], secret_keys: set) -> Dict[str, Any]:
+        masked = dict(resolved)
+        headers = dict(masked.get("headers") or {})
+        for key in list(headers.keys()):
+            if "authorization" in key.lower() or "token" in key.lower() or "secret" in key.lower():
+                headers[key] = "******"
+        masked["headers"] = headers
+        return masked
     
     async def execute_tcp_test(self, request: TcpTestRequest) -> TcpTestResponse:
         """执行TCP接口测试"""

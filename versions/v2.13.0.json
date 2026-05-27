@@ -1,0 +1,110 @@
+{
+  "version": "v2.13.0",
+  "date": "2026-05-27",
+  "title": "API 环境与变量管理能力上线",
+  "description": "本次发布新增成熟 API 测试平台常见的环境体系，支持 dev/test/stage/prod 环境、全局与环境变量、密钥变量、动态变量、前置脚本、后置脚本、环境切换执行、账号池、数据池和依赖接口取值，并将该能力接入 HTTP 测试执行链路。",
+  "features": [
+    {
+      "title": "环境与变量配置",
+      "items": [
+        "新增环境与变量管理页面 /environments，菜单入口为“系统与治理 -> 环境变量管理”。",
+        "支持创建 dev/test/stage/prod 等 API 执行环境，配置 Base URL、默认环境、前置脚本和后置脚本。",
+        "支持普通变量、密钥变量和动态变量，密钥变量在返回给前端时自动脱敏。",
+        "HTTP 测试支持选择环境并自动渲染 {{base_url}}、{{token}} 等变量。"
+      ]
+    },
+    {
+      "title": "动态变量、账号池与数据池",
+      "items": [
+        "支持 {{$timestamp}}、{{$isoTimestamp}}、{{$uuid}}、{{$randomInt:min:max}} 等动态变量。",
+        "支持账号池配置，执行时可按轮询或固定第一条策略注入 account.* 变量。",
+        "支持数据池配置，执行时可按轮询或固定第一条策略注入 data.* 变量。",
+        "HTTP 测试页新增账号池、数据池选择，支持使用 {{account.username}}、{{account.token}}、{{data.userId}} 等占位符。"
+      ]
+    },
+    {
+      "title": "前后置脚本与依赖取值",
+      "items": [
+        "支持前置脚本 set key=value，在执行前生成或覆盖变量。",
+        "支持后置脚本 extract name json $.data.token 和 extract name header X-Trace-Id，从响应中提取变量。",
+        "HTTP 测试支持 persist_extracted，将提取结果写回环境动态变量，用于后续依赖接口取值。",
+        "响应结果返回 resolved_request、environment、selected_account、selected_data 和 extracted_variables，便于排查变量渲染与依赖提取过程。"
+      ]
+    }
+  ],
+  "improvements": [
+    "HTTP 测试从单次静态请求升级为环境感知执行，可在 dev/test/stage/prod 间切换。",
+    "密钥变量和账号池敏感字段在前端展示与 resolved_request 中均做掩码处理。",
+    "相对 URL 会在选择环境后自动拼接 Base URL，减少重复录入。",
+    "后置提取能力可支撑登录接口取 token、业务接口复用 token 的依赖接口链路。"
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增环境、变量、账号池、数据池模型与服务，并接入 HTTP 测试执行前后的上下文渲染和响应提取。",
+      "strategies": [
+        "database_models.py 新增 ApiEnvironment、ApiEnvironmentVariable、ApiAccountPool、ApiDataPool。",
+        "新增 services/environment_service.py，封装变量渲染、动态变量生成、账号池/数据池取值、前置脚本执行、后置提取和动态变量写回。",
+        "新增 api/v1/environments.py，提供环境、变量、账号池、数据池 CRUD 接口。",
+        "response_schemas.py 扩展 HttpTestRequest 和 HttpTestResponse，支持 environment_id、pool_id、前后置脚本、提取器、写回标识和执行上下文返回。",
+        "test_execution_service.py 在 HTTP 请求前解析环境上下文，执行后提取变量并返回脱敏后的 resolved_request。",
+        "新增 Alembic 迁移脚本 5c2d6e7f8a9b_add_api_environment_management.py，创建环境管理相关表。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增环境管理页面，并在 HTTP 测试页加入环境选择、账号池/数据池、前后置脚本和提取变量展示。",
+      "strategies": [
+        "新增 pages/EnvironmentManagement.tsx，支持环境、变量、账号池和数据池维护。",
+        "HttpTest.tsx 新增环境选择、账号池、数据池、前置脚本、后置脚本和提取结果展示。",
+        "App.tsx 新增 /environments 路由。",
+        "ResponsiveLayout.tsx 与 AppSider.tsx 新增“环境变量管理”菜单入口。",
+        "services/api.ts 新增 environmentApi，封装环境体系相关接口。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/alembic/versions/5c2d6e7f8a9b_add_api_environment_management.py",
+      "backend/api/v1/environments.py",
+      "backend/schemas/environment_schemas.py",
+      "backend/services/environment_service.py",
+      "frontend/src/pages/EnvironmentManagement.tsx",
+      "versions/v2.13.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/api/deps.py",
+      "backend/main.py",
+      "backend/api/v1/tests.py",
+      "backend/schemas/response_schemas.py",
+      "backend/services/test_execution_service.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/pages/HttpTest.tsx",
+      "frontend/src/services/api.ts",
+      "frontend/src/types/index.ts"
+    ]
+  },
+  "api_changes": [
+    "GET /api/v1/environments",
+    "POST /api/v1/environments",
+    "PUT /api/v1/environments/{environment_id}",
+    "DELETE /api/v1/environments/{environment_id}",
+    "POST /api/v1/environments/{environment_id}/variables",
+    "PUT /api/v1/environment-variables/{variable_id}",
+    "DELETE /api/v1/environment-variables/{variable_id}",
+    "POST /api/v1/environments/{environment_id}/account-pools",
+    "PUT /api/v1/environment-account-pools/{pool_id}",
+    "DELETE /api/v1/environment-account-pools/{pool_id}",
+    "POST /api/v1/environments/{environment_id}/data-pools",
+    "PUT /api/v1/environment-data-pools/{pool_id}",
+    "DELETE /api/v1/environment-data-pools/{pool_id}",
+    "POST /api/v1/test/http 新增环境执行参数"
+  ],
+  "notes": [
+    "首次部署需执行 alembic upgrade head，创建 API 环境管理相关表。",
+    "前置脚本当前支持 set key=value；后置脚本当前支持 extract name json $.path、extract name header Header-Name、extract name body $。",
+    "依赖接口取值可通过后置脚本提取并开启 persist_extracted 写回环境动态变量，再由后续请求使用 {{变量名}} 引用。",
+    "前端构建已通过，当前仅存在项目既有 ESLint warning。"
+  ]
+}

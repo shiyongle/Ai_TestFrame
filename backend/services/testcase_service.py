@@ -3,6 +3,7 @@ from typing import List, Optional
 from models.database_models import TestCase, TestResult, AIGeneratedCaseEvidence
 from schemas.response_schemas import TestCaseCreate, TestCaseResponse
 from typing import TYPE_CHECKING
+from services.test_asset_audit_service import test_asset_audit_service
 
 if TYPE_CHECKING:
     from models.database_models import TestCase as TestCaseModel
@@ -21,6 +22,14 @@ class TestCaseService:
             db.add(db_testcase)
             db.commit()
             db.refresh(db_testcase)
+            test_asset_audit_service.record_asset_version(
+                db,
+                "functional_case",
+                db_testcase,
+                action="create",
+                actor="system",
+                source="manual",
+            )
             logger.info(f"创建测试用例成功: {testcase.name} (项目ID: {project_id})")
             return db_testcase
         except Exception as e:
@@ -68,13 +77,25 @@ class TestCaseService:
             if not testcase:
                 logger.warning(f"更新测试用例失败，用例不存在: ID {testcase_id}")
                 return None
-            
+
+            test_asset_audit_service.assert_asset_editable(db, "functional_case", testcase_id)
+            before_snapshot = test_asset_audit_service.serialize_asset("functional_case", testcase)
+
             for field, value in testcase_update.items():
                 if hasattr(testcase, field):
                     setattr(testcase, field, value)
             
             db.commit()
             db.refresh(testcase)
+            test_asset_audit_service.record_asset_version(
+                db,
+                "functional_case",
+                testcase,
+                action="update",
+                before_snapshot=before_snapshot,
+                actor="system",
+                source="manual",
+            )
             logger.info(f"更新测试用例成功: {testcase.name} (ID: {testcase_id})")
             return testcase
         except Exception as e:
@@ -91,6 +112,8 @@ class TestCaseService:
                 return False
 
             testcase_name = testcase.name
+            test_asset_audit_service.assert_asset_editable(db, "functional_case", testcase_id)
+            before_snapshot = test_asset_audit_service.serialize_asset("functional_case", testcase)
 
             # 方案A：AI证据保留为历史审计记录，仅断开与功能用例的弱关联
             detached_count = db.query(AIGeneratedCaseEvidence).filter(
@@ -102,6 +125,16 @@ class TestCaseService:
             if detached_count:
                 logger.info(f"删除测试用例前已断开 {detached_count} 条AI生成证据与用例的关联: testcase_id={testcase_id}")
 
+            test_asset_audit_service.record_asset_version(
+                db,
+                "functional_case",
+                testcase,
+                action="delete",
+                before_snapshot=before_snapshot,
+                actor="system",
+                source="manual",
+                commit=False,
+            )
             db.delete(testcase)
             db.commit()
             logger.info(f"删除测试用例成功: {testcase_name} (ID: {testcase_id})")
@@ -137,6 +170,26 @@ class TestCaseService:
             db.add(test_result)
             db.commit()
             db.refresh(test_result)
+            testcase = db.query(TestCase).filter(TestCase.id == testcase_id).first()
+            if testcase:
+                test_asset_audit_service.record_audit_event(
+                    db,
+                    "functional_case",
+                    testcase_id,
+                    testcase.project_id,
+                    action="execution_recorded",
+                    actor="system",
+                    detail=f"记录执行结果：{test_result.status}",
+                    after_hash=test_asset_audit_service._hash({
+                        "test_result_id": test_result.id,
+                        "status": test_result.status,
+                        "response_data": test_result.response_data,
+                        "execution_time": test_result.execution_time,
+                        "error_message": test_result.error_message,
+                        "executed_at": test_result.executed_at,
+                    }),
+                    metadata={"test_result_id": test_result.id, "status": test_result.status},
+                )
             logger.info(f"保存测试结果成功: 测试用例ID {testcase_id}")
             return test_result
         except Exception as e:
