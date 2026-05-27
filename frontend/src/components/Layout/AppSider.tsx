@@ -122,6 +122,7 @@ const AppSider: React.FC = () => {
       children: [
         { key: '/rule-config', icon: <SettingOutlined />, label: '全局测试规则' },
         { key: '/settings', icon: <SettingOutlined />, label: '平台配置中心' },
+        { key: '/enterprise-governance', icon: <SafetyCertificateOutlined />, label: '权限与企业治理' },
         { key: '/operation-logs', icon: <HistoryOutlined />, label: '操作审计日志' },
       ],
     },
@@ -162,6 +163,7 @@ const AppSider: React.FC = () => {
     if (
       location.pathname.startsWith('/rule-config')
       || location.pathname.startsWith('/settings')
+      || location.pathname.startsWith('/enterprise-governance')
       || location.pathname.startsWith('/operation-logs')
     ) {
       openKeys.push('settings');

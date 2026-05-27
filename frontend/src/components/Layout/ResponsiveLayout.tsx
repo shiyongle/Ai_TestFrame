@@ -209,6 +209,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           children: [
             { key: '/rule-config', icon: <SafetyCertificateOutlined />, label: '全局测试规则' },
             { key: '/settings', icon: <SettingOutlined />, label: '平台配置中心' },
+            { key: '/enterprise-governance', icon: <SafetyCertificateOutlined />, label: '权限与企业治理' },
             { key: '/operation-logs', icon: <ClockCircleOutlined />, label: '操作审计日志' },
           ],
         },
@@ -247,7 +248,12 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {
       openKeys.push('/automation');
     }
-    if (currentPath.startsWith('/rule-config') || currentPath.startsWith('/settings') || currentPath.startsWith('/operation-logs')) {
+    if (
+      currentPath.startsWith('/rule-config')
+      || currentPath.startsWith('/settings')
+      || currentPath.startsWith('/enterprise-governance')
+      || currentPath.startsWith('/operation-logs')
+    ) {
       openKeys.push('settings');
     }
     if (currentPath.startsWith('/data-warehouse')) {

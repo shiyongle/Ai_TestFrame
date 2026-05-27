@@ -30,6 +30,7 @@ import TaskCenter from './pages/TaskCenter';
 import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
 import BusinessData from './pages/DataWarehouse/BusinessData';
 import OperationLogs from './pages/OperationLogs';
+import EnterpriseGovernance from './pages/EnterpriseGovernance';
 import Defects from './pages/Defects';
 import TraceabilityMatrix from './pages/TraceabilityMatrix';
 import ImpactAnalysis from './pages/ImpactAnalysis';
@@ -127,6 +128,7 @@ const AppLayout: React.FC = () => {
               <Route path="/environments" element={<EnvironmentManagement />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
+              <Route path="/enterprise-governance" element={<EnterpriseGovernance />} />
               <Route path="/tasks" element={<TaskCenter />} />
               <Route path="/operation-logs" element={<OperationLogs />} />
             </Routes>

@@ -262,6 +262,44 @@ export const systemApi = {
   deleteUser: (id: number): Promise<any> => api.delete(`/api/v1/system/users/${id}`),
 };
 
+export const enterpriseGovernanceApi = {
+  getOverview: (): Promise<any> => api.get('/api/v1/enterprise-governance/overview'),
+  listOrganizations: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/organizations'),
+  createOrganization: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/organizations', data),
+  updateOrganization: (id: number, data: any): Promise<any> => api.put(`/api/v1/enterprise-governance/organizations/${id}`, data),
+  listTeams: (organizationId?: number): Promise<any[]> =>
+    api.get('/api/v1/enterprise-governance/teams', { params: { organization_id: organizationId } }),
+  createTeam: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/teams', data),
+  addTeamMember: (teamId: number, data: any): Promise<any> =>
+    api.post(`/api/v1/enterprise-governance/teams/${teamId}/members`, data),
+  deleteTeamMember: (memberId: number): Promise<any> =>
+    api.delete(`/api/v1/enterprise-governance/team-members/${memberId}`),
+  listRoles: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/roles'),
+  createRole: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/roles', data),
+  updateRole: (id: number, data: any): Promise<any> => api.put(`/api/v1/enterprise-governance/roles/${id}`, data),
+  listProjectRoles: (projectId?: number): Promise<any[]> =>
+    api.get('/api/v1/enterprise-governance/project-roles', { params: { project_id: projectId } }),
+  grantProjectRole: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/project-roles', data),
+  listSsoProviders: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/sso-providers'),
+  createSsoProvider: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/sso-providers', data),
+  updateSsoProvider: (id: number, data: any): Promise<any> =>
+    api.put(`/api/v1/enterprise-governance/sso-providers/${id}`, data),
+  listApiTokens: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/api-tokens'),
+  createApiToken: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/api-tokens', data),
+  revokeApiToken: (id: number): Promise<any> => api.delete(`/api/v1/enterprise-governance/api-tokens/${id}`),
+  listSecrets: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/secrets'),
+  createSecret: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/secrets', data),
+  rotateSecret: (id: number, data: any): Promise<any> =>
+    api.post(`/api/v1/enterprise-governance/secrets/${id}/rotate`, data),
+  listApprovals: (statusFilter?: string): Promise<any[]> =>
+    api.get('/api/v1/enterprise-governance/approvals', { params: { status_filter: statusFilter } }),
+  createApproval: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/approvals', data),
+  decideApproval: (id: number, data: { decision: string; comment?: string }): Promise<any> =>
+    api.post(`/api/v1/enterprise-governance/approvals/${id}/decision`, data),
+  listAudits: (params?: { event_type?: string; limit?: number }): Promise<any[]> =>
+    api.get('/api/v1/enterprise-governance/audits', { params }),
+};
+
 // 仪表盘 API
 export const dashboardApi = {
   getStats: (): Promise<any> => api.get('/api/v1/dashboard/stats'),

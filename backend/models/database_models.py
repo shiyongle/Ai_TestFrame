@@ -882,6 +882,185 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class EnterpriseOrganization(Base):
+    """企业组织。"""
+    __tablename__ = "enterprise_organizations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    code = Column(String(80), nullable=False, index=True)
+    description = Column(Text)
+    status = Column(String(20), nullable=False, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    teams = relationship("EnterpriseTeam", back_populates="organization", cascade="all, delete-orphan")
+
+
+class EnterpriseTeam(Base):
+    """组织下的团队。"""
+    __tablename__ = "enterprise_teams"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("enterprise_organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(150), nullable=False)
+    code = Column(String(80), nullable=False, index=True)
+    owner = Column(String(100))
+    description = Column(Text)
+    status = Column(String(20), nullable=False, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("EnterpriseOrganization", back_populates="teams")
+    members = relationship("EnterpriseTeamMember", back_populates="team", cascade="all, delete-orphan")
+
+
+class EnterpriseTeamMember(Base):
+    """团队成员。"""
+    __tablename__ = "enterprise_team_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    team_id = Column(Integer, ForeignKey("enterprise_teams.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    member_role = Column(String(50), nullable=False, default="member")
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+    team = relationship("EnterpriseTeam", back_populates="members")
+    user = relationship("User")
+
+
+class EnterpriseRole(Base):
+    """RBAC 角色定义。"""
+    __tablename__ = "enterprise_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    code = Column(String(80), nullable=False, index=True)
+    scope = Column(String(30), nullable=False, default="project")
+    permissions = Column(JSON)
+    description = Column(Text)
+    built_in = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EnterpriseProjectRole(Base):
+    """用户在项目内的角色授权，用于数据隔离和项目权限。"""
+    __tablename__ = "enterprise_project_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(Integer, ForeignKey("enterprise_roles.id", ondelete="SET NULL"))
+    role_code = Column(String(80), nullable=False, default="project_viewer")
+    permissions = Column(JSON)
+    status = Column(String(20), nullable=False, default="active")
+    granted_by = Column(String(100), default="system")
+    granted_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    project = relationship("Project")
+    role = relationship("EnterpriseRole")
+
+
+class EnterpriseSsoProvider(Base):
+    """SSO/OIDC/SAML/LDAP 配置。"""
+    __tablename__ = "enterprise_sso_providers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    provider_type = Column(String(30), nullable=False, default="oidc")
+    enabled = Column(Boolean, nullable=False, default=False)
+    issuer_url = Column(Text)
+    metadata_url = Column(Text)
+    client_id = Column(String(255))
+    client_secret = Column(Text)
+    ldap_url = Column(Text)
+    domain = Column(String(150))
+    config = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EnterpriseApiToken(Base):
+    """API Token，只存哈希和前缀。"""
+    __tablename__ = "enterprise_api_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    token_prefix = Column(String(16), nullable=False, index=True)
+    token_hash = Column(String(128), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    scopes = Column(JSON)
+    expires_at = Column(DateTime)
+    revoked_at = Column(DateTime)
+    last_used_at = Column(DateTime)
+    created_by = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
+class EnterpriseSecret(Base):
+    """密钥托管记录。"""
+    __tablename__ = "enterprise_secrets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False)
+    secret_type = Column(String(50), nullable=False, default="api_key")
+    owner_scope = Column(String(30), nullable=False, default="platform")
+    owner_id = Column(Integer)
+    encrypted_value = Column(Text, nullable=False)
+    masked_value = Column(String(120))
+    description = Column(Text)
+    rotation_period_days = Column(Integer, default=90)
+    last_rotated_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class EnterpriseApprovalRequest(Base):
+    """企业操作审批。"""
+    __tablename__ = "enterprise_approval_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    action_type = Column(String(80), nullable=False)
+    resource_type = Column(String(80), nullable=False)
+    resource_id = Column(String(80))
+    payload = Column(JSON)
+    status = Column(String(30), nullable=False, default="pending")
+    requester_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    requester = Column(String(100), default="system")
+    approver_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    decision_comment = Column(Text)
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime)
+
+    requester_user = relationship("User", foreign_keys=[requester_id])
+    approver_user = relationship("User", foreign_keys=[approver_id])
+
+
+class EnterpriseAccessAudit(Base):
+    """访问审计流水。"""
+    __tablename__ = "enterprise_access_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    username = Column(String(100))
+    event_type = Column(String(80), nullable=False)
+    resource_type = Column(String(80), nullable=False)
+    resource_id = Column(String(80))
+    result = Column(String(20), nullable=False, default="success")
+    ip_address = Column(String(80))
+    user_agent = Column(Text)
+    detail = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class Defect(Base):
     """缺陷闭环主表，支持内置流转与外部缺陷平台映射。"""
     __tablename__ = "defects"

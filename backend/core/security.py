@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config.settings import settings
-from models.database_models import User
+from models.database_models import EnterpriseApiToken, User
 
 security = HTTPBearer(auto_error=False)
 
@@ -76,6 +76,35 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="认证令牌已过期")
 
     return payload
+
+
+def hash_api_token(token: str) -> str:
+    return hmac.new(settings.auth_secret_key.encode("utf-8"), token.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def get_user_by_api_token(db: Session, token: str) -> User:
+    """校验企业 API Token，并返回关联用户。"""
+    if not token.startswith("taf_"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的 API Token")
+
+    token_hash = hash_api_token(token)
+    token_record = db.query(EnterpriseApiToken).filter(
+        EnterpriseApiToken.token_hash == token_hash,
+        EnterpriseApiToken.revoked_at.is_(None),
+    ).first()
+    if not token_record:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API Token 不存在或已撤销")
+    if token_record.expires_at and token_record.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API Token 已过期")
+
+    user = db.query(User).filter(User.id == token_record.user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API Token 关联用户不可用")
+
+    token_record.last_used_at = datetime.utcnow()
+    db.add(token_record)
+    db.commit()
+    return user
 
 
 def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:

@@ -10,8 +10,8 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent, performance, agent_evaluation, model_configs, badcases, evaluation_templates, golden_datasets, defects, traceability, test_asset_audit, environments, api_testing_advanced, ai_quality_governance
-from core.security import decode_access_token, ensure_default_admin
+from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent, performance, agent_evaluation, model_configs, badcases, evaluation_templates, golden_datasets, defects, traceability, test_asset_audit, environments, api_testing_advanced, ai_quality_governance, enterprise_governance
+from core.security import decode_access_token, ensure_default_admin, get_user_by_api_token
 from fastapi import HTTPException
 
 # 设置日志
@@ -55,9 +55,23 @@ async def authenticate_request(request: Request, call_next):
         try:
             request.state.user = decode_access_token(token)
         except Exception as exc:
-            if isinstance(exc, HTTPException):
-                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
-            return JSONResponse(status_code=401, content={"detail": "认证失败"})
+            try:
+                from core.database import SessionLocal
+                db = SessionLocal()
+                try:
+                    api_user = get_user_by_api_token(db, token)
+                    request.state.user = {
+                        "sub": api_user.username,
+                        "user_id": api_user.id,
+                        "role": api_user.role,
+                        "auth_type": "api_token",
+                    }
+                finally:
+                    db.close()
+            except Exception:
+                if isinstance(exc, HTTPException):
+                    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+                return JSONResponse(status_code=401, content={"detail": "认证失败"})
 
     return await call_next(request)
 
@@ -185,6 +199,7 @@ try:
     app.include_router(environments.router, prefix="/api/v1", tags=["environments"])
     app.include_router(api_testing_advanced.router, prefix="/api/v1", tags=["api_testing_advanced"])
     app.include_router(ai_quality_governance.router, prefix="/api/v1", tags=["ai_quality_governance"])
+    app.include_router(enterprise_governance.router, prefix="/api/v1", tags=["enterprise_governance"])
     main_logger.info("API路由注册成功")
 except Exception as e:
     main_logger.error(f"API路由注册失败: {str(e)}")
