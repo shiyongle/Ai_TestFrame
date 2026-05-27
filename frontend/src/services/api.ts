@@ -235,6 +235,23 @@ export const aiApi = {
   updateKnowledgeLinks: (id: number, data: any): Promise<any> =>
     api.post(`/api/v1/ai/knowledge/${id}/links`, data),
 };
+
+export const aiQualityApi = {
+  getOverview: (): Promise<any> => api.get('/api/v1/ai-quality/overview'),
+  listPrompts: (params?: { prompt_type?: string }): Promise<any[]> => api.get('/api/v1/ai-quality/prompts', { params }),
+  createPrompt: (data: any): Promise<any> => api.post('/api/v1/ai-quality/prompts', data),
+  activatePrompt: (id: number): Promise<any> => api.post(`/api/v1/ai-quality/prompts/${id}/activate`),
+  listReviews: (params?: { status?: string; limit?: number }): Promise<any[]> => api.get('/api/v1/ai-quality/reviews', { params }),
+  createReview: (data: any): Promise<any> => api.post('/api/v1/ai-quality/reviews', data),
+  updateReview: (id: number, data: any): Promise<any> => api.put(`/api/v1/ai-quality/reviews/${id}`, data),
+  listBudgets: (): Promise<any[]> => api.get('/api/v1/ai-quality/budgets'),
+  createBudget: (data: any): Promise<any> => api.post('/api/v1/ai-quality/budgets', data),
+  syncBudgetUsage: (): Promise<any> => api.post('/api/v1/ai-quality/budgets/sync-usage'),
+  listExperiments: (): Promise<any[]> => api.get('/api/v1/ai-quality/experiments'),
+  createExperiment: (data: any): Promise<any> => api.post('/api/v1/ai-quality/experiments', data),
+  listKnowledgeScans: (params?: { limit?: number }): Promise<any[]> => api.get('/api/v1/ai-quality/knowledge-scans', { params }),
+  runKnowledgeScan: (maxDocs = 100): Promise<any> => api.post('/api/v1/ai-quality/knowledge-scans/run', null, { params: { max_docs: maxDocs } }),
+};
 // 系统设置 API
 export const systemApi = {
   getSettings: (category: string): Promise<any> => api.get(`/api/v1/system/settings/${category}`),

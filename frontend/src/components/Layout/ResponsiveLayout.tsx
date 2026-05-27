@@ -209,6 +209,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               icon: <SettingOutlined />,
               label: '模型配置',
             },
+            {
+              key: '/ai-quality',
+              icon: <SafetyCertificateOutlined />,
+              label: 'AI 质量治理',
+            },
           ],
         },
         {
@@ -376,7 +381,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     if (currentPath.startsWith('/testcases')) {
       openKeys.push('testcases');
     }
-    if (currentPath.startsWith('/agent-evaluation')) {
+    if (currentPath.startsWith('/agent-evaluation') || currentPath.startsWith('/ai-quality')) {
       openKeys.push('agent-eval');
     }
     if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {

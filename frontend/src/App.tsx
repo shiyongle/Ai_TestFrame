@@ -42,6 +42,7 @@ import EvaluationTemplates from './pages/AgentEvaluation/EvaluationTemplates';
 import BadCases from './pages/AgentEvaluation/BadCases';
 import ModelConfigs from './pages/AgentEvaluation/ModelConfigs';
 import GoldenDatasets from './pages/AgentEvaluation/GoldenDatasets';
+import AIQualityGovernance from './pages/AIQualityGovernance';
 import { authStorage } from './services/api';
 
 const { Content } = Layout;
@@ -108,6 +109,7 @@ const AppLayout: React.FC = () => {
               <Route path="/agent-evaluation/badcases" element={<BadCases />} />
               <Route path="/agent-evaluation/model-configs" element={<ModelConfigs />} />
               <Route path="/agent-evaluation/golden-datasets" element={<GoldenDatasets />} />
+              <Route path="/ai-quality" element={<AIQualityGovernance />} />
               <Route path="/rule-config" element={<RuleConfig />} />
               <Route path="/ai/knowledge" element={<AiKnowledge />} />
               <Route path="/tools/id-generator" element={<IdGenerator />} />

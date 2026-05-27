@@ -1332,6 +1332,113 @@ class AgentEvaluationItem(Base):
     run = relationship("AgentEvaluationRun", back_populates="items")
 
 
+class AIPromptVersion(Base):
+    """AI Prompt 版本管理。"""
+    __tablename__ = "ai_prompt_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    prompt_type = Column(String(50), nullable=False, default="testcase_generation")
+    version = Column(String(50), nullable=False, default="v1")
+    system_prompt = Column(Text)
+    user_prompt = Column(Text, nullable=False)
+    model_config_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    status = Column(String(20), nullable=False, default="draft")
+    change_log = Column(Text)
+    metrics = Column(JSON)
+    created_by = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    model_config = relationship("ModelConfig")
+
+
+class AIGenerationReview(Base):
+    """AI 生成结果评审与质量评分。"""
+    __tablename__ = "ai_generation_reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_type = Column(String(50), nullable=False, default="manual")
+    source_id = Column(Integer)
+    prompt_version_id = Column(Integer, ForeignKey("ai_prompt_versions.id", ondelete="SET NULL"))
+    model_config_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    title = Column(String(200), nullable=False)
+    content = Column(JSON)
+    status = Column(String(30), nullable=False, default="pending")
+    quality_score = Column(Float, nullable=False, default=0)
+    hallucination_score = Column(Float, nullable=False, default=0)
+    hallucination_flags = Column(JSON)
+    reviewer = Column(String(100))
+    review_comment = Column(Text)
+    adopted_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    prompt_version = relationship("AIPromptVersion")
+    model_config = relationship("ModelConfig")
+
+
+class AIModelBudget(Base):
+    """模型成本预算与消耗追踪。"""
+    __tablename__ = "ai_model_budgets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    provider = Column(String(50), nullable=False)
+    model = Column(String(100), nullable=False)
+    period_month = Column(String(7), nullable=False)
+    token_budget = Column(Integer, nullable=False, default=0)
+    cost_budget = Column(Float, nullable=False, default=0)
+    used_tokens = Column(Integer, nullable=False, default=0)
+    used_cost = Column(Float, nullable=False, default=0)
+    alert_threshold = Column(Float, nullable=False, default=0.8)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AIABExperiment(Base):
+    """模型/Prompt A/B 实验。"""
+    __tablename__ = "ai_ab_experiments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    prompt_a_id = Column(Integer, ForeignKey("ai_prompt_versions.id", ondelete="SET NULL"))
+    prompt_b_id = Column(Integer, ForeignKey("ai_prompt_versions.id", ondelete="SET NULL"))
+    model_a_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    model_b_id = Column(Integer, ForeignKey("model_configs.id", ondelete="SET NULL"))
+    metric_name = Column(String(80), nullable=False, default="quality_score")
+    sample_size = Column(Integer, nullable=False, default=0)
+    result_summary = Column(JSON)
+    winner = Column(String(20))
+    status = Column(String(20), nullable=False, default="draft")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    prompt_a = relationship("AIPromptVersion", foreign_keys=[prompt_a_id])
+    prompt_b = relationship("AIPromptVersion", foreign_keys=[prompt_b_id])
+    model_a = relationship("ModelConfig", foreign_keys=[model_a_id])
+    model_b = relationship("ModelConfig", foreign_keys=[model_b_id])
+
+
+class AIKnowledgeQualityScan(Base):
+    """知识库质量与过期扫描记录。"""
+    __tablename__ = "ai_knowledge_quality_scans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("knowledge_documents.id", ondelete="SET NULL"))
+    scan_type = Column(String(50), nullable=False, default="quality")
+    quality_score = Column(Float, nullable=False, default=0)
+    freshness_score = Column(Float, nullable=False, default=0)
+    coverage_score = Column(Float, nullable=False, default=0)
+    issue_count = Column(Integer, nullable=False, default=0)
+    issues = Column(JSON)
+    status = Column(String(20), nullable=False, default="completed")
+    scanned_at = Column(DateTime, default=datetime.utcnow)
+
+    document = relationship("KnowledgeDocument")
+
+
 # 知识提取模板表
 class ExtractionTemplate(Base):
     __tablename__ = "extraction_templates"

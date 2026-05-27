@@ -66,6 +66,11 @@ const AppSider: React.FC = () => {
           icon: <ControlOutlined />,
           label: '模型配置',
         },
+        {
+          key: '/ai-quality',
+          icon: <SafetyCertificateOutlined />,
+          label: 'AI质量治理',
+        },
       ],
     },
     {
@@ -172,7 +177,7 @@ const AppSider: React.FC = () => {
     if (location.pathname.startsWith('/tools')) {
       openKeys.push('tools');
     }
-    if (location.pathname.startsWith('/agent-evaluation')) {
+    if (location.pathname.startsWith('/agent-evaluation') || location.pathname.startsWith('/ai-quality')) {
       openKeys.push('agent-eval');
     }
     if (location.pathname.startsWith('/rule-config') || location.pathname.startsWith('/settings')) {

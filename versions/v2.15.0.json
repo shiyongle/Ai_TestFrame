@@ -1,0 +1,95 @@
+{
+  "version": "v2.15.0",
+  "date": "2026-05-27",
+  "title": "AI 质量治理闭环上线",
+  "description": "本次发布补齐 AI 能力工程化治理闭环，在现有 RAG、用例生成、Agent 评测、证据追踪基础上，新增 Prompt 版本管理、生成结果评审流、幻觉风险检测、采纳率统计、AI 生成质量评分、模型成本预算、模型/Prompt A/B 实验、知识库质量评估和知识过期检测。",
+  "features": [
+    {
+      "title": "Prompt 版本与评审流",
+      "items": [
+        "新增 AI 质量治理页面 /ai-quality，菜单入口为“Agent 评测 -> AI 质量治理”。",
+        "支持维护 Prompt 类型、版本、System Prompt、User Prompt、默认模型、变更说明和生效状态。",
+        "支持将生成结果纳入评审台账，记录来源、Prompt 版本、模型、质量分、幻觉风险分和人工采纳/驳回状态。",
+        "支持一键将指定 Prompt 版本设为 active，同类型历史版本自动归档。"
+      ]
+    },
+    {
+      "title": "幻觉检测、质量评分与采纳率",
+      "items": [
+        "生成评审创建时自动执行轻量质量评分，检查空输出、内容过短、不确定表达和缺少证据引用等风险。",
+        "自动生成 hallucination_flags，便于评审人员定位幻觉风险来源。",
+        "治理总览展示评审数量、采纳率、平均质量分、平均幻觉风险和知识引用率。",
+        "评审记录支持采纳和驳回，形成生成结果从产出到确认的闭环。"
+      ]
+    },
+    {
+      "title": "成本预算、A/B 实验与知识质量",
+      "items": [
+        "支持配置模型月度 Token 预算、成本预算、已用 Token、已用成本和告警阈值。",
+        "支持从 Agent 评测运行记录同步模型 Token 与成本消耗，沉淀模型预算视图。",
+        "支持创建模型/Prompt A/B 实验，记录样本量、指标、结果摘要和胜出版本。",
+        "支持知识库质量扫描，对知识内容长度、分类、更新时间进行评分并识别过期知识。"
+      ]
+    }
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增 AI 质量治理模型、迁移、服务和 API，复用现有模型配置、Agent 评测、AI 生成证据和知识库数据。",
+      "strategies": [
+        "database_models.py 新增 AIPromptVersion、AIGenerationReview、AIModelBudget、AIABExperiment、AIKnowledgeQualityScan。",
+        "新增 Alembic 迁移脚本 7e8f9a0b1c2d_add_ai_quality_governance.py。",
+        "新增 services/ai_quality_governance_service.py，封装总览指标、Prompt 生效、生成评分、评审状态流转、预算同步、A/B 摘要和知识质量扫描。",
+        "新增 api/v1/ai_quality_governance.py，提供 AI 质量治理 REST API。",
+        "main.py 注册 ai_quality_governance 路由。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增 AI 质量治理页面，形成 AI 产出质量、模型成本和知识健康的统一治理入口。",
+      "strategies": [
+        "新增 pages/AIQualityGovernance.tsx，提供 Prompt 版本、生成评审、模型预算、模型 A/B、知识质量五个标签页。",
+        "services/api.ts 新增 aiQualityApi，封装治理接口。",
+        "App.tsx 新增 /ai-quality 路由。",
+        "ResponsiveLayout.tsx 与 AppSider.tsx 在 Agent 评测菜单下新增“AI 质量治理”。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/alembic/versions/7e8f9a0b1c2d_add_ai_quality_governance.py",
+      "backend/api/v1/ai_quality_governance.py",
+      "backend/services/ai_quality_governance_service.py",
+      "frontend/src/pages/AIQualityGovernance.tsx",
+      "versions/v2.15.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/main.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/services/api.ts"
+    ]
+  },
+  "api_changes": [
+    "GET /api/v1/ai-quality/overview",
+    "GET /api/v1/ai-quality/prompts",
+    "POST /api/v1/ai-quality/prompts",
+    "POST /api/v1/ai-quality/prompts/{prompt_id}/activate",
+    "GET /api/v1/ai-quality/reviews",
+    "POST /api/v1/ai-quality/reviews",
+    "PUT /api/v1/ai-quality/reviews/{review_id}",
+    "GET /api/v1/ai-quality/budgets",
+    "POST /api/v1/ai-quality/budgets",
+    "POST /api/v1/ai-quality/budgets/sync-usage",
+    "GET /api/v1/ai-quality/experiments",
+    "POST /api/v1/ai-quality/experiments",
+    "GET /api/v1/ai-quality/knowledge-scans",
+    "POST /api/v1/ai-quality/knowledge-scans/run"
+  ],
+  "notes": [
+    "首次部署需执行 alembic upgrade head，创建 AI 质量治理相关表。",
+    "幻觉检测当前为轻量启发式规则，后续可接入 LLM-as-Judge 和事实一致性检索校验。",
+    "模型预算当前支持配置与同步 Agent 评测消耗，后续可在所有 LLM 调用链路统一埋点 token/cost。",
+    "A/B 实验当前先沉淀实验台账和已有评测摘要，后续可自动分流真实生成任务。"
+  ]
+}
