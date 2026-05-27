@@ -24,6 +24,7 @@ from services.defect_service import DefectService, defect_service
 from services.traceability_service import TraceabilityService, traceability_service
 from services.test_asset_audit_service import TestAssetAuditService, test_asset_audit_service
 from services.environment_service import EnvironmentService, environment_service
+from services.api_testing_advanced_service import ApiTestingAdvancedService, api_testing_advanced_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -111,3 +112,8 @@ def get_test_asset_audit_service() -> TestAssetAuditService:
 def get_environment_service() -> EnvironmentService:
     """获取 API 环境与变量管理服务实例"""
     return environment_service
+
+
+def get_api_testing_advanced_service() -> ApiTestingAdvancedService:
+    """获取高级接口测试服务实例"""
+    return api_testing_advanced_service

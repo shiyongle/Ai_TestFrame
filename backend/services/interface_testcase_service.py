@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from models.database_models import InterfaceTestCase
 from services.test_asset_audit_service import test_asset_audit_service
+from services.api_testing_advanced_service import api_testing_advanced_service
 
 
 class InterfaceTestCaseService:
@@ -60,6 +61,7 @@ class InterfaceTestCaseService:
             return None
         test_asset_audit_service.assert_asset_editable(db, "interface_case", case_id)
         before_snapshot = test_asset_audit_service.serialize_asset("interface_case", obj)
+        api_before_snapshot = api_testing_advanced_service._case_snapshot(obj)
         for key, value in payload.items():
             if hasattr(obj, key):
                 setattr(obj, key, value)
@@ -72,7 +74,15 @@ class InterfaceTestCaseService:
             action="update",
             before_snapshot=before_snapshot,
             actor="system",
+                source="manual",
+            )
+        api_testing_advanced_service.record_interface_change(
+            db,
+            obj,
+            api_before_snapshot,
             source="manual",
+            operator="system",
+            commit=True,
         )
         return obj
 

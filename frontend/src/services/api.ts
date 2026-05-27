@@ -332,6 +332,37 @@ export const environmentApi = {
   deleteDataPool: (id: number): Promise<any> => api.delete(`/api/v1/environment-data-pools/${id}`),
 };
 
+export const apiAdvancedApi = {
+  getSummary: (params?: { project_id?: number }): Promise<any> =>
+    api.get('/api/v1/api-advanced/assets/summary', { params }),
+  listCollections: (params?: { project_id?: number }): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/collections', { params }),
+  createCollection: (data: any): Promise<any> =>
+    api.post('/api/v1/api-advanced/collections', data),
+  runCollection: (collectionId: number, data: { environment_id?: number; iterations?: number; data_pool_id?: number }): Promise<any> =>
+    api.post(`/api/v1/api-advanced/collections/${collectionId}/run`, data),
+  listRuns: (params?: { collection_id?: number; limit?: number }): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/runs', { params }),
+  syncDocs: (data: { docs_url: string; project_id: number; module?: string; max_cases?: number }): Promise<any> =>
+    api.post('/api/v1/api-advanced/docs/sync', data),
+  listMocks: (params?: { project_id?: number }): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/mocks', { params }),
+  createMock: (data: any): Promise<any> =>
+    api.post('/api/v1/api-advanced/mocks', data),
+  listContracts: (params?: { interface_testcase_id?: number }): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/contracts', { params }),
+  createContract: (data: any): Promise<any> =>
+    api.post('/api/v1/api-advanced/contracts', data),
+  listMonitors: (): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/monitors'),
+  createMonitor: (data: any): Promise<any> =>
+    api.post('/api/v1/api-advanced/monitors', data),
+  runMonitor: (probeId: number): Promise<any> =>
+    api.post(`/api/v1/api-advanced/monitors/${probeId}/run`),
+  listChanges: (params?: { project_id?: number; limit?: number }): Promise<any[]> =>
+    api.get('/api/v1/api-advanced/changes', { params }),
+};
+
 export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };

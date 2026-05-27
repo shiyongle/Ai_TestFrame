@@ -91,6 +91,11 @@ const AppSider: React.FC = () => {
       label: '接口测试',
       children: [
         {
+          key: '/api-advanced',
+          icon: <ApiOutlined />,
+          label: '高级接口测试',
+        },
+        {
           key: '/test/http',
           icon: <ApiOutlined />,
           label: 'HTTP测试',

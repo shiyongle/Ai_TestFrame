@@ -631,6 +631,167 @@ class ApiDataPool(Base):
 
     environment = relationship("ApiEnvironment", back_populates="data_pools")
 
+
+class ApiTestCollection(Base):
+    """接口测试集合，支持集合级 Runner 和前后置脚本。"""
+    __tablename__ = "api_test_collections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    environment_id = Column(Integer, ForeignKey("api_environments.id"))
+    pre_script = Column(Text)
+    post_script = Column(Text)
+    tags = Column(JSON)
+    status = Column(String(20), nullable=False, default="active")
+    created_by = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    environment = relationship("ApiEnvironment")
+    items = relationship("ApiTestCollectionItem", back_populates="collection", cascade="all, delete-orphan")
+
+
+class ApiTestCollectionItem(Base):
+    """接口测试集合步骤。"""
+    __tablename__ = "api_test_collection_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    collection_id = Column(Integer, ForeignKey("api_test_collections.id", ondelete="CASCADE"), nullable=False)
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id"), nullable=False)
+    order_index = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+    extractors = Column(JSON)
+    assertions = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    collection = relationship("ApiTestCollection", back_populates="items")
+    interface_testcase = relationship("InterfaceTestCase")
+
+
+class ApiTestRun(Base):
+    """接口集合运行记录。"""
+    __tablename__ = "api_test_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    collection_id = Column(Integer, ForeignKey("api_test_collections.id", ondelete="SET NULL"))
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    environment_id = Column(Integer, ForeignKey("api_environments.id"))
+    status = Column(String(20), nullable=False, default="running")
+    total_items = Column(Integer, default=0)
+    passed_items = Column(Integer, default=0)
+    failed_items = Column(Integer, default=0)
+    duration_ms = Column(Integer, default=0)
+    context_snapshot = Column(JSON)
+    summary = Column(JSON)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+
+    collection = relationship("ApiTestCollection")
+    project = relationship("Project")
+    environment = relationship("ApiEnvironment")
+    items = relationship("ApiTestRunItem", back_populates="run", cascade="all, delete-orphan")
+
+
+class ApiTestRunItem(Base):
+    """接口集合运行步骤结果。"""
+    __tablename__ = "api_test_run_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    run_id = Column(Integer, ForeignKey("api_test_runs.id", ondelete="CASCADE"), nullable=False)
+    collection_item_id = Column(Integer, ForeignKey("api_test_collection_items.id"))
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id"))
+    name = Column(String(150))
+    status = Column(String(20), nullable=False, default="failed")
+    status_code = Column(Integer, default=0)
+    duration_ms = Column(Integer, default=0)
+    assertions = Column(JSON)
+    extracted_variables = Column(JSON)
+    error_message = Column(Text)
+    response_snapshot = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    run = relationship("ApiTestRun", back_populates="items")
+    interface_testcase = relationship("InterfaceTestCase")
+
+
+class ApiMockEndpoint(Base):
+    """Mock Server 端点。"""
+    __tablename__ = "api_mock_endpoints"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    name = Column(String(150), nullable=False)
+    mock_key = Column(String(80), nullable=False, index=True)
+    method = Column(String(10), nullable=False, default="GET")
+    path = Column(String(300), nullable=False)
+    status_code = Column(Integer, default=200)
+    headers = Column(JSON)
+    response_body = Column(JSON)
+    delay_ms = Column(Integer, default=0)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+
+
+class ApiContractSchema(Base):
+    """接口契约 Schema。"""
+    __tablename__ = "api_contract_schemas"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(150), nullable=False)
+    expected_status_codes = Column(JSON)
+    response_schema = Column(JSON)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    interface_testcase = relationship("InterfaceTestCase")
+
+
+class ApiInterfaceChangeLog(Base):
+    """接口资产变更 Diff 日志。"""
+    __tablename__ = "api_interface_change_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    old_snapshot = Column(JSON)
+    new_snapshot = Column(JSON)
+    diff = Column(JSON)
+    source = Column(String(50), default="manual")
+    operator = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    interface_testcase = relationship("InterfaceTestCase")
+    project = relationship("Project")
+
+
+class ApiMonitorProbe(Base):
+    """接口监控探测配置。"""
+    __tablename__ = "api_monitor_probes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), nullable=False)
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id", ondelete="CASCADE"), nullable=False)
+    environment_id = Column(Integer, ForeignKey("api_environments.id"))
+    interval_seconds = Column(Integer, default=300)
+    enabled = Column(Boolean, default=True)
+    last_status = Column(String(20))
+    last_status_code = Column(Integer)
+    last_latency_ms = Column(Integer)
+    last_checked_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    interface_testcase = relationship("InterfaceTestCase")
+    environment = relationship("ApiEnvironment")
+
 # 批量测试任务表
 class BatchTestTask(Base):
     __tablename__ = "batch_test_tasks"
