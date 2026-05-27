@@ -10,6 +10,7 @@ class DefectCreate(BaseModel):
     severity: str = "major"
     priority: str = "P2"
     source_type: str = "manual"
+    requirement_id: Optional[int] = None
     project_id: Optional[int] = None
     report_id: Optional[int] = None
     testcase_id: Optional[int] = None
@@ -80,6 +81,7 @@ class DefectResponse(BaseModel):
     status: str
     source_type: str
     project_id: Optional[int] = None
+    requirement_id: Optional[int] = None
     report_id: Optional[int] = None
     testcase_id: Optional[int] = None
     interface_testcase_id: Optional[int] = None
