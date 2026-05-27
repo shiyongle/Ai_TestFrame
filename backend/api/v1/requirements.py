@@ -6,6 +6,7 @@ from models.database_models import Requirement, Project, TestCase, TestSuite, Te
 from pydantic import BaseModel
 from datetime import datetime
 from services.ai.ai_service import ai_service
+from services.traceability_service import traceability_service
 from utils.activity_logger import log_activity
 
 router = APIRouter()
@@ -131,9 +132,16 @@ async def update_requirement(
                 detail="项目不存在"
             )
     
+    tracked_fields = [
+        "title", "description", "priority", "status", "type", "acceptance_criteria",
+        "business_value", "tags", "linked_test_cases"
+    ]
+    old_content = {field: getattr(db_requirement, field, None) for field in tracked_fields}
     update_data = requirement_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_requirement, field, value)
+    new_content = {field: getattr(db_requirement, field, None) for field in tracked_fields}
+    traceability_service.record_requirement_change(db, db_requirement, old_content, new_content)
     
     db_requirement.updated_at = datetime.utcnow()
     db.commit()

@@ -239,6 +239,16 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           label: '测试质量报告',
         },
         {
+          key: '/traceability',
+          icon: <FileSearchOutlined />,
+          label: '质量追踪矩阵',
+        },
+        {
+          key: '/impact-analysis',
+          icon: <ThunderboltOutlined />,
+          label: '需求影响分析',
+        },
+        {
           key: '/defects',
           icon: <IssuesCloseOutlined />,
           label: '缺陷管理',

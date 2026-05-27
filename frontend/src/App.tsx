@@ -31,6 +31,8 @@ import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
 import BusinessData from './pages/DataWarehouse/BusinessData';
 import OperationLogs from './pages/OperationLogs';
 import Defects from './pages/Defects';
+import TraceabilityMatrix from './pages/TraceabilityMatrix';
+import ImpactAnalysis from './pages/ImpactAnalysis';
 import UiAutomation from './pages/ApiAutomation/UIAutomation';
 import Login from './pages/Login';
 import AgentEvaluation from './pages/AgentEvaluation';
@@ -114,6 +116,8 @@ const AppLayout: React.FC = () => {
               <Route path="/data-warehouse/business" element={<BusinessData />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/defects" element={<Defects />} />
+              <Route path="/traceability" element={<TraceabilityMatrix />} />
+              <Route path="/impact-analysis" element={<ImpactAnalysis />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
               <Route path="/tasks" element={<TaskCenter />} />

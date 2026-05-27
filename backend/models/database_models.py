@@ -397,6 +397,64 @@ class Requirement(Base):
     
     project = relationship("Project")
 
+
+class RequirementTestAsset(Base):
+    """需求与测试资产的统一关联表。"""
+    __tablename__ = "requirement_test_assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requirement_id = Column(Integer, ForeignKey("requirements.id", ondelete="CASCADE"), nullable=False)
+    asset_type = Column(String(50), nullable=False)  # functional_case/interface_case/ui_case/performance_scenario/agent_dataset
+    asset_id = Column(Integer, nullable=False)
+    coverage_type = Column(String(30), nullable=False, default="regression")
+    priority = Column(String(20), nullable=False, default="medium")
+    source = Column(String(30), nullable=False, default="manual")
+    confidence_score = Column(Float, default=1.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requirement = relationship("Requirement")
+
+
+class QualityExecutionResult(Base):
+    """统一质量执行结果表，用于沉淀不同测试资产的执行状态。"""
+    __tablename__ = "quality_execution_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requirement_id = Column(Integer, ForeignKey("requirements.id", ondelete="CASCADE"), nullable=False)
+    asset_type = Column(String(50), nullable=False)
+    asset_id = Column(Integer, nullable=False)
+    execution_ref_type = Column(String(50))
+    execution_ref_id = Column(Integer)
+    report_id = Column(Integer, ForeignKey("test_reports.id"))
+    version_id = Column(Integer, ForeignKey("versions.id"))
+    status = Column(String(20), nullable=False, default="not_run")
+    defect_id = Column(Integer, ForeignKey("defects.id"))
+    executed_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    requirement = relationship("Requirement")
+    report = relationship("TestReport")
+    version = relationship("Version")
+
+
+class RequirementChangeLog(Base):
+    """需求变更快照，用于影响分析和回归范围推荐。"""
+    __tablename__ = "requirement_change_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    requirement_id = Column(Integer, ForeignKey("requirements.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    old_content = Column(JSON)
+    new_content = Column(JSON)
+    changed_fields = Column(JSON)
+    impact_keywords = Column(JSON)
+    operator = Column(String(100), default="system")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    requirement = relationship("Requirement")
+    project = relationship("Project")
+
 # 批量测试任务表
 class BatchTestTask(Base):
     __tablename__ = "batch_test_tasks"
@@ -498,6 +556,7 @@ class Defect(Base):
     priority = Column(String(20), nullable=False, default="P2")
     status = Column(String(30), nullable=False, default="open")
     source_type = Column(String(30), nullable=False, default="manual")
+    requirement_id = Column(Integer, ForeignKey("requirements.id"))
     project_id = Column(Integer, ForeignKey("projects.id"))
     report_id = Column(Integer, ForeignKey("test_reports.id"))
     testcase_id = Column(Integer, ForeignKey("testcases.id"))
@@ -519,6 +578,7 @@ class Defect(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     project = relationship("Project")
+    requirement = relationship("Requirement")
     report = relationship("TestReport", foreign_keys=[report_id])
     regression_report = relationship("TestReport", foreign_keys=[regression_report_id])
     testcase = relationship("TestCase")

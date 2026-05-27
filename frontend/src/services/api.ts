@@ -274,6 +274,25 @@ export const defectApi = {
   testIntegration: (): Promise<any> => api.post('/api/v1/defects/integrations/test'),
 };
 
+export const traceabilityApi = {
+  getMatrix: (params?: { project_id?: number; version_id?: number; status?: string; coverage_status?: string }): Promise<any> =>
+    api.get('/api/v1/traceability/matrix', { params }),
+  getImpactChanges: (params?: { project_id?: number; limit?: number }): Promise<any> =>
+    api.get('/api/v1/traceability/impact-changes', { params }),
+  linkAssets: (requirementId: number, assets: any[]): Promise<any> =>
+    api.post(`/api/v1/requirements/${requirementId}/test-assets`, { assets }),
+  unlinkAsset: (requirementId: number, linkId: number): Promise<any> =>
+    api.delete(`/api/v1/requirements/${requirementId}/test-assets/${linkId}`),
+  getRegressionRecommendations: (requirementId: number): Promise<any> =>
+    api.get(`/api/v1/requirements/${requirementId}/regression-recommendations`),
+  createRegressionPlan: (requirementId: number, data?: { owner?: string; execution_mode?: string; priority?: string }): Promise<any> =>
+    api.post(`/api/v1/requirements/${requirementId}/regression-plan`, data || {}),
+  getImpactAnalysis: (requirementId: number): Promise<any> =>
+    api.get(`/api/v1/requirements/${requirementId}/impact-analysis`),
+  applySuggestedStatus: (requirementId: number, status: string): Promise<any> =>
+    api.post(`/api/v1/requirements/${requirementId}/apply-suggested-status`, { status }),
+};
+
 export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };

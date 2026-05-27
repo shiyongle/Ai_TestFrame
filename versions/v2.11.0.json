@@ -1,0 +1,102 @@
+{
+  "version": "v2.11.0",
+  "date": "2026-05-27",
+  "title": "需求-用例-执行-缺陷追踪矩阵与影响分析上线",
+  "description": "本次发布新增需求-用例-执行-缺陷全链路质量追踪能力，支持按项目和版本查看覆盖率矩阵、识别未覆盖需求、汇总执行状态和未关闭缺陷，并基于需求变更自动生成影响分析、推荐回归范围、缺失用例补齐建议和需求验收状态推进建议。",
+  "features": [
+    {
+      "title": "质量追踪矩阵",
+      "items": [
+        "新增独立页面 /traceability，菜单入口为“数据与报告 -> 质量追踪矩阵”。",
+        "支持按项目、版本、覆盖状态筛选需求质量矩阵。",
+        "矩阵展示需求覆盖状态、关联测试资产数量、自动化资产数量、执行状态、通过率、未关闭缺陷数、风险等级和建议验收状态。",
+        "支持在需求详情抽屉中查看关联测试资产、推荐回归范围和影响分析结果。",
+        "支持一键应用系统建议状态，推动需求从测试中到已完成等验收状态闭环。"
+      ]
+    },
+    {
+      "title": "需求变更影响分析",
+      "items": [
+        "新增独立页面 /impact-analysis，菜单入口为“数据与报告 -> 需求影响分析”。",
+        "需求更新时自动记录变更快照，包括旧内容、新内容、变更字段和影响关键词。",
+        "影响分析页支持按项目查看需求变更列表、影响等级、高中低影响统计和推荐回归数量。",
+        "支持查看单个需求的影响详情，包括影响关键词、推荐回归资产和缺失用例建议。",
+        "基于需求标题、描述、验收标准和变更关键词匹配同项目功能用例、接口用例，形成回归推荐范围。"
+      ]
+    },
+    {
+      "title": "回归范围与测试计划生成",
+      "items": [
+        "新增需求级回归推荐接口，综合直接关联资产、历史关联用例和关键词命中用例生成推荐清单。",
+        "支持从追踪详情中一键生成回归测试计划，自动写入推荐的功能用例和接口用例。",
+        "当需求缺少明确覆盖用例时，自动给出基础正向验收用例、追踪关系补齐、高风险边界异常场景等建议。",
+        "新增统一质量执行结果表，为后续接入 UI 自动化、性能测试、Agent 评测等执行结果提供统一沉淀结构。"
+      ]
+    }
+  ],
+  "improvements": [
+    "缺陷模型新增 requirement_id，支持缺陷直接回溯到需求，完善需求-缺陷链路。",
+    "需求更新接口接入变更记录能力，为影响分析和回归范围推荐提供数据来源。",
+    "追踪矩阵同时兼容新统一关联表与历史 linked_test_cases 数据，降低存量数据迁移成本。",
+    "Alembic 迁移使用 batch_alter_table 处理 defects 外键变更，兼容 SQLite 本地开发环境。"
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增追踪矩阵领域模型、服务层、API 路由、Schema 与 Alembic 迁移，串联需求、测试资产、执行结果、缺陷和需求变更日志。",
+      "strategies": [
+        "database_models.py 新增 RequirementTestAsset、QualityExecutionResult、RequirementChangeLog 三个模型，并为 Defect 增加 requirement_id。",
+        "新增 services/traceability_service.py，封装矩阵汇总、资产关联、执行状态聚合、缺陷统计、回归推荐、影响分析、缺失用例建议和建议状态应用逻辑。",
+        "新增 api/v1/traceability.py，提供矩阵查询、变更影响列表、资产关联、回归推荐、影响分析、回归计划生成和建议状态应用接口。",
+        "requirements.py 在需求更新时调用 traceability_service.record_requirement_change，自动沉淀变更快照。",
+        "api/deps.py 注册 traceability_service 依赖，main.py 注册 traceability 路由。",
+        "新增 Alembic 迁移脚本 3f7a91d2c8b4_add_traceability_matrix.py，创建追踪矩阵相关表结构并补充缺陷需求外键。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增质量追踪矩阵页、需求影响分析页、菜单入口、路由和前端 API 封装。",
+      "strategies": [
+        "新增 pages/TraceabilityMatrix.tsx，提供覆盖率矩阵、版本/项目筛选、需求追踪详情、建议状态应用和回归计划生成能力。",
+        "新增 pages/ImpactAnalysis.tsx，提供需求变更影响列表、影响等级统计、项目筛选和影响详情抽屉。",
+        "App.tsx 新增 /traceability 与 /impact-analysis 路由。",
+        "ResponsiveLayout.tsx 与 AppSider.tsx 在“数据与报告”分组新增质量追踪矩阵和需求影响分析菜单入口。",
+        "services/api.ts 新增 traceabilityApi，统一封装追踪矩阵和影响分析相关接口。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/alembic/versions/3f7a91d2c8b4_add_traceability_matrix.py",
+      "backend/api/v1/traceability.py",
+      "backend/schemas/traceability_schemas.py",
+      "backend/services/traceability_service.py",
+      "frontend/src/pages/TraceabilityMatrix.tsx",
+      "frontend/src/pages/ImpactAnalysis.tsx",
+      "versions/v2.11.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/api/deps.py",
+      "backend/api/v1/requirements.py",
+      "backend/main.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/services/api.ts"
+    ]
+  },
+  "api_changes": [
+    "GET /api/v1/traceability/matrix",
+    "GET /api/v1/traceability/impact-changes",
+    "POST /api/v1/requirements/{requirement_id}/test-assets",
+    "DELETE /api/v1/requirements/{requirement_id}/test-assets/{link_id}",
+    "GET /api/v1/requirements/{requirement_id}/regression-recommendations",
+    "GET /api/v1/requirements/{requirement_id}/impact-analysis",
+    "POST /api/v1/requirements/{requirement_id}/regression-plan",
+    "POST /api/v1/requirements/{requirement_id}/apply-suggested-status"
+  ],
+  "notes": [
+    "首次部署需执行 alembic upgrade head，创建 requirement_test_assets、quality_execution_results、requirement_change_logs 等表。",
+    "影响分析列表依赖需求更新后的变更日志；存量需求未变更时列表可能为空，但单需求影响分析仍可基于需求内容和关键词实时计算。",
+    "前端构建已通过，当前仅存在项目既有 ESLint warning。"
+  ]
+}

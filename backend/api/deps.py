@@ -21,6 +21,7 @@ from services.badcase_service import DifyAgentService, dify_agent_service, BadCa
 from services.evaluation_template_service import EvaluationTemplateService, evaluation_template_service
 from services.golden_dataset_service import GoldenDatasetService, golden_dataset_service
 from services.defect_service import DefectService, defect_service
+from services.traceability_service import TraceabilityService, traceability_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -93,3 +94,8 @@ def get_evaluation_template_service() -> EvaluationTemplateService:
 def get_defect_service() -> DefectService:
     """获取缺陷闭环服务实例"""
     return defect_service
+
+
+def get_traceability_service() -> TraceabilityService:
+    """获取质量追踪矩阵服务实例"""
+    return traceability_service
