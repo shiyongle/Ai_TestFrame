@@ -10,7 +10,7 @@ import uuid
 from config.settings import settings
 from core.logging import setup_logging
 from core.database import create_tables
-from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent, performance, agent_evaluation, model_configs, badcases, evaluation_templates, golden_datasets
+from api.v1 import auth, projects, testcases, interface_testcases, tests, versions, requirements, rules, ai, system, test_suites, dashboard, reports, test_plans, ui_automation, agent, performance, agent_evaluation, model_configs, badcases, evaluation_templates, golden_datasets, defects
 from core.security import decode_access_token, ensure_default_admin
 from fastapi import HTTPException
 
@@ -179,6 +179,7 @@ try:
     app.include_router(badcases.router, prefix="/api/v1", tags=["badcases"])
     app.include_router(evaluation_templates.router, prefix="/api/v1", tags=["evaluation_templates"])
     app.include_router(golden_datasets.router, prefix="/api/v1", tags=["golden_datasets"])
+    app.include_router(defects.router, prefix="/api/v1", tags=["defects"])
     main_logger.info("API路由注册成功")
 except Exception as e:
     main_logger.error(f"API路由注册失败: {str(e)}")
@@ -226,6 +227,7 @@ async def startup_event():
         main_logger.error(f"数据库初始化失败: {str(e)}")
     
     main_logger.info(f"{settings.app_name} 启动成功")
+    main_logger.info(f"服务地址: http://0.0.0.0:8000 | API文档: http://0.0.0.0:8000/docs")
 
 if __name__ == "__main__":
     import uvicorn
@@ -234,5 +236,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=settings.debug,
-        log_level=settings.log_level.lower()
+        log_level=settings.log_level.lower(),
+        log_config=None  # 禁用 uvicorn 默认日志配置，使用自定义 colorlog 彩色日志
     )

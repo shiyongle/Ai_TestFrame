@@ -30,6 +30,7 @@ import TaskCenter from './pages/TaskCenter';
 import CommonFunctions from './pages/DataWarehouse/CommonFunctions';
 import BusinessData from './pages/DataWarehouse/BusinessData';
 import OperationLogs from './pages/OperationLogs';
+import Defects from './pages/Defects';
 import UiAutomation from './pages/ApiAutomation/UIAutomation';
 import Login from './pages/Login';
 import AgentEvaluation from './pages/AgentEvaluation';
@@ -112,6 +113,7 @@ const AppLayout: React.FC = () => {
               <Route path="/data-warehouse/functions" element={<CommonFunctions />} />
               <Route path="/data-warehouse/business" element={<BusinessData />} />
               <Route path="/reports" element={<Reports />} />
+              <Route path="/defects" element={<Defects />} />
               <Route path="/versions" element={<Versions />} />
               <Route path="/settings" element={<SystemSettings />} />
               <Route path="/tasks" element={<TaskCenter />} />

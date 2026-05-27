@@ -17,6 +17,7 @@ import {
   FileTextOutlined,
   AlertOutlined,
   ControlOutlined,
+  IssuesCloseOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -107,6 +108,11 @@ const AppSider: React.FC = () => {
       key: '/reports',
       icon: <BarChartOutlined />,
       label: '测试报告',
+    },
+    {
+      key: '/defects',
+      icon: <IssuesCloseOutlined />,
+      label: '缺陷管理',
     },
     {
       key: '/versions',

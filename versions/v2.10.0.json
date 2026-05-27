@@ -1,0 +1,121 @@
+{
+  "version": "v2.10.0",
+  "date": "2026-05-27",
+  "title": "缺陷闭环管理与 Jira 集成能力上线",
+  "description": "本次发布新增完整的缺陷闭环管理体系，支持从失败测试报告一键提 Bug、缺陷状态流转、回归验证、关闭闭环、外部状态同步以及项目维度筛选。同时新增 Jira Cloud 直连集成能力，可将平台缺陷自动创建为 Jira Issue，并在缺陷状态变更、回归验证时同步 Jira 工作流状态，形成从测试失败到缺陷修复验证的质量闭环。",
+  "features": [
+    {
+      "title": "缺陷管理闭环",
+      "items": [
+        "新增独立缺陷管理页面 /defects，支持查看缺陷列表、缺陷详情和状态流转记录。",
+        "新增缺陷主表 defects 与状态历史表 defect_status_histories，沉淀缺陷生命周期数据。",
+        "支持缺陷状态流转：open、in_progress、resolved、verified、closed、reopened。",
+        "支持回归验证闭环：回归通过自动进入 verified，回归失败自动进入 reopened。",
+        "支持手动新建缺陷，并可选择是否同步到外部缺陷平台。",
+        "支持按项目、状态、标题关键字筛选缺陷列表。"
+      ]
+    },
+    {
+      "title": "测试报告一键提 Bug",
+      "items": [
+        "测试报告页失败报告新增一键提 Bug 操作。",
+        "从报告提 Bug 时自动带入项目、报告 ID、失败/异常数量、通过数、总用例数等上下文。",
+        "同一失败报告已有未关闭缺陷时自动复用，避免重复创建缺陷。",
+        "提 Bug 请求支持 sync_external 参数，配置 Jira 后可自动创建 Jira Issue。"
+      ]
+    },
+    {
+      "title": "Jira Cloud 直连集成",
+      "items": [
+        "新增 JiraDefectConnector，基于 Jira Cloud REST API v3 创建 Issue、拉取状态、执行状态流转。",
+        "系统设置新增“缺陷集成配置”页签，支持配置 Jira Base URL、账号邮箱、API Token、项目 Key、Issue 类型。",
+        "支持本平台状态到 Jira 工作流状态的可配置映射，例如 open -> To Do、in_progress -> In Progress、resolved/closed -> Done。",
+        "支持“保存并测试连接”，校验 Jira 账号认证与项目 Key 是否可用。",
+        "缺陷管理页支持从 Jira 拉取最新状态回写本平台。",
+        "缺陷状态流转与回归验证可自动同步 Jira 状态。"
+      ]
+    },
+    {
+      "title": "外部缺陷平台扩展底座",
+      "items": [
+        "新增 DefectConnector 抽象接口，为 Jira、Webhook、后续禅道/TAPD/飞书工作项等平台提供统一适配层。",
+        "保留 WebhookDefectConnector，支持通过中间层对接其他成熟缺陷平台。",
+        "缺陷表新增 external_provider、external_key、external_url、external_status、last_synced_at 等字段，保存外部平台映射关系。",
+        "新增外部状态同步接口 /api/v1/defects/{defect_id}/external-sync 与主动拉取接口 /api/v1/defects/{defect_id}/pull-external。"
+      ]
+    }
+  ],
+  "improvements": [
+    "测试报告页的失败结果不再停留在统计层面，可直接进入缺陷处理流程。",
+    "缺陷列表新增项目筛选，便于按项目维度跟踪质量风险。",
+    "缺陷详情新增流转记录时间线，提升缺陷处理过程的可追溯性。",
+    "状态流转、回归验证、外部同步统一由后端服务层管理，避免前端直接拼装业务规则。",
+    "Jira 状态流转不硬编码 transition id，而是运行时读取可用 transitions 后按状态名称匹配，适配不同 Jira 工作流。"
+  ],
+  "technical_solutions": {
+    "backend": {
+      "summary": "新增缺陷领域模型、服务层、API 路由、Jira Connector 与 Alembic 迁移，形成内置缺陷闭环与外部平台集成能力。",
+      "strategies": [
+        "database_models.py 新增 Defect 与 DefectStatusHistory 两个模型，保存缺陷主数据与状态流转历史。",
+        "新增 schemas/defect_schemas.py，定义缺陷创建、报告提 Bug、状态流转、回归验证、外部同步等请求/响应结构。",
+        "新增 services/defect_service.py，封装缺陷状态机、报告提 Bug、回归验证、外部状态同步和集成测试逻辑。",
+        "新增 services/defect_connector.py，定义 DefectConnector 抽象接口，并实现 Local、Webhook、Jira 三种连接器。",
+        "新增 api/v1/defects.py，提供缺陷列表、详情、创建、更新、状态流转、回归验证、外部同步、Jira 拉取、集成测试等接口。",
+        "main.py 注册 defects 路由，api/deps.py 注册 defect_service 依赖。",
+        "新增 Alembic 迁移脚本 2c9d8f1a4b6e_add_defect_lifecycle.py，创建缺陷闭环相关表结构。"
+      ]
+    },
+    "frontend": {
+      "summary": "新增缺陷管理页面、菜单入口、报告提 Bug 入口、Jira 配置页，并扩展前端 API 封装。",
+      "strategies": [
+        "新增 pages/Defects.tsx，提供缺陷列表、项目筛选、状态筛选、手动创建、状态流转、回归验证、外部同步、Jira 状态拉取能力。",
+        "App.tsx 新增 /defects 路由。",
+        "ResponsiveLayout.tsx 在“数据与报告”分组新增“缺陷管理”菜单入口。",
+        "Reports.tsx 在失败报告操作栏新增一键提 Bug 操作。",
+        "SystemSettings.tsx 新增“缺陷集成配置”页签，支持 Jira 配置保存与连接测试。",
+        "services/api.ts 新增 defectApi，封装缺陷闭环与 Jira 集成相关接口。"
+      ]
+    }
+  },
+  "file_changes": {
+    "added": [
+      "backend/api/v1/defects.py",
+      "backend/schemas/defect_schemas.py",
+      "backend/services/defect_connector.py",
+      "backend/services/defect_service.py",
+      "backend/alembic/versions/2c9d8f1a4b6e_add_defect_lifecycle.py",
+      "frontend/src/pages/Defects.tsx",
+      "versions/v2.10.0.json"
+    ],
+    "modified": [
+      "backend/models/database_models.py",
+      "backend/api/deps.py",
+      "backend/main.py",
+      "frontend/src/App.tsx",
+      "frontend/src/components/Layout/AppSider.tsx",
+      "frontend/src/components/Layout/ResponsiveLayout.tsx",
+      "frontend/src/pages/Reports.tsx",
+      "frontend/src/pages/SystemSettings.tsx",
+      "frontend/src/services/api.ts"
+    ]
+  },
+  "api_changes": [
+    "GET /api/v1/defects",
+    "GET /api/v1/defects/{defect_id}",
+    "POST /api/v1/defects",
+    "PUT /api/v1/defects/{defect_id}",
+    "POST /api/v1/reports/{report_id}/defects",
+    "POST /api/v1/defects/{defect_id}/transition",
+    "POST /api/v1/defects/{defect_id}/regression",
+    "POST /api/v1/defects/{defect_id}/external-sync",
+    "POST /api/v1/defects/{defect_id}/pull-external",
+    "POST /api/v1/defects/integrations/test"
+  ],
+  "notes": [
+    "Jira Cloud 对接需在系统设置的“缺陷集成配置”中填写有效的 Jira Base URL、账号邮箱、API Token 和项目 Key。",
+    "Jira 工作流状态名称因项目而异，需按实际 Jira 项目配置状态映射；系统运行时会读取 transitions 并按状态名称匹配，不依赖固定 transition id。",
+    "首次部署需运行 alembic upgrade head，或依赖现有启动流程自动执行迁移，创建 defects 与 defect_status_histories 表。",
+    "如果未配置 Jira，sync_external 会走 local 连接器，不影响本地缺陷闭环使用。",
+    "前端构建已通过，当前仅存在项目既有 ESLint warning。"
+  ]
+}

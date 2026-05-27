@@ -20,6 +20,7 @@ from services.model_config_service import ModelConfigService, model_config_servi
 from services.badcase_service import DifyAgentService, dify_agent_service, BadCaseService, bad_case_service
 from services.evaluation_template_service import EvaluationTemplateService, evaluation_template_service
 from services.golden_dataset_service import GoldenDatasetService, golden_dataset_service
+from services.defect_service import DefectService, defect_service
 
 def get_project_service() -> ProjectService:
     """获取项目服务实例"""
@@ -87,3 +88,8 @@ def get_bad_case_service() -> BadCaseService:
 def get_evaluation_template_service() -> EvaluationTemplateService:
     """获取评测模板管理服务实例"""
     return evaluation_template_service
+
+
+def get_defect_service() -> DefectService:
+    """获取缺陷闭环服务实例"""
+    return defect_service

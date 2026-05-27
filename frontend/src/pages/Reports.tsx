@@ -29,7 +29,7 @@ import {
   EyeOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
-import { reportApi } from '../services/api';
+import { defectApi, reportApi } from '../services/api';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -140,6 +140,19 @@ const Reports: React.FC = () => {
     link.download = `reports_${dayjs().format('YYYYMMDD_HHmmss')}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleCreateDefect = async (record: ReportItem) => {
+    try {
+      const defect = await defectApi.createFromReport(record.id, {
+        severity: record.failed > 5 ? 'critical' : 'major',
+        priority: record.failed > 5 ? 'P1' : 'P2',
+        sync_external: true,
+      });
+      message.success(`已创建/关联缺陷 #${defect.id}`);
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail || '创建缺陷失败');
+    }
   };
 
   const renderSummaryCards = () => (
@@ -337,9 +350,14 @@ const Reports: React.FC = () => {
           {
             title: 'Actions',
             key: 'actions',
-            render: () => (
+            render: (_: any, record: ReportItem) => (
               <Space>
                 <Tooltip title="View Details"><Button type="text" icon={<EyeOutlined />} /></Tooltip>
+                {record.failed > 0 && (
+                  <Tooltip title="从失败报告提 Bug">
+                    <Button type="text" danger icon={<BugOutlined />} onClick={() => handleCreateDefect(record)} />
+                  </Tooltip>
+                )}
                 <Tooltip title="Download PDF"><Button type="text" icon={<DownloadOutlined />} /></Tooltip>
               </Space>
             ),

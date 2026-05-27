@@ -487,6 +487,62 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Defect(Base):
+    """缺陷闭环主表，支持内置流转与外部缺陷平台映射。"""
+    __tablename__ = "defects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    severity = Column(String(20), nullable=False, default="major")
+    priority = Column(String(20), nullable=False, default="P2")
+    status = Column(String(30), nullable=False, default="open")
+    source_type = Column(String(30), nullable=False, default="manual")
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    report_id = Column(Integer, ForeignKey("test_reports.id"))
+    testcase_id = Column(Integer, ForeignKey("testcases.id"))
+    interface_testcase_id = Column(Integer, ForeignKey("interface_testcases.id"))
+    external_provider = Column(String(50), default="local")
+    external_key = Column(String(100))
+    external_url = Column(Text)
+    external_status = Column(String(50))
+    last_synced_at = Column(DateTime)
+    regression_status = Column(String(30), nullable=False, default="not_started")
+    regression_report_id = Column(Integer, ForeignKey("test_reports.id"))
+    regression_notes = Column(Text)
+    created_by = Column(String(100), default="system")
+    assigned_to = Column(String(100))
+    resolved_at = Column(DateTime)
+    verified_at = Column(DateTime)
+    closed_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    project = relationship("Project")
+    report = relationship("TestReport", foreign_keys=[report_id])
+    regression_report = relationship("TestReport", foreign_keys=[regression_report_id])
+    testcase = relationship("TestCase")
+    interface_testcase = relationship("InterfaceTestCase")
+    histories = relationship("DefectStatusHistory", back_populates="defect", cascade="all, delete-orphan")
+
+
+class DefectStatusHistory(Base):
+    """缺陷状态流转记录。"""
+    __tablename__ = "defect_status_histories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    defect_id = Column(Integer, ForeignKey("defects.id", ondelete="CASCADE"), nullable=False)
+    from_status = Column(String(30))
+    to_status = Column(String(30), nullable=False)
+    action = Column(String(50), nullable=False)
+    operator = Column(String(100), default="system")
+    comment = Column(Text)
+    external_status = Column(String(50))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    defect = relationship("Defect", back_populates="histories")
+
+
 # UI 自动化用例表
 class UIAutomationCase(Base):
     __tablename__ = "ui_automation_cases"

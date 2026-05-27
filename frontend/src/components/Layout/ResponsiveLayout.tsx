@@ -32,6 +32,7 @@ import {
   ScheduleOutlined,
   FolderOpenOutlined,
   ExperimentOutlined,
+  IssuesCloseOutlined,
 } from '@ant-design/icons';
 import CabbageIcon from '../common/CabbageIcon';
 
@@ -236,6 +237,11 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
           key: '/reports',
           icon: <BarChartOutlined />,
           label: '测试质量报告',
+        },
+        {
+          key: '/defects',
+          icon: <IssuesCloseOutlined />,
+          label: '缺陷管理',
         },
       ],
     },

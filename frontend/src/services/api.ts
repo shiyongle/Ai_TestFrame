@@ -257,6 +257,23 @@ export const reportApi = {
     api.get('/api/v1/reports/overview/stats', { params }),
 };
 
+export const defectApi = {
+  list: (params?: { status?: string; project_id?: number; keyword?: string; limit?: number; offset?: number }): Promise<any[]> =>
+    api.get('/api/v1/defects', { params }),
+  get: (id: number): Promise<any> => api.get(`/api/v1/defects/${id}`),
+  create: (data: any): Promise<any> => api.post('/api/v1/defects', data),
+  createFromReport: (reportId: number, data: any): Promise<any> => api.post(`/api/v1/reports/${reportId}/defects`, data),
+  update: (id: number, data: any): Promise<any> => api.put(`/api/v1/defects/${id}`, data),
+  transition: (id: number, data: { status: string; comment?: string; sync_external?: boolean }): Promise<any> =>
+    api.post(`/api/v1/defects/${id}/transition`, data),
+  verifyRegression: (id: number, data: { passed: boolean; report_id?: number; notes?: string; sync_external?: boolean }): Promise<any> =>
+    api.post(`/api/v1/defects/${id}/regression`, data),
+  syncExternal: (id: number, data: { external_status?: string; external_key?: string; external_url?: string }): Promise<any> =>
+    api.post(`/api/v1/defects/${id}/external-sync`, data),
+  pullExternal: (id: number): Promise<any> => api.post(`/api/v1/defects/${id}/pull-external`),
+  testIntegration: (): Promise<any> => api.post('/api/v1/defects/integrations/test'),
+};
+
 export const agentApi = {
   chat: (data: { message: string; session_id?: string }): Promise<any> => api.post('/api/v1/agent/chat', data),
 };

@@ -24,9 +24,11 @@ import {
     TeamOutlined,
     PlusOutlined,
     EditOutlined,
-    DeleteOutlined
+    DeleteOutlined,
+    BugOutlined,
+    ApiOutlined
 } from '@ant-design/icons';
-import { authStorage, systemApi } from '../services/api';
+import { authStorage, defectApi, systemApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -44,6 +46,7 @@ interface ManagedUser {
 const SystemSettings: React.FC = () => {
     const [aiForm] = Form.useForm();
     const [webhookForm] = Form.useForm();
+    const [defectForm] = Form.useForm();
     const [userForm] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [usersLoading, setUsersLoading] = useState(false);
@@ -63,9 +66,10 @@ const SystemSettings: React.FC = () => {
     const loadSettings = async () => {
         setLoading(true);
         try {
-            const [llmRes, webhookRes] = await Promise.all([
+            const [llmRes, webhookRes, defectRes] = await Promise.all([
                 systemApi.getSettings('llm'),
-                systemApi.getSettings('webhook')
+                systemApi.getSettings('webhook'),
+                systemApi.getSettings('defect')
             ]);
 
             const llmValues: any = {};
@@ -81,6 +85,12 @@ const SystemSettings: React.FC = () => {
 
             aiForm.setFieldsValue(llmValues);
             webhookForm.setFieldsValue(webhookValues);
+
+            const defectValues: any = {};
+            Object.keys(defectRes || {}).forEach(key => {
+                defectValues[key] = defectRes[key].value;
+            });
+            defectForm.setFieldsValue(defectValues);
         } catch (error) {
             message.error('加载系统配置失败');
         } finally {
@@ -123,6 +133,39 @@ const SystemSettings: React.FC = () => {
             message.error('保存失败');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSaveDefectConfig = async (values: any) => {
+        setLoading(true);
+        try {
+            const settingsPayload = Object.keys(values).map(key => ({
+                setting_key: key,
+                setting_value: values[key] || '',
+                description: getDefectDescription(key)
+            }));
+
+            await systemApi.updateSettings('defect', { settings: settingsPayload });
+            message.success('缺陷集成配置保存成功');
+            loadSettings();
+        } catch (error) {
+            message.error('保存失败');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTestDefectIntegration = async () => {
+        try {
+            await defectForm.validateFields(['provider', 'base_url', 'email', 'api_token', 'project_key']);
+            await handleSaveDefectConfig(defectForm.getFieldsValue());
+            const result = await defectApi.testIntegration();
+            message.success(`连接成功：${result.provider}${result.project ? ` / ${result.project}` : ''}`);
+        } catch (error: any) {
+            if (error?.errorFields) {
+                return;
+            }
+            message.error(error?.response?.data?.detail || '连接测试失败');
         }
     };
 
@@ -251,6 +294,24 @@ const SystemSettings: React.FC = () => {
             'WEBHOOK_OPENCLAW_ENABLED': 'OpenClaw 渠道开关',
             'WEBHOOK_OPENCLAW_URL': 'OpenClaw Webhook 地址',
             'WEBHOOK_OPENCLAW_TOKEN': 'OpenClaw Token / 密钥',
+        };
+        return map[key] || '';
+    };
+
+    const getDefectDescription = (key: string) => {
+        const map: any = {
+            provider: '缺陷平台提供商，local/webhook/jira',
+            base_url: 'Jira 站点地址，例如 https://example.atlassian.net',
+            email: 'Jira 账号邮箱',
+            api_token: 'Jira API Token',
+            project_key: 'Jira 项目 Key',
+            issue_type: 'Jira Issue 类型，通常为 Bug',
+            status_open: '本平台 open 映射的 Jira 状态',
+            status_in_progress: '本平台 in_progress 映射的 Jira 状态',
+            status_resolved: '本平台 resolved 映射的 Jira 状态',
+            status_verified: '本平台 verified 映射的 Jira 状态',
+            status_closed: '本平台 closed 映射的 Jira 状态',
+            status_reopened: '本平台 reopened 映射的 Jira 状态',
         };
         return map[key] || '';
     };
@@ -566,6 +627,86 @@ const SystemSettings: React.FC = () => {
                             )
                         },
                         ...(isSuperAdmin ? [userManagementTab] : []),
+                        {
+                            key: 'defect',
+                            label: <span><BugOutlined /> 缺陷集成配置</span>,
+                            children: (
+                                <div style={{ padding: '0 24px' }}>
+                                    <Title level={4}><ApiOutlined /> Jira 缺陷平台集成</Title>
+                                    <Paragraph type="secondary" style={{ marginBottom: 24 }}>
+                                        配置后，缺陷创建、状态流转和回归验证可以同步到 Jira；也可以从 Jira 拉取最新状态回写本平台。
+                                    </Paragraph>
+
+                                    <Alert
+                                        message="Jira 对接说明"
+                                        description="Jira Cloud 使用账号邮箱和 API Token 认证。不同 Jira 项目的工作流状态名称可能不同，请按实际工作流配置状态映射。"
+                                        type="info"
+                                        showIcon
+                                        style={{ marginBottom: 32, borderRadius: 8 }}
+                                    />
+
+                                    <Form
+                                        form={defectForm}
+                                        layout="vertical"
+                                        onFinish={handleSaveDefectConfig}
+                                        initialValues={{
+                                            provider: 'jira',
+                                            issue_type: 'Bug',
+                                            status_open: 'To Do',
+                                            status_in_progress: 'In Progress',
+                                            status_resolved: 'Done',
+                                            status_verified: 'Done',
+                                            status_closed: 'Done',
+                                            status_reopened: 'To Do',
+                                        }}
+                                    >
+                                        <Card size="small" title="连接信息" className="glass-panel" style={{ borderRadius: 12, marginBottom: 24 }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}>
+                                                <Form.Item label="缺陷平台" name="provider" rules={[{ required: true, message: '请选择缺陷平台' }]}>
+                                                    <Input placeholder="jira" />
+                                                </Form.Item>
+                                                <Form.Item label="Jira Base URL" name="base_url" rules={[{ required: true, message: '请输入 Jira 地址' }]}>
+                                                    <Input placeholder="https://your-domain.atlassian.net" />
+                                                </Form.Item>
+                                                <Form.Item label="账号邮箱" name="email" rules={[{ required: true, message: '请输入 Jira 账号邮箱' }]}>
+                                                    <Input placeholder="qa@example.com" />
+                                                </Form.Item>
+                                                <Form.Item label="API Token" name="api_token" rules={[{ required: true, message: '请输入 Jira API Token' }]}>
+                                                    <Input.Password placeholder="Jira API Token" />
+                                                </Form.Item>
+                                                <Form.Item label="项目 Key" name="project_key" rules={[{ required: true, message: '请输入 Jira 项目 Key' }]}>
+                                                    <Input placeholder="TEST" />
+                                                </Form.Item>
+                                                <Form.Item label="Issue 类型" name="issue_type">
+                                                    <Input placeholder="Bug" />
+                                                </Form.Item>
+                                            </div>
+                                        </Card>
+
+                                        <Card size="small" title="状态映射" className="glass-panel" style={{ borderRadius: 12 }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '24px' }}>
+                                                <Form.Item label="待处理(open)" name="status_open"><Input placeholder="To Do" /></Form.Item>
+                                                <Form.Item label="处理中(in_progress)" name="status_in_progress"><Input placeholder="In Progress" /></Form.Item>
+                                                <Form.Item label="已解决(resolved)" name="status_resolved"><Input placeholder="Done" /></Form.Item>
+                                                <Form.Item label="已验证(verified)" name="status_verified"><Input placeholder="Done" /></Form.Item>
+                                                <Form.Item label="已关闭(closed)" name="status_closed"><Input placeholder="Done" /></Form.Item>
+                                                <Form.Item label="重新打开(reopened)" name="status_reopened"><Input placeholder="To Do" /></Form.Item>
+                                            </div>
+                                        </Card>
+
+                                        <Divider />
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
+                                            <Button icon={<ApiOutlined />} onClick={handleTestDefectIntegration} loading={loading} size="large" style={{ borderRadius: 8 }}>
+                                                保存并测试连接
+                                            </Button>
+                                            <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={loading} size="large" style={{ minWidth: 160, borderRadius: 8 }}>
+                                                保存缺陷集成
+                                            </Button>
+                                        </div>
+                                    </Form>
+                                </div>
+                            )
+                        },
                         {
                             key: 'webhook',
                             label: <span><NotificationOutlined /> Webhook 通知配置</span>,
