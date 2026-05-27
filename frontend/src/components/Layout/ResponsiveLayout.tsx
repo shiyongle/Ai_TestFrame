@@ -222,11 +222,6 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
               label: '接口自动化',
             },
             {
-              key: '/api-advanced',
-              icon: <ApiOutlined />,
-              label: '高级接口测试',
-            },
-            {
               key: '/ui-automation',
               icon: <PlayCircleOutlined />,
               label: 'UI 自动化',
@@ -384,7 +379,7 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
     if (currentPath.startsWith('/agent-evaluation')) {
       openKeys.push('agent-eval');
     }
-    if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/api-advanced') || currentPath.startsWith('/ui-automation')) {
+    if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {
       openKeys.push('automation');
     }
     if (currentPath.startsWith('/requirements') || currentPath.startsWith('/projects')) {

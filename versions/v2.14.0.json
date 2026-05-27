@@ -1,31 +1,31 @@
 {
   "version": "v2.14.0",
   "date": "2026-05-27",
-  "title": "高级接口测试能力增强",
-  "description": "本次发布围绕接口测试深度补齐 Postman/Apifox/JMeter 类平台能力，新增集合级 Runner、前后置脚本复用、参数化执行、关联提取、Mock Server、契约 Schema 校验、接口变更 Diff、监控探测和 API 资产治理入口。",
+  "title": "接口自动化能力增强",
+  "description": "本次发布围绕接口自动化补齐 Postman/Apifox/JMeter 类平台能力，新增接口文档同步、Mock Server、契约 Schema 校验、接口变更 Diff、监控探测和 API 资产治理入口，并将能力收敛到现有接口场景/场景编排下。",
   "features": [
     {
-      "title": "集合 Runner 与参数化执行",
+      "title": "接口场景增强底座",
       "items": [
-        "新增高级接口测试页面 /api-advanced，左侧菜单入口为“接口测试 -> 高级接口测试”。",
-        "支持按项目创建接口测试集合，将多个接口用例按顺序编排为集合步骤。",
-        "集合运行支持选择环境、迭代次数和数据池，复用 v2.13.0 的环境变量、账号池和数据池能力。",
-        "集合级前置脚本和后置脚本会透传到 HTTP 执行链路，支持执行前变量覆盖和执行后变量提取。"
+        "在现有“接口自动化”页面新增 Mock/契约/监控扩展分段，避免与已有 Runner 形成重复入口。",
+        "前端不再暴露独立“集合 Runner”概念，统一使用已有“接口场景/场景编排”表达多接口业务流。",
+        "后端保留 api_test_collections 作为接口场景服务端持久化与历史兼容底座，后续可承接现有本地场景迁移。",
+        "环境变量、账号池、数据池、前后置脚本和关联提取能力统一作为接口场景执行增强能力。"
       ]
     },
     {
-      "title": "关联提取、契约校验与运行记录",
+      "title": "关联提取、契约校验与执行记录",
       "items": [
-        "集合步骤支持 extractors，将接口响应中的变量提取到运行上下文，并传递给后续步骤使用。",
-        "运行结果记录每个步骤的状态码、耗时、断言结果、提取变量、错误信息和响应快照。",
+        "接口场景步骤支持 extractors，将接口响应中的变量提取到运行上下文，并传递给后续步骤使用。",
+        "服务端执行底座可记录每个步骤的状态码、耗时、断言结果、提取变量、错误信息和响应快照。",
         "新增契约 Schema 管理，支持接口用例绑定期望状态码和简化 JSON Schema 校验。",
-        "集合运行时自动执行契约校验和步骤断言，生成通过率、通过数、失败数等汇总数据。"
+        "接口场景执行时可自动执行契约校验和步骤断言，生成通过率、通过数、失败数等汇总数据。"
       ]
     },
     {
       "title": "接口文档同步",
       "items": [
-        "高级接口测试页新增“接口文档同步”标签页，支持填写 OpenAPI/Swagger 文档 URL 后同步接口资产。",
+        "接口自动化扩展分段新增“接口文档同步”标签页，支持填写 OpenAPI/Swagger 文档 URL 后同步接口资产。",
         "后端支持拉取 JSON/YAML 文档并复用既有 OpenAPI 解析器生成接口用例。",
         "同步时按项目、请求方法和 URL 做匹配，已存在接口执行更新，不存在接口自动新增。",
         "接口文档同步更新已有接口时会记录 source=docs_sync 的接口变更 Diff。"
@@ -37,12 +37,12 @@
         "新增 Mock Server 配置，可按项目、Mock Key、方法和路径返回指定响应头、状态码和响应体。",
         "新增接口变更 Diff 记录，接口用例更新时自动记录关键字段前后快照和字段级变更。",
         "新增接口监控探测配置，可对指定接口用例执行即时探测并记录最近状态、状态码和延迟。",
-        "页面顶部新增 API 资产治理统计，按项目汇总接口资产、集合、契约、Mock 和监控数量。"
+        "页面顶部新增 API 资产治理统计，按项目汇总接口资产、契约、Mock 和监控数量。"
       ]
     }
   ],
   "improvements": [
-    "接口测试从单接口执行扩展为集合级业务流编排，支持登录取 token、后续接口复用变量的链路测试。",
+    "接口测试从单接口执行扩展为接口场景业务流编排，支持登录取 token、后续接口复用变量的链路测试。",
     "Mock Server 提供独立访问 URL，便于前后端联调和依赖接口不可用时的替身响应。",
     "接口契约能力将接口文档/期望结构沉淀为可执行校验规则，减少接口变更后未发现的兼容性风险。",
     "接口变更 Diff 为接口文档同步、影响分析和推荐回归范围提供基础数据。",
@@ -50,23 +50,24 @@
   ],
   "technical_solutions": {
     "backend": {
-      "summary": "新增高级接口测试模型、服务和 API 路由，并复用现有 HTTP 执行服务与环境变量引擎。",
+      "summary": "新增接口自动化增强模型、服务和 API 路由，并复用现有 HTTP 执行服务与环境变量引擎。",
       "strategies": [
         "database_models.py 新增 ApiTestCollection、ApiTestCollectionItem、ApiTestRun、ApiTestRunItem、ApiMockEndpoint、ApiContractSchema、ApiInterfaceChangeLog、ApiMonitorProbe。",
-        "新增 services/api_testing_advanced_service.py，封装集合创建/运行、接口文档同步、上下文变量传递、契约校验、Mock 响应、监控探测和接口变更记录。",
-        "新增 api/v1/api_testing_advanced.py，提供高级接口测试相关 REST API。",
-        "api/deps.py 新增高级接口测试服务依赖注入，main.py 注册 api_testing_advanced 路由。",
+        "新增 services/api_testing_advanced_service.py，封装接口场景服务端持久化/运行、接口文档同步、上下文变量传递、契约校验、Mock 响应、监控探测和接口变更记录。",
+        "新增 api/v1/api_testing_advanced.py，提供接口自动化增强相关 REST API。",
+        "api/deps.py 新增接口自动化增强服务依赖注入，main.py 注册 api_testing_advanced 路由。",
         "interface_testcase_service.py 在接口用例更新时记录接口变更 Diff。",
-        "新增 Alembic 迁移脚本 6d7e8f9a0b1c_add_api_testing_advanced.py，创建高级接口测试相关表。"
+        "新增 Alembic 迁移脚本 6d7e8f9a0b1c_add_api_testing_advanced.py，创建接口自动化增强相关表。"
       ]
     },
     "frontend": {
-      "summary": "新增高级接口测试治理页面，并接入集合、运行、Mock、契约、监控和变更 Diff 的统一操作入口。",
+      "summary": "将新增治理能力收敛到现有接口自动化页面，并接入接口文档同步、Mock、契约、监控和变更 Diff 的统一操作入口。",
       "strategies": [
-        "新增 pages/ApiAdvancedTesting.tsx，提供集合 Runner、运行记录、接口文档同步、Mock Server、契约 Schema、监控探测和接口变更 Diff 标签页。",
-        "services/api.ts 新增 apiAdvancedApi，封装高级接口测试相关接口调用。",
-        "App.tsx 新增 /api-advanced 路由。",
-        "AppSider.tsx 与 ResponsiveLayout.tsx 新增“高级接口测试”菜单入口。"
+        "新增 pages/ApiAdvancedTesting.tsx 作为接口自动化扩展面板，提供接口文档同步、Mock Server、契约 Schema、监控探测和接口变更 Diff 标签页。",
+        "services/api.ts 新增 apiAdvancedApi，封装接口自动化增强相关接口调用。",
+        "ApiAutomation/index.tsx 新增 Mock/契约/监控分段并嵌入扩展面板。",
+        "App.tsx 将 /api-advanced 兼容跳转到 /api-automation。",
+        "AppSider.tsx 与 ResponsiveLayout.tsx 不再暴露独立高级接口测试菜单入口。"
       ]
     }
   },
@@ -84,6 +85,7 @@
       "backend/main.py",
       "backend/services/interface_testcase_service.py",
       "frontend/src/App.tsx",
+      "frontend/src/pages/ApiAutomation/index.tsx",
       "frontend/src/components/Layout/AppSider.tsx",
       "frontend/src/components/Layout/ResponsiveLayout.tsx",
       "frontend/src/services/api.ts"
@@ -107,7 +109,7 @@
     "GET /api/v1/api-advanced/changes"
   ],
   "notes": [
-    "首次部署需执行 alembic upgrade head，创建高级接口测试相关表。",
+    "首次部署需执行 alembic upgrade head，创建接口自动化增强相关表。",
     "JSON Schema 当前实现轻量校验，支持 object、array、string、integer、number、boolean、required 和 properties，后续可替换为标准 jsonschema 引擎。",
     "接口变更 Diff 当前覆盖接口用例核心字段，后续可接入 OpenAPI 文档导入/同步并生成影响分析。",
     "前端构建已通过，当前仅存在项目既有 ESLint warning。"

@@ -22,7 +22,6 @@ import InterfaceTestCases from './pages/TestCases/InterfaceTestCases';
 import TestPlans from './pages/TestCases/TestPlans';
 import TestSuites from './pages/TestCases/TestSuites';
 import ApiAutomation from './pages/ApiAutomation';
-import ApiAdvancedTesting from './pages/ApiAdvancedTesting';
 import Requirements from './pages/Requirements';
 import RuleConfig from './pages/RuleConfig';
 import AiKnowledge from './pages/AiKnowledge';
@@ -97,7 +96,7 @@ const AppLayout: React.FC = () => {
               <Route path="/testcases/functional" element={<FunctionalTestCases />} />
               <Route path="/testcases/interface" element={<InterfaceTestCases />} />
               <Route path="/api-automation" element={<ApiAutomation />} />
-              <Route path="/api-advanced" element={<ApiAdvancedTesting />} />
+              <Route path="/api-advanced" element={<Navigate to="/api-automation" replace />} />
               <Route path="/ui-automation" element={<UiAutomation />} />
               {/* 测试执行 (Test Execution) */}
               <Route path="/test/http" element={<HttpTest />} />

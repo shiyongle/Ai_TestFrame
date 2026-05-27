@@ -45,6 +45,7 @@ import {
 import dayjs from 'dayjs';
 import { interfaceTestcaseApi, projectApi, testApi } from '../../services/api';
 import { HttpTestResponse } from '../../types';
+import ApiAdvancedTesting from '../ApiAdvancedTesting';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -388,7 +389,7 @@ const parseBodyValue = (bodyText: string | undefined, context: Record<string, an
 };
 
 const ApiAutomation: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'orchestration'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'orchestration' | 'governance'>('overview');
   const [scenarios, setScenarios] = useState<TestScenario[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('');
 
@@ -989,10 +990,11 @@ const ApiAutomation: React.FC = () => {
       <Segmented
         style={{ marginBottom: 16 }}
         value={activeTab}
-        onChange={(v) => setActiveTab(v as 'overview' | 'orchestration')}
+        onChange={(v) => setActiveTab(v as 'overview' | 'orchestration' | 'governance')}
         options={[
           { label: '主页面总览', value: 'overview', icon: <ApiOutlined /> },
           { label: '场景编排', value: 'orchestration', icon: <BranchesOutlined /> },
+          { label: '接口资产增强', value: 'governance', icon: <SettingOutlined /> },
         ]}
       />
 
@@ -1274,6 +1276,10 @@ const ApiAutomation: React.FC = () => {
             )}
           </Card>
         </div>
+      )}
+
+      {activeTab === 'governance' && (
+        <ApiAdvancedTesting embedded defaultProjectId={selectedProjectId} />
       )}
 
       <Modal

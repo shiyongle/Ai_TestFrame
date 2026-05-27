@@ -14,31 +14,32 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PlayCircleOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { apiAdvancedApi, environmentApi, interfaceTestcaseApi, projectApi } from '../services/api';
 
 const { Title, Text } = Typography;
 
-const ApiAdvancedTesting: React.FC = () => {
+interface ApiAdvancedTestingProps {
+  embedded?: boolean;
+  defaultProjectId?: number;
+}
+
+const ApiAdvancedTesting: React.FC<ApiAdvancedTestingProps> = ({ embedded = false, defaultProjectId }) => {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [environments, setEnvironments] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
-  const [projectId, setProjectId] = useState<number | undefined>();
+  const [projectId, setProjectId] = useState<number | undefined>(defaultProjectId);
   const [summary, setSummary] = useState<any>({});
-  const [collections, setCollections] = useState<any[]>([]);
-  const [runs, setRuns] = useState<any[]>([]);
   const [mocks, setMocks] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
   const [monitors, setMonitors] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
-  const [collectionOpen, setCollectionOpen] = useState(false);
   const [mockOpen, setMockOpen] = useState(false);
   const [contractOpen, setContractOpen] = useState(false);
   const [monitorOpen, setMonitorOpen] = useState(false);
   const [docSyncResult, setDocSyncResult] = useState<any>();
-  const [collectionForm] = Form.useForm();
   const [docSyncForm] = Form.useForm();
   const [mockForm] = Form.useForm();
   const [contractForm] = Form.useForm();
@@ -48,13 +49,11 @@ const ApiAdvancedTesting: React.FC = () => {
     setLoading(true);
     try {
       const params = { project_id: projectId };
-      const [projectList, envList, caseList, summaryData, collectionList, runList, mockList, contractList, monitorList, changeList] = await Promise.all([
+      const [projectList, envList, caseList, summaryData, mockList, contractList, monitorList, changeList] = await Promise.all([
         projectApi.getProjects(),
         environmentApi.list(),
         interfaceTestcaseApi.getAll(projectId),
         apiAdvancedApi.getSummary(params),
-        apiAdvancedApi.listCollections(params),
-        apiAdvancedApi.listRuns({ limit: 20 }),
         apiAdvancedApi.listMocks(params),
         apiAdvancedApi.listContracts(),
         apiAdvancedApi.listMonitors(),
@@ -64,14 +63,12 @@ const ApiAdvancedTesting: React.FC = () => {
       setEnvironments(envList || []);
       setCases(caseList || []);
       setSummary(summaryData || {});
-      setCollections(collectionList || []);
-      setRuns(runList || []);
       setMocks(mockList || []);
       setContracts(contractList || []);
       setMonitors(monitorList || []);
       setChanges(changeList || []);
     } catch (error) {
-      message.error('加载高级接口测试数据失败');
+      message.error('加载接口自动化扩展数据失败');
     } finally {
       setLoading(false);
     }
@@ -82,31 +79,16 @@ const ApiAdvancedTesting: React.FC = () => {
   }, [loadData]);
 
   useEffect(() => {
+    if (defaultProjectId) {
+      setProjectId(defaultProjectId);
+    }
+  }, [defaultProjectId]);
+
+  useEffect(() => {
     if (projectId) {
       docSyncForm.setFieldsValue({ project_id: projectId });
     }
   }, [docSyncForm, projectId]);
-
-  const createCollection = async () => {
-    try {
-      const values = await collectionForm.validateFields();
-      await apiAdvancedApi.createCollection({
-        ...values,
-        items: (values.case_ids || []).map((id: number, index: number) => ({
-          interface_testcase_id: id,
-          order_index: index,
-          enabled: true,
-          assertions: [{ type: 'status_code', expected: 200 }],
-        })),
-      });
-      message.success('集合已创建');
-      setCollectionOpen(false);
-      collectionForm.resetFields();
-      loadData();
-    } catch (error: any) {
-      if (!error?.errorFields) message.error(error?.response?.data?.detail || '创建集合失败');
-    }
-  };
 
   const syncDocs = async () => {
     try {
@@ -117,19 +99,6 @@ const ApiAdvancedTesting: React.FC = () => {
       loadData();
     } catch (error: any) {
       if (!error?.errorFields) message.error(error?.response?.data?.detail || '接口文档同步失败');
-    }
-  };
-
-  const runCollection = async (record: any) => {
-    try {
-      const res = await apiAdvancedApi.runCollection(record.id, {
-        environment_id: record.environment_id,
-        iterations: 1,
-      });
-      message.success(`运行完成：通过 ${res.passed_items}/${res.total_items}`);
-      loadData();
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail || '运行集合失败');
     }
   };
 
@@ -191,11 +160,11 @@ const ApiAdvancedTesting: React.FC = () => {
   };
 
   return (
-    <div className="app-content fade-in" style={{ padding: 24, maxWidth: 1680, margin: '0 auto' }}>
+    <div className={embedded ? 'fade-in' : 'app-content fade-in'} style={{ padding: embedded ? 0 : 24, maxWidth: embedded ? 'none' : 1680, margin: embedded ? 0 : '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <Title level={2} style={{ margin: 0, fontWeight: 700 }}>高级接口测试</Title>
-          <Text type="secondary">集合 Runner、契约校验、Mock Server、监控探测、接口变更 Diff 与 API 资产治理</Text>
+          <Title level={embedded ? 3 : 2} style={{ margin: 0, fontWeight: 700 }}>接口自动化扩展能力</Title>
+          <Text type="secondary">接口文档同步、契约校验、Mock Server、监控探测、接口变更 Diff 与 API 资产治理</Text>
         </div>
         <Space>
           <Select
@@ -212,7 +181,6 @@ const ApiAdvancedTesting: React.FC = () => {
 
       <Space size="large" wrap style={{ marginBottom: 16 }}>
         <Card bordered={false} style={{ minWidth: 160 }}><Text type="secondary">接口资产</Text><div style={{ fontSize: 28, fontWeight: 700 }}>{summary.interface_cases || 0}</div></Card>
-        <Card bordered={false} style={{ minWidth: 160 }}><Text type="secondary">集合</Text><div style={{ fontSize: 28, fontWeight: 700 }}>{summary.collections || 0}</div></Card>
         <Card bordered={false} style={{ minWidth: 160 }}><Text type="secondary">契约</Text><div style={{ fontSize: 28, fontWeight: 700 }}>{summary.contracts || 0}</div></Card>
         <Card bordered={false} style={{ minWidth: 160 }}><Text type="secondary">Mock</Text><div style={{ fontSize: 28, fontWeight: 700 }}>{summary.mocks || 0}</div></Card>
         <Card bordered={false} style={{ minWidth: 160 }}><Text type="secondary">监控</Text><div style={{ fontSize: 28, fontWeight: 700 }}>{summary.monitors || 0}</div></Card>
@@ -221,33 +189,6 @@ const ApiAdvancedTesting: React.FC = () => {
       <Card bordered={false}>
         <Tabs
           items={[
-            {
-              key: 'collections',
-              label: '集合 Runner',
-              children: (
-                <>
-                  <Button type="primary" icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setCollectionOpen(true)}>新增集合</Button>
-                  <Table loading={loading} rowKey="id" dataSource={collections} columns={[
-                    { title: '集合', dataIndex: 'name' },
-                    { title: '用例数', dataIndex: 'item_count', render: (value: number) => <Tag>{value}</Tag> },
-                    { title: '环境', dataIndex: 'environment_id', render: (value: number) => environments.find((item) => item.id === value)?.name || '-' },
-                    { title: '更新时间', dataIndex: 'updated_at', render: (value: string) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-' },
-                    { title: '操作', render: (_: any, record: any) => <Button size="small" icon={<PlayCircleOutlined />} onClick={() => runCollection(record)}>运行</Button> },
-                  ]} />
-                </>
-              ),
-            },
-            {
-              key: 'runs',
-              label: '运行记录',
-              children: <Table loading={loading} rowKey="id" dataSource={runs} columns={[
-                { title: 'Run ID', dataIndex: 'id' },
-                { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'passed' ? 'green' : 'red'}>{value}</Tag> },
-                { title: '通过', render: (_: any, record: any) => `${record.passed_items}/${record.total_items}` },
-                { title: '耗时', dataIndex: 'duration_ms', render: (value: number) => `${value || 0}ms` },
-                { title: '开始时间', dataIndex: 'started_at', render: (value: string) => value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-' },
-              ]} />,
-            },
             {
               key: 'docs',
               label: '接口文档同步',
@@ -348,17 +289,6 @@ const ApiAdvancedTesting: React.FC = () => {
           ]}
         />
       </Card>
-
-      <Modal title="新增集合" open={collectionOpen} onCancel={() => setCollectionOpen(false)} onOk={createCollection} width={720}>
-        <Form form={collectionForm} layout="vertical">
-          <Form.Item name="name" label="集合名称" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="project_id" label="项目" rules={[{ required: true }]}><Select options={projects.map((item) => ({ label: item.name, value: item.id }))} /></Form.Item>
-          <Form.Item name="environment_id" label="默认环境"><Select allowClear options={environments.map((item) => ({ label: item.name, value: item.id }))} /></Form.Item>
-          <Form.Item name="case_ids" label="接口用例" rules={[{ required: true }]}><Select mode="multiple" options={cases.map((item) => ({ label: `${item.method} ${item.name}`, value: item.id }))} /></Form.Item>
-          <Form.Item name="pre_script" label="集合前置脚本"><Input.TextArea rows={3} placeholder="set token={{account.token}}" /></Form.Item>
-          <Form.Item name="post_script" label="集合后置脚本"><Input.TextArea rows={3} placeholder="extract token json $.data.token" /></Form.Item>
-        </Form>
-      </Modal>
 
       <Modal title="新增 Mock" open={mockOpen} onCancel={() => setMockOpen(false)} onOk={createMock} width={720}>
         <Form form={mockForm} layout="vertical" initialValues={{ method: 'GET', status_code: 200, response_body: '{\n  "ok": true\n}', mock_key: 'default' }}>
