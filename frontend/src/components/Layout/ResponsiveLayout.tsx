@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Drawer, Space, Tag } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Layout, Menu, Drawer, Space } from 'antd';
 import type { MenuProps } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -26,8 +26,6 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlayCircleOutlined,
-  StopOutlined,
-  ReloadOutlined,
   AppstoreOutlined,
   ScheduleOutlined,
   FolderOpenOutlined,
@@ -58,12 +56,12 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
 
   const isControlled = typeof mobileMenuVisible === 'boolean';
   const mobileVisible = isControlled ? mobileMenuVisible : internalMobileVisible;
-  const setMobileVisible = (visible: boolean) => {
+  const setMobileVisible = useCallback((visible: boolean) => {
     if (!isControlled) {
       setInternalMobileVisible(visible);
     }
     onMobileMenuVisibleChange?.(visible);
-  };
+  }, [isControlled, onMobileMenuVisibleChange]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -85,272 +83,134 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
   const menuItems: MenuProps['items'] = [
     {
       type: 'group' as const,
-      label: '概览',
+      label: '工作台',
       children: [
-        {
-          key: '/dashboard',
-          icon: <DashboardOutlined />,
-          label: '仪表盘',
-        },
+        { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
       ],
     },
     {
       type: 'group' as const,
-      label: '项目与协作',
+      label: '项目与需求',
       children: [
-        {
-          key: '/projects',
-          icon: <ProjectOutlined />,
-          label: '项目列表',
-        },
-        {
-          key: '/requirements',
-          icon: <FileSearchOutlined />,
-          label: '需求管理',
-        },
-        {
-          key: '/versions',
-          icon: <HistoryOutlined />,
-          label: '版本追踪',
-        },
+        { key: '/projects', icon: <ProjectOutlined />, label: '项目列表' },
+        { key: '/requirements', icon: <FileSearchOutlined />, label: '需求管理' },
+        { key: '/versions', icon: <HistoryOutlined />, label: '版本追踪' },
       ],
     },
     {
       type: 'group' as const,
-      label: '测试资产',
+      label: '测试设计',
       children: [
         {
           key: 'testcases',
           icon: <AppstoreOutlined />,
-          label: '测试用例管理',
+          label: '用例与计划',
           children: [
-            {
-              key: '/testcases/plans',
-              icon: <ScheduleOutlined />,
-              label: '测试计划',
-            },
-            {
-              key: '/testcases/suites',
-              icon: <FolderOpenOutlined />,
-              label: '测试用例集',
-            },
-            {
-              key: '/testcases/functional',
-              icon: <FileTextOutlined />,
-              label: '功能测试',
-            },
-            {
-              key: '/testcases/interface',
-              icon: <ApiOutlined />,
-              label: '接口测试',
-            },
+            { key: '/testcases/plans', icon: <ScheduleOutlined />, label: '测试计划' },
+            { key: '/testcases/suites', icon: <FolderOpenOutlined />, label: '测试用例集' },
+            { key: '/testcases/functional', icon: <FileTextOutlined />, label: '功能测试用例' },
+            { key: '/testcases/interface', icon: <ApiOutlined />, label: '接口测试用例' },
           ],
         },
+        { key: '/traceability', icon: <FileSearchOutlined />, label: '需求-用例矩阵' },
+        { key: '/impact-analysis', icon: <ThunderboltOutlined />, label: '变更影响分析' },
       ],
     },
     {
       type: 'group' as const,
-      label: '测试执行',
+      label: '执行与自动化',
       children: [
-        {
-          key: 'test',
-          icon: <BugOutlined />,
-          label: '接口调试',
-          children: [
-            {
-              key: '/test/http',
-              icon: <ApiOutlined />,
-              label: 'HTTP 测试',
-            },
-            {
-              key: '/test/tcp',
-              icon: <ApiOutlined />,
-              label: 'TCP 测试',
-            },
-            {
-              key: '/test/mq',
-              icon: <ApiOutlined />,
-              label: 'MQ 测试',
-            },
-          ],
-        },
-        {
-          key: '/test/performance',
-          icon: <ThunderboltOutlined />,
-          label: '性能测试',
-        },
-        {
-          key: 'agent-eval',
-          icon: <ExperimentOutlined />,
-          label: 'Agent 评测',
-          children: [
-            {
-              key: '/agent-evaluation',
-              icon: <ExperimentOutlined />,
-              label: '评测执行',
-            },
-            {
-              key: '/agent-evaluation/golden-datasets',
-              icon: <DatabaseOutlined />,
-              label: '黄金测试集',
-            },
-            {
-              key: '/agent-evaluation/badcases',
-              icon: <ExperimentOutlined />,
-              label: '被测Agent管理',
-            },
-            {
-              key: '/agent-evaluation/templates',
-              icon: <FileTextOutlined />,
-              label: '评测模板',
-            },
-            {
-              key: '/agent-evaluation/model-configs',
-              icon: <SettingOutlined />,
-              label: '模型配置',
-            },
-            {
-              key: '/ai-quality',
-              icon: <SafetyCertificateOutlined />,
-              label: 'AI 质量治理',
-            },
-          ],
-        },
         {
           key: '/automation',
           icon: <RocketOutlined />,
           label: '自动化执行',
           children: [
-            {
-              key: '/api-automation',
-              icon: <ApiOutlined />,
-              label: '接口自动化',
-            },
-            {
-              key: '/ui-automation',
-              icon: <PlayCircleOutlined />,
-              label: 'UI 自动化',
-            },
+            { key: '/api-automation', icon: <ApiOutlined />, label: '接口自动化' },
+            { key: '/ui-automation', icon: <PlayCircleOutlined />, label: 'UI 自动化' },
           ],
         },
+        {
+          key: 'test',
+          icon: <BugOutlined />,
+          label: '接口调试',
+          children: [
+            { key: '/test/http', icon: <ApiOutlined />, label: 'HTTP 测试' },
+            { key: '/test/tcp', icon: <ApiOutlined />, label: 'TCP 测试' },
+            { key: '/test/mq', icon: <ApiOutlined />, label: 'MQ 测试' },
+          ],
+        },
+        { key: '/test/performance', icon: <ThunderboltOutlined />, label: '性能测试' },
       ],
     },
     {
       type: 'group' as const,
-      label: '数据与报告',
+      label: 'AI 与智能评测',
       children: [
         {
-          key: '/reports',
-          icon: <BarChartOutlined />,
-          label: '测试质量报告',
+          key: 'agent-eval',
+          icon: <ExperimentOutlined />,
+          label: 'Agent 评测',
+          children: [
+            { key: '/ai-quality', icon: <SafetyCertificateOutlined />, label: 'AI 质量治理' },
+            { key: '/agent-evaluation', icon: <ExperimentOutlined />, label: '评测执行' },
+            { key: '/agent-evaluation/golden-datasets', icon: <DatabaseOutlined />, label: '黄金测试集' },
+            { key: '/agent-evaluation/badcases', icon: <ExperimentOutlined />, label: '被测 Agent 管理' },
+            { key: '/agent-evaluation/templates', icon: <FileTextOutlined />, label: '评测模板' },
+            { key: '/agent-evaluation/model-configs', icon: <SettingOutlined />, label: '模型配置' },
+          ],
         },
-        {
-          key: '/traceability',
-          icon: <FileSearchOutlined />,
-          label: '质量追踪矩阵',
-        },
-        {
-          key: '/impact-analysis',
-          icon: <ThunderboltOutlined />,
-          label: '需求影响分析',
-        },
-        {
-          key: '/defects',
-          icon: <IssuesCloseOutlined />,
-          label: '缺陷管理',
-        },
+        { key: '/ai/knowledge', icon: <DatabaseOutlined />, label: 'AI 知识库' },
       ],
     },
     {
       type: 'group' as const,
-      label: '引擎与辅助',
+      label: '质量与交付',
       children: [
+        { key: '/defects', icon: <IssuesCloseOutlined />, label: '缺陷管理' },
+        { key: '/reports', icon: <BarChartOutlined />, label: '测试质量报告' },
+        { key: '/test-assets/audit', icon: <SafetyCertificateOutlined />, label: '测试资产审计' },
+      ],
+    },
+    {
+      type: 'group' as const,
+      label: '数据与环境',
+      children: [
+        { key: '/environments', icon: <CloudServerOutlined />, label: '环境变量管理' },
         {
           key: 'data-warehouse',
           icon: <DatabaseOutlined />,
           label: '数据引擎',
           children: [
-            {
-              key: '/data-warehouse/functions',
-              icon: <FunctionOutlined />,
-              label: '模板内置函数',
-            },
-            {
-              key: '/data-warehouse/business',
-              icon: <HddOutlined />,
-              label: '业务依赖数据',
-            },
-          ],
-        },
-        {
-          key: 'tools',
-          icon: <ToolOutlined />,
-          label: '测试工具箱',
-          children: [
-            {
-              key: '/tools/id-generator',
-              icon: <IdcardOutlined />,
-              label: '身份证生成',
-            },
-            {
-              key: '/tools/phone-generator',
-              icon: <MobileOutlined />,
-              label: '手机号生成',
-            },
-            {
-              key: '/tools/json-formatter',
-              icon: <CodeOutlined />,
-              label: 'JSON 格式化',
-            },
-            {
-              key: '/tools/aes-crypto',
-              icon: <SafetyCertificateOutlined />,
-              label: 'AES 加解密',
-            },
+            { key: '/data-warehouse/functions', icon: <FunctionOutlined />, label: '模板内置函数' },
+            { key: '/data-warehouse/business', icon: <HddOutlined />, label: '业务依赖数据' },
           ],
         },
       ],
     },
     {
       type: 'group' as const,
-      label: '系统与治理',
+      label: '系统工具',
       children: [
+        {
+          key: 'tools',
+          icon: <ToolOutlined />,
+          label: '测试工具箱',
+          children: [
+            { key: '/tools/id-generator', icon: <IdcardOutlined />, label: '身份证生成' },
+            { key: '/tools/phone-generator', icon: <MobileOutlined />, label: '手机号生成' },
+            { key: '/tools/json-formatter', icon: <CodeOutlined />, label: 'JSON 格式化' },
+            { key: '/tools/aes-crypto', icon: <SafetyCertificateOutlined />, label: 'AES 加解密' },
+          ],
+        },
         {
           key: 'settings',
           icon: <SettingOutlined />,
           label: '平台设置',
           children: [
-            {
-              key: '/ai/knowledge',
-              icon: <DatabaseOutlined />,
-              label: '系统知识引擎',
-            },
-            {
-              key: '/rule-config',
-              icon: <SafetyCertificateOutlined />,
-              label: '全局测试规则',
-            },
-            {
-              key: '/settings',
-              icon: <SettingOutlined />,
-              label: '平台配置中心',
-            },
+            { key: '/rule-config', icon: <SafetyCertificateOutlined />, label: '全局测试规则' },
+            { key: '/settings', icon: <SettingOutlined />, label: '平台配置中心' },
+            { key: '/operation-logs', icon: <ClockCircleOutlined />, label: '操作审计日志' },
           ],
-        },
-        {
-          key: '/operation-logs',
-          icon: <ClockCircleOutlined />,
-          label: '操作审计日志',
-        },
-        {
-          key: '/test-assets/audit',
-          icon: <SafetyCertificateOutlined />,
-          label: '测试资产审计',
-        },
-        {
-          key: '/environments',
-          icon: <CloudServerOutlined />,
-          label: '环境变量管理',
         },
       ],
     },
@@ -385,20 +245,13 @@ const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({
       openKeys.push('agent-eval');
     }
     if (currentPath.startsWith('/api-automation') || currentPath.startsWith('/ui-automation')) {
-      openKeys.push('automation');
+      openKeys.push('/automation');
     }
-    if (currentPath.startsWith('/requirements') || currentPath.startsWith('/projects')) {
-      openKeys.push('projects');
-    }
-    if (currentPath.startsWith('/ai/knowledge') || currentPath.startsWith('/rule-config') || currentPath.startsWith('/settings')) {
+    if (currentPath.startsWith('/rule-config') || currentPath.startsWith('/settings') || currentPath.startsWith('/operation-logs')) {
       openKeys.push('settings');
     }
     if (currentPath.startsWith('/data-warehouse')) {
       openKeys.push('data-warehouse');
-    }
-    // 默认展开工具箱菜单
-    if (openKeys.length === 0) {
-      openKeys.push('tools');
     }
     return openKeys;
   };
