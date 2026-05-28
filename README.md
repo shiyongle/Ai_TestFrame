@@ -11,12 +11,19 @@
 - **接口测试**：HTTP、TCP、MQ等多种协议接口测试
 - **版本管理**：版本与需求关联，支持版本发布流程
 - **测试报告**：详细的测试执行报告和统计分析
+- **缺陷闭环**：支持缺陷自主创建、状态流转、外部平台同步、回归验证和关闭闭环
+- **需求-用例-执行-缺陷追踪矩阵**：支持覆盖率矩阵、失败缺陷追踪、影响分析和推荐回归范围
+- **测试资产治理**：支持用例版本历史、变更 Diff、审批、基线、冻结测试集和审计日志
 
 ### 高级功能
 - **规则配置系统**：可视化规则编辑器，自动生成测试用例
 - **AI智能化**：集成大模型API，智能测试用例生成和结果分析
 - **RAG知识库**：文档检索、向量化存储和知识增强
 - **工作流引擎**：工作流编排、任务调度和流程自动化
+- **AI质量治理**：支持 Prompt 版本、生成结果评审、幻觉检测、采纳率统计、模型预算、A/B 实验和知识质量扫描
+- **高级接口测试**：支持集合 Runner、Mock Server、契约 Schema、监控探测、接口变更 Diff 和接口文档同步
+- **环境与变量管理**：支持 dev/test/stage/prod 环境、全局变量、密钥变量、前后置脚本、账号池和数据池
+- **权限与企业治理**：支持组织、团队、用户管理、RBAC、项目角色授权、数据隔离、SSO 配置、API Token、密钥托管、操作审批和访问审计
 - **工具箱**：ID生成器、手机号生成器等实用工具
 
 ### 测试支持
@@ -25,6 +32,46 @@
 - **MQ接口测试**：RabbitMQ消息队列测试
 - **批量测试**：支持批量测试执行
 - **断言验证**：多种断言类型，字段路径支持
+
+## 平台治理与质量闭环
+
+### 缺陷管理闭环
+- 支持从测试报告、执行失败、人工录入等来源创建缺陷
+- 内置 `open / in_progress / resolved / verified / closed / reopened` 状态流转
+- 支持 Jira 对接配置，可同步缺陷创建、状态变更和回归验证结果
+- 缺陷管理页支持项目筛选、关键字检索和状态过滤
+
+### 需求-用例-执行-缺陷追踪
+- `需求-用例矩阵` 展示需求覆盖状态、关联测试资产和失败缺陷
+- `变更影响分析` 支持识别受影响需求并推荐回归范围
+- 支持基于需求创建推荐回归计划，并沉淀统一执行结果
+- 支持需求验收状态建议，用于推动需求从测试到完成的状态闭环
+
+### 测试资产版本化与审计
+- 记录测试资产版本历史、变更 Diff、审批决策和 AI 生成证据
+- 支持测试基线创建和冻结，冻结后的基线可作为发布准入依据
+- 支持 AI 生成用例确认，保留生成来源、证据、确认人和确认时间
+- 提供测试资产审计页，集中查看资产版本、基线和审计事件
+
+### 环境与接口测试治理
+- `环境变量管理` 支持环境、变量、账号池、数据池、前置脚本和后置脚本
+- `接口自动化` 承载接口测试用例与 Runner 执行能力
+- 高级接口能力统一收敛在接口自动化扩展区，包括集合 Runner、Mock、契约 Schema、监控探测和接口变更 Diff
+- 支持从接口文档同步接口资产，为自动化和契约校验提供统一资产入口
+
+### AI 质量治理
+- 支持 Prompt 版本管理、启用版本控制和变更记录
+- 支持 AI 生成结果评审、质量评分、幻觉检测和采纳状态统计
+- 支持模型预算、Token 使用率、成本预算和告警阈值
+- 支持模型/Prompt A/B 实验和知识库质量扫描
+
+### 权限与企业治理
+- `权限与企业治理` 页面集中管理用户、组织、团队、角色、项目授权、SSO、API Token、密钥、审批和审计
+- 用户管理已并入企业治理页，可直接从用户列表进入角色绑定和项目授权
+- RBAC 支持平台、组织、团队范围的用户角色绑定
+- 项目数据隔离授权支持按用户、项目、角色授予访问范围
+- API Token 只保存哈希和前缀，可用于外部系统以 `Authorization: Bearer taf_xxx` 访问受保护接口
+- 支持 OIDC / SAML / LDAP 配置记录，为后续统一登录接入预留配置基础
 
 ## 技术栈
 
@@ -577,6 +624,10 @@ MYSQL_DATABASE=test_system
 DB_POOL_SIZE=10
 DB_MAX_OVERFLOW=20
 DB_POOL_TIMEOUT=30
+
+# 认证与治理配置
+AUTH_SECRET_KEY=replace_with_a_strong_secret
+CORS_ORIGINS=["http://localhost","http://localhost:3000"]
 ```
 
 #### 5.3 向量数据库配置
@@ -703,6 +754,46 @@ Content-Type: application/json
 **获取执行状态**：
 ```http
 GET /api/v1/ai/workflow/status/{execution_id}
+```
+
+#### 6.4 企业治理与 RBAC
+
+**治理总览**：
+```http
+GET /api/v1/enterprise-governance/overview
+Authorization: Bearer <access_token 或 taf_api_token>
+```
+
+**绑定用户角色**：
+```http
+POST /api/v1/enterprise-governance/user-role-bindings
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "role_id": 2,
+  "scope_type": "platform",
+  "scope_id": null
+}
+```
+
+**授予项目角色**：
+```http
+POST /api/v1/enterprise-governance/project-roles
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "project_id": 3,
+  "role_id": 4,
+  "role_code": "tester",
+  "permissions": ["project:read", "execution:run"]
+}
+```
+
+**查看用户治理画像**：
+```http
+GET /api/v1/enterprise-governance/users/{user_id}/governance-profile
 ```
 
 ### 7. 使用示例
@@ -956,11 +1047,24 @@ npm start
 docker-compose up -d
 ```
 
+### 生产 Docker Compose 部署
+```bash
+cd deploy/docker
+cp .env.prod.example .env.prod
+# 按实际环境修改 .env.prod 中的镜像地址、数据库密码、AUTH_SECRET_KEY、CORS_ORIGINS
+docker compose --env-file .env.prod -f docker-compose.prod.yml pull
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d
+```
+
+生产部署文件位于 `deploy/docker/docker-compose.prod.yml`，默认包含 MySQL、后端和前端三个服务。前端 Nginx 会将 `/api/` 反向代理到后端容器。
+
 ## 访问地址
 - 前端界面: http://localhost:3000
 - 后端API: http://localhost:8000
 - API文档: http://localhost:8000/docs
 - 健康检查: http://localhost:8000/health
+- Docker 生产前端: http://服务器IP/
+- Docker 生产后端: http://服务器IP:8000
 
 ## 贡献指南
 1. Fork 项目
@@ -973,6 +1077,18 @@ docker-compose up -d
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ## 更新日志
+
+### v2.10.0 (2026-05-28)
+- 新增权限与企业治理中心：组织、团队、用户管理、RBAC、项目授权、SSO 配置、API Token、密钥托管、审批和访问审计
+- 用户管理并入企业治理页，支持从用户列表直接绑定角色和授予项目权限
+- 项目授权和用户角色绑定列表支持展示用户、项目、角色名称，提升可读性
+- API Token 支持作为 Bearer Token 访问受保护接口
+
+### v2.9.0 (2026-05-27)
+- 新增 AI 质量治理：Prompt 版本、生成评审、幻觉检测、模型预算、A/B 实验和知识质量扫描
+- 新增接口自动化高级能力：集合 Runner、Mock Server、契约 Schema、监控探测和接口变更 Diff
+- 新增环境变量管理：多环境、全局变量、密钥变量、前后置脚本、账号池和数据池
+- 新增测试资产审计：版本历史、变更 Diff、审批、基线和冻结测试集
 
 ### v2.4.0 (2026-03-13)
 - 向量数据库迁移至 ChromaDB
