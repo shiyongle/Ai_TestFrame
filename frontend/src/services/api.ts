@@ -280,6 +280,13 @@ export const enterpriseGovernanceApi = {
   listProjectRoles: (projectId?: number): Promise<any[]> =>
     api.get('/api/v1/enterprise-governance/project-roles', { params: { project_id: projectId } }),
   grantProjectRole: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/project-roles', data),
+  listUserRoleBindings: (userId?: number): Promise<any[]> =>
+    api.get('/api/v1/enterprise-governance/user-role-bindings', { params: { user_id: userId } }),
+  bindUserRole: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/user-role-bindings', data),
+  deleteUserRoleBinding: (id: number): Promise<any> =>
+    api.delete(`/api/v1/enterprise-governance/user-role-bindings/${id}`),
+  getUserGovernanceProfile: (userId: number): Promise<any> =>
+    api.get(`/api/v1/enterprise-governance/users/${userId}/governance-profile`),
   listSsoProviders: (): Promise<any[]> => api.get('/api/v1/enterprise-governance/sso-providers'),
   createSsoProvider: (data: any): Promise<any> => api.post('/api/v1/enterprise-governance/sso-providers', data),
   updateSsoProvider: (id: number, data: any): Promise<any> =>

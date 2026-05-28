@@ -28,6 +28,7 @@ import {
     BugOutlined,
     ApiOutlined
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { authStorage, defectApi, systemApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
@@ -53,6 +54,7 @@ const SystemSettings: React.FC = () => {
     const [users, setUsers] = useState<ManagedUser[]>([]);
     const [userModalOpen, setUserModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+    const navigate = useNavigate();
     const currentUser = authStorage.getUser();
     const isSuperAdmin = currentUser?.role === 'super_admin';
 
@@ -415,9 +417,12 @@ const SystemSettings: React.FC = () => {
                             {
                                 title: '操作',
                                 key: 'actions',
-                                width: 180,
+                                width: 240,
                                 render: (_: any, record: ManagedUser) => (
                                     <Space size="small">
+                                        <Button type="link" icon={<SafetyCertificateOutlined />} onClick={() => navigate(`/enterprise-governance?user_id=${record.id}`)}>
+                                            权限
+                                        </Button>
                                         <Button type="link" icon={<EditOutlined />} onClick={() => openEditUserModal(record)}>
                                             编辑
                                         </Button>

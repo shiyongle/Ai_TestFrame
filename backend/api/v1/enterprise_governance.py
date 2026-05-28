@@ -24,6 +24,7 @@ from models.database_models import (
     EnterpriseSsoProvider,
     EnterpriseTeam,
     EnterpriseTeamMember,
+    EnterpriseUserRole,
     Project,
     User,
 )
@@ -117,6 +118,20 @@ class ProjectRolePayload(BaseModel):
 
 
 class ProjectRoleResponse(ProjectRolePayload, ORMModel):
+    id: int
+    granted_by: Optional[str] = None
+    granted_at: datetime
+
+
+class UserRoleBindingPayload(BaseModel):
+    user_id: int
+    role_id: int
+    scope_type: str = "platform"
+    scope_id: Optional[int] = None
+    status: str = "active"
+
+
+class UserRoleBindingResponse(UserRoleBindingPayload, ORMModel):
     id: int
     granted_by: Optional[str] = None
     granted_at: datetime
@@ -326,6 +341,7 @@ def get_overview(
         "organizations": db.query(func.count(EnterpriseOrganization.id)).scalar() or 0,
         "teams": db.query(func.count(EnterpriseTeam.id)).scalar() or 0,
         "roles": db.query(func.count(EnterpriseRole.id)).scalar() or 0,
+        "user_roles": db.query(func.count(EnterpriseUserRole.id)).scalar() or 0,
         "project_roles": db.query(func.count(EnterpriseProjectRole.id)).scalar() or 0,
         "sso_enabled": db.query(func.count(EnterpriseSsoProvider.id)).filter(EnterpriseSsoProvider.enabled.is_(True)).scalar() or 0,
         "api_tokens": db.query(func.count(EnterpriseApiToken.id)).filter(EnterpriseApiToken.revoked_at.is_(None)).scalar() or 0,
@@ -529,6 +545,127 @@ def grant_project_role(
     db.commit()
     db.refresh(target)
     return target
+
+
+@router.get("/user-role-bindings", response_model=List[UserRoleBindingResponse])
+def list_user_role_bindings(
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_database),
+    _: User = Depends(require_super_admin),
+):
+    query = db.query(EnterpriseUserRole)
+    if user_id:
+        query = query.filter(EnterpriseUserRole.user_id == user_id)
+    return query.order_by(EnterpriseUserRole.id.desc()).all()
+
+
+@router.post("/user-role-bindings", response_model=UserRoleBindingResponse, status_code=status.HTTP_201_CREATED)
+def bind_user_role(
+    payload: UserRoleBindingPayload,
+    request: Request,
+    db: Session = Depends(get_database),
+    current_user: User = Depends(require_super_admin),
+):
+    if not db.query(User).filter(User.id == payload.user_id).first():
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if not db.query(EnterpriseRole).filter(EnterpriseRole.id == payload.role_id).first():
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    existing = db.query(EnterpriseUserRole).filter(
+        EnterpriseUserRole.user_id == payload.user_id,
+        EnterpriseUserRole.role_id == payload.role_id,
+        EnterpriseUserRole.scope_type == payload.scope_type,
+        EnterpriseUserRole.scope_id == payload.scope_id,
+    ).first()
+    if existing:
+        binding = existing
+        binding.status = payload.status
+    else:
+        binding = EnterpriseUserRole(**payload.model_dump(), granted_by=current_user.username)
+        db.add(binding)
+    db.flush()
+    record_audit(db, current_user, "grant", "user_role", str(binding.id), request=request)
+    db.commit()
+    db.refresh(binding)
+    return binding
+
+
+@router.delete("/user-role-bindings/{binding_id}")
+def delete_user_role_binding(
+    binding_id: int,
+    request: Request,
+    db: Session = Depends(get_database),
+    current_user: User = Depends(require_super_admin),
+):
+    binding = db.query(EnterpriseUserRole).filter(EnterpriseUserRole.id == binding_id).first()
+    if not binding:
+        raise HTTPException(status_code=404, detail="用户角色绑定不存在")
+    db.delete(binding)
+    record_audit(db, current_user, "revoke", "user_role", str(binding_id), request=request)
+    db.commit()
+    return {"success": True}
+
+
+@router.get("/users/{user_id}/governance-profile")
+def get_user_governance_profile(
+    user_id: int,
+    db: Session = Depends(get_database),
+    _: User = Depends(require_super_admin),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user_roles = db.query(EnterpriseUserRole).filter(EnterpriseUserRole.user_id == user_id).all()
+    project_roles = db.query(EnterpriseProjectRole).filter(EnterpriseProjectRole.user_id == user_id).all()
+    team_members = db.query(EnterpriseTeamMember).filter(EnterpriseTeamMember.user_id == user_id).all()
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "real_name": user.real_name,
+            "role": user.role,
+            "is_active": user.is_active,
+        },
+        "role_bindings": [
+            {
+                "id": item.id,
+                "role_id": item.role_id,
+                "role_code": item.role.code if item.role else "",
+                "role_name": item.role.name if item.role else "",
+                "scope_type": item.scope_type,
+                "scope_id": item.scope_id,
+                "status": item.status,
+                "granted_by": item.granted_by,
+                "granted_at": item.granted_at,
+            }
+            for item in user_roles
+        ],
+        "project_roles": [
+            {
+                "id": item.id,
+                "project_id": item.project_id,
+                "project_name": item.project.name if item.project else "",
+                "role_id": item.role_id,
+                "role_code": item.role_code,
+                "status": item.status,
+                "granted_by": item.granted_by,
+                "granted_at": item.granted_at,
+            }
+            for item in project_roles
+        ],
+        "teams": [
+            {
+                "id": item.id,
+                "team_id": item.team_id,
+                "team_name": item.team.name if item.team else "",
+                "organization_id": item.team.organization_id if item.team else None,
+                "member_role": item.member_role,
+                "joined_at": item.joined_at,
+            }
+            for item in team_members
+        ],
+    }
 
 
 @router.get("/sso-providers", response_model=List[SsoProviderResponse])

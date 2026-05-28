@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -29,7 +29,10 @@ import {
   ReloadOutlined,
   SafetyCertificateOutlined,
   TeamOutlined,
+  EditOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import { enterpriseGovernanceApi, projectApi, systemApi } from '../services/api';
 
 const { Title, Text, Paragraph } = Typography;
@@ -51,17 +54,21 @@ const EnterpriseGovernance: React.FC = () => {
   const [orgForm] = Form.useForm();
   const [teamForm] = Form.useForm();
   const [roleForm] = Form.useForm();
+  const [userRoleForm] = Form.useForm();
   const [projectRoleForm] = Form.useForm();
   const [ssoForm] = Form.useForm();
   const [tokenForm] = Form.useForm();
   const [secretForm] = Form.useForm();
   const [approvalForm] = Form.useForm();
+  const [userForm] = Form.useForm();
 
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
   const [overview, setOverview] = useState<any>({});
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
+  const [userRoleBindings, setUserRoleBindings] = useState<any[]>([]);
   const [projectRoles, setProjectRoles] = useState<any[]>([]);
   const [ssoProviders, setSsoProviders] = useState<any[]>([]);
   const [apiTokens, setApiTokens] = useState<any[]>([]);
@@ -71,6 +78,14 @@ const EnterpriseGovernance: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [createdToken, setCreatedToken] = useState<string>('');
+  const [selectedProfile, setSelectedProfile] = useState<any>(null);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const location = useLocation();
+  const initialUserId = useMemo(() => {
+    const raw = new URLSearchParams(location.search).get('user_id');
+    return raw ? Number(raw) : undefined;
+  }, [location.search]);
 
   const userOptions = useMemo(
     () => users.map((item) => ({ label: item.real_name ? `${item.real_name} (${item.username})` : item.username, value: item.id })),
@@ -84,8 +99,20 @@ const EnterpriseGovernance: React.FC = () => {
     () => roles.map((item) => ({ label: `${item.name} (${item.code})`, value: item.id })),
     [roles]
   );
+  const userNameMap = useMemo(
+    () => new Map(users.map((item) => [item.id, item.real_name ? `${item.real_name} (${item.username})` : item.username])),
+    [users]
+  );
+  const projectNameMap = useMemo(
+    () => new Map(projects.map((item) => [item.id, item.name])),
+    [projects]
+  );
+  const roleNameMap = useMemo(
+    () => new Map(roles.map((item) => [item.id, `${item.name} (${item.code})`])),
+    [roles]
+  );
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       const [
@@ -93,6 +120,7 @@ const EnterpriseGovernance: React.FC = () => {
         orgRes,
         teamRes,
         roleRes,
+        userRoleRes,
         projectRoleRes,
         ssoRes,
         tokenRes,
@@ -106,6 +134,7 @@ const EnterpriseGovernance: React.FC = () => {
         enterpriseGovernanceApi.listOrganizations(),
         enterpriseGovernanceApi.listTeams(),
         enterpriseGovernanceApi.listRoles(),
+        enterpriseGovernanceApi.listUserRoleBindings(initialUserId),
         enterpriseGovernanceApi.listProjectRoles(),
         enterpriseGovernanceApi.listSsoProviders(),
         enterpriseGovernanceApi.listApiTokens(),
@@ -119,6 +148,7 @@ const EnterpriseGovernance: React.FC = () => {
       setOrganizations(orgRes || []);
       setTeams(teamRes || []);
       setRoles(roleRes || []);
+      setUserRoleBindings(userRoleRes || []);
       setProjectRoles(projectRoleRes || []);
       setSsoProviders(ssoRes || []);
       setApiTokens(tokenRes || []);
@@ -127,16 +157,26 @@ const EnterpriseGovernance: React.FC = () => {
       setAudits(auditRes || []);
       setUsers(userRes || []);
       setProjects(projectRes || []);
+      if (initialUserId) {
+        userRoleForm.setFieldsValue({ user_id: initialUserId, scope_type: 'platform' });
+        projectRoleForm.setFieldsValue({ user_id: initialUserId });
+        try {
+          const profile = await enterpriseGovernanceApi.getUserGovernanceProfile(initialUserId);
+          setSelectedProfile(profile);
+        } catch {
+          setSelectedProfile(null);
+        }
+      }
     } catch (error: any) {
       message.error(error?.response?.data?.detail || '加载企业治理数据失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [initialUserId, projectRoleForm, userRoleForm]);
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [loadAll]);
 
   const submit = async (action: () => Promise<any>, successText: string, form?: any) => {
     setLoading(true);
@@ -154,10 +194,72 @@ const EnterpriseGovernance: React.FC = () => {
     }
   };
 
+  const openCreateUserModal = () => {
+    setEditingUser(null);
+    userForm.resetFields();
+    setUserModalOpen(true);
+  };
+
+  const openEditUserModal = (user: any) => {
+    setEditingUser(user);
+    userForm.setFieldsValue({
+      username: user.username,
+      real_name: user.real_name,
+      password: '',
+    });
+    setUserModalOpen(true);
+  };
+
+  const handleSaveUser = async () => {
+    try {
+      const values = await userForm.validateFields();
+      await submit(
+        () => editingUser
+          ? systemApi.updateUser(editingUser.id, {
+              username: values.username,
+              real_name: values.real_name,
+              password: values.password || undefined,
+            })
+          : systemApi.createUser({
+              username: values.username,
+              real_name: values.real_name,
+              password: values.password,
+            }),
+        editingUser ? '用户更新成功' : '用户创建成功'
+      );
+      setUserModalOpen(false);
+      setEditingUser(null);
+      userForm.resetFields();
+    } catch (error: any) {
+      if (!error?.errorFields) {
+        message.error(error?.response?.data?.detail || '保存用户失败');
+      }
+    }
+  };
+
+  const handleDeleteUser = async (user: any) => {
+    await submit(() => systemApi.deleteUser(user.id), '用户删除成功');
+  };
+
+  const openUserAuthorization = async (user: any) => {
+    userRoleForm.setFieldsValue({ user_id: user.id, scope_type: 'platform' });
+    projectRoleForm.setFieldsValue({ user_id: user.id });
+    setActiveTab('rbac');
+    try {
+      const profile = await enterpriseGovernanceApi.getUserGovernanceProfile(user.id);
+      const bindings = await enterpriseGovernanceApi.listUserRoleBindings(user.id);
+      setSelectedProfile(profile);
+      setUserRoleBindings(bindings || []);
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail || '加载用户授权失败');
+    }
+  };
+
   const overviewCards = [
     { title: '组织', value: overview.organizations || 0, icon: <BankOutlined /> },
     { title: '团队', value: overview.teams || 0, icon: <TeamOutlined /> },
     { title: 'RBAC 角色', value: overview.roles || 0, icon: <SafetyCertificateOutlined /> },
+    { title: '用户角色', value: overview.user_roles || 0, icon: <TeamOutlined /> },
     { title: '项目授权', value: overview.project_roles || 0, icon: <LockOutlined /> },
     { title: 'SSO 启用', value: overview.sso_enabled || 0, icon: <CloudSyncOutlined /> },
     { title: 'API Token', value: overview.api_tokens || 0, icon: <ApiOutlined /> },
@@ -184,6 +286,8 @@ const EnterpriseGovernance: React.FC = () => {
       />
 
       <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: 'overview',
@@ -196,6 +300,47 @@ const EnterpriseGovernance: React.FC = () => {
                   </Card>
                 ))}
               </div>
+            ),
+          },
+          {
+            key: 'users',
+            label: '用户管理',
+            children: (
+              <Card bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div>
+                    <Title level={4} style={{ marginBottom: 6 }}>用户管理</Title>
+                    <Text type="secondary">统一维护登录账号，并从这里进入角色绑定、项目授权和团队归属管理。</Text>
+                  </div>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={openCreateUserModal}>新增用户</Button>
+                </div>
+                <Table
+                  rowKey="id"
+                  loading={loading}
+                  dataSource={users}
+                  pagination={{ pageSize: 8 }}
+                  columns={[
+                    { title: '用户名', dataIndex: 'username' },
+                    { title: '真实姓名', dataIndex: 'real_name', render: (v) => v || '-' },
+                    { title: '系统角色', dataIndex: 'role', render: (v) => <Tag color={v === 'super_admin' ? 'red' : 'blue'}>{v}</Tag> },
+                    { title: '状态', dataIndex: 'is_active', render: (v) => v ? <Tag color="green">启用</Tag> : <Tag>停用</Tag> },
+                    { title: '创建时间', dataIndex: 'created_at', render: formatTime },
+                    {
+                      title: '操作',
+                      width: 260,
+                      render: (_: any, record: any) => (
+                        <Space size="small">
+                          <Button type="link" icon={<SafetyCertificateOutlined />} onClick={() => openUserAuthorization(record)}>授权</Button>
+                          <Button type="link" icon={<EditOutlined />} onClick={() => openEditUserModal(record)}>编辑</Button>
+                          <Popconfirm title="确认删除该用户？" onConfirm={() => handleDeleteUser(record)}>
+                            <Button type="link" danger icon={<DeleteOutlined />} disabled={record.role === 'super_admin'}>删除</Button>
+                          </Popconfirm>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+              </Card>
             ),
           },
           {
@@ -273,6 +418,32 @@ const EnterpriseGovernance: React.FC = () => {
                     <Button type="primary" htmlType="submit">授权</Button>
                   </Form>
                 </Card>
+                <Card title="绑定用户角色" bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
+                  <Form form={userRoleForm} layout="inline" onFinish={(values) => submit(
+                    () => enterpriseGovernanceApi.bindUserRole(values),
+                    '用户角色绑定成功',
+                    userRoleForm
+                  )}>
+                    <Form.Item name="user_id" rules={[{ required: true }]}><Select placeholder="用户" options={userOptions} style={{ width: 220 }} /></Form.Item>
+                    <Form.Item name="role_id" rules={[{ required: true }]}><Select placeholder="角色" options={roleOptions} style={{ width: 240 }} /></Form.Item>
+                    <Form.Item name="scope_type" initialValue="platform"><Select style={{ width: 150 }} options={[
+                      { label: '平台', value: 'platform' },
+                      { label: '组织', value: 'organization' },
+                      { label: '团队', value: 'team' },
+                    ]} /></Form.Item>
+                    <Form.Item name="scope_id"><InputNumber placeholder="范围ID" min={1} /></Form.Item>
+                    <Button type="primary" htmlType="submit">绑定角色</Button>
+                  </Form>
+                  {selectedProfile && (
+                    <Alert
+                      type="success"
+                      showIcon
+                      style={{ marginTop: 16, borderRadius: 8 }}
+                      message={`${selectedProfile.user?.real_name || selectedProfile.user?.username} 的治理画像`}
+                      description={`平台角色 ${selectedProfile.role_bindings?.length || 0} 个，项目授权 ${selectedProfile.project_roles?.length || 0} 个，团队 ${selectedProfile.teams?.length || 0} 个。`}
+                    />
+                  )}
+                </Card>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <Card title="角色矩阵" bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
                     <Table rowKey="id" loading={loading} dataSource={roles} pagination={{ pageSize: 6 }} columns={[
@@ -284,13 +455,34 @@ const EnterpriseGovernance: React.FC = () => {
                   </Card>
                   <Card title="项目数据隔离授权" bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
                     <Table rowKey="id" loading={loading} dataSource={projectRoles} pagination={{ pageSize: 6 }} columns={[
-                      { title: '用户ID', dataIndex: 'user_id' },
-                      { title: '项目ID', dataIndex: 'project_id' },
-                      { title: '角色', dataIndex: 'role_code' },
+                      { title: '用户', dataIndex: 'user_id', render: (v) => userNameMap.get(v) || `用户 #${v}` },
+                      { title: '项目', dataIndex: 'project_id', render: (v) => projectNameMap.get(v) || `项目 #${v}` },
+                      { title: '角色', render: (_: any, record: any) => record.role_id ? (roleNameMap.get(record.role_id) || record.role_code) : record.role_code },
                       { title: '状态', dataIndex: 'status' },
                     ]} />
                   </Card>
                 </div>
+                <Card title="用户角色绑定" bordered={false} className="glass-panel" style={{ borderRadius: 12 }}>
+                  <Table rowKey="id" loading={loading} dataSource={userRoleBindings} pagination={{ pageSize: 6 }} columns={[
+                    { title: '用户', dataIndex: 'user_id', render: (v) => userNameMap.get(v) || `用户 #${v}` },
+                    { title: '角色', dataIndex: 'role_id', render: (v) => roleNameMap.get(v) || `角色 #${v}` },
+                    {
+                      title: '范围',
+                      dataIndex: 'scope_type',
+                      render: (v) => ({ platform: '平台', organization: '组织', team: '团队' } as Record<string, string>)[v] || v,
+                    },
+                    { title: '范围ID', dataIndex: 'scope_id', render: (v) => v || '-' },
+                    { title: '状态', dataIndex: 'status' },
+                    {
+                      title: '操作',
+                      render: (_: any, record: any) => (
+                        <Popconfirm title="确认解除该角色绑定？" onConfirm={() => submit(() => enterpriseGovernanceApi.deleteUserRoleBinding(record.id), '用户角色绑定已解除')}>
+                          <Button type="link" danger>解除</Button>
+                        </Popconfirm>
+                      ),
+                    },
+                  ]} />
+                </Card>
               </Space>
             ),
           },
@@ -454,6 +646,37 @@ const EnterpriseGovernance: React.FC = () => {
           style={{ marginBottom: 12 }}
         />
         <Input.TextArea value={createdToken} rows={4} readOnly />
+      </Modal>
+
+      <Modal
+        title={editingUser ? '编辑用户' : '新增用户'}
+        open={userModalOpen}
+        onCancel={() => {
+          setUserModalOpen(false);
+          setEditingUser(null);
+          userForm.resetFields();
+        }}
+        onOk={handleSaveUser}
+        confirmLoading={loading}
+        destroyOnHidden
+        okText={editingUser ? '保存' : '创建'}
+        cancelText="取消"
+      >
+        <Form form={userForm} layout="vertical">
+          <Form.Item label="用户名" name="username" rules={[{ required: true, message: '请输入用户名' }]}>
+            <Input placeholder="登录用户名" />
+          </Form.Item>
+          <Form.Item label="真实姓名" name="real_name" rules={[{ required: true, message: '请输入真实姓名' }]}>
+            <Input placeholder="真实姓名" />
+          </Form.Item>
+          <Form.Item
+            label={editingUser ? '重置密码' : '登录密码'}
+            name="password"
+            rules={editingUser ? [] : [{ required: true, message: '请输入登录密码' }]}
+          >
+            <Input.Password placeholder={editingUser ? '不填写则不修改密码' : '登录密码'} />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

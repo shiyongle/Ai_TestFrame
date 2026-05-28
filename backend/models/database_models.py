@@ -963,6 +963,23 @@ class EnterpriseProjectRole(Base):
     role = relationship("EnterpriseRole")
 
 
+class EnterpriseUserRole(Base):
+    """用户级角色绑定，用于平台、组织、团队等非项目范围授权。"""
+    __tablename__ = "enterprise_user_roles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(Integer, ForeignKey("enterprise_roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    scope_type = Column(String(30), nullable=False, default="platform")
+    scope_id = Column(Integer)
+    status = Column(String(20), nullable=False, default="active")
+    granted_by = Column(String(100), default="system")
+    granted_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    role = relationship("EnterpriseRole")
+
+
 class EnterpriseSsoProvider(Base):
     """SSO/OIDC/SAML/LDAP 配置。"""
     __tablename__ = "enterprise_sso_providers"
